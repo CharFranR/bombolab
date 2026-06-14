@@ -1,51 +1,64 @@
 use crate::domain::base::Base;
+use crate::domain::errors::{Error, Result};
 use crate::domain::joint::Joint;
 use crate::domain::link::Link;
 
 pub struct Segment {
     pub joint: Joint,
-    pub link: Link
+    pub link: Link,
 }
+
 pub struct Robot {
     pub base: Base,
-    pub segments: Vec<Segment>
+    pub segments: Vec<Segment>,
 }
 
 impl Segment {
-    pub fn new (joint: Joint, link: Link) -> Self {
-        Self {
-            joint, link
-        }
+    pub fn new(joint: Joint, link: Link) -> Self {
+        Self { joint, link }
     }
 }
 
 impl Robot {
-    pub fn new (base: Base, segments: Vec<Segment>) -> Self {
+    pub fn new(base: Base, segments: Vec<Segment>) -> Self {
         Self { base, segments }
     }
 
-    pub fn dof (&self) -> usize  {
+    pub fn dof(&self) -> usize {
         self.segments.len()
     }
 
-    pub fn segment (&self, index:usize) -> Option<&Segment> {
-        self.segments.get(index) 
+    pub fn segment(&self, index: usize) -> Result<&Segment> {
+        self.segments.get(index).ok_or(Error::IndexOutOfBounds {
+            index,
+            len: self.segments.len(),
+        })
     }
 
-    pub fn segment_mut (&mut self, index:usize) -> Option<&mut Segment> {
-        self.segments.get_mut(index) 
+    pub fn segment_mut(&mut self, index: usize) -> Result<&mut Segment> {
+        let len = self.segments.len();
+        self.segments.get_mut(index).ok_or(Error::IndexOutOfBounds {
+            index,
+            len,
+        })
     }
 
-    pub fn set_joint_values (&mut self, new_joints: Vec<Joint>) {
-
+    pub fn set_joint_values(&mut self, new_joints: Vec<Joint>) -> Result<()> {
+        if new_joints.len() != self.segments.len() {
+            return Err(Error::JointCountMismatch {
+                expected: self.segments.len(),
+                got: new_joints.len(),
+            });
+        }
         for (segment, joint) in self.segments.iter_mut().zip(new_joints) {
             segment.joint = joint;
         }
+        Ok(())
     }
 
-    pub fn reset_to_zero (&mut self) {
-        for segment in self.segments.iter_mut(){
-            segment.joint.value= 0.0;
+    pub fn reset_to_zero(&mut self) {
+        for segment in self.segments.iter_mut() {
+            segment.joint.value = 0.0;
         }
     }
 
@@ -57,12 +70,14 @@ impl Robot {
         self.segments.push(segment);
     }
 
-    pub fn remove_segment(&mut self, index: usize) -> Option<Segment> {
+    pub fn remove_segment(&mut self, index: usize) -> Result<Segment> {
         if index < self.segments.len() {
-            Some(self.segments.remove(index))
+            Ok(self.segments.remove(index))
         } else {
-            None
+            Err(Error::IndexOutOfBounds {
+                index,
+                len: self.segments.len(),
+            })
         }
     }
-
 }

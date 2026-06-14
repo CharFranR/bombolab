@@ -1,44 +1,54 @@
+use crate::domain::errors::{Error, Result};
+
 pub enum JointType {
     Revolute,
-    Prismatic
+    Prismatic,
 }
 
 pub struct Joint {
     pub joint_type: JointType,
     pub value: f64,
     pub value_max: f64,
-    pub value_min: f64
+    pub value_min: f64,
 }
 
 impl Joint {
-    pub fn new (joint_type: JointType, value: f64, value_max: f64, value_min: f64) -> Self{
+    pub fn new(joint_type: JointType, value: f64, value_max: f64, value_min: f64) -> Self {
         Self {
-                joint_type, value, value_max, value_min
+            joint_type,
+            value,
+            value_max,
+            value_min,
         }
     }
 
-    pub fn range(&self) -> Vec<f64>{
+    pub fn range(&self) -> Vec<f64> {
         vec![self.value_min, self.value_max]
     }
 
-    pub fn is_within_limits(&self) -> bool{
-        self.value < self.value_max && self.value > self.value_min
+    pub fn is_within_limits(&self) -> bool {
+        self.value <= self.value_max && self.value >= self.value_min
     }
 
     pub fn clamp(&mut self) {
-        if self.value > self.value_max{
+        if self.value > self.value_max {
             self.value = self.value_max
-        } 
+        }
 
         if self.value < self.value_min {
             self.value = self.value_min
         }
     }
 
-    pub fn set_value(&mut self, value: f64) {
-
-        if value < self.value_max && value > self.value_min{
-            self.value = value
+    pub fn set_value(&mut self, value: f64) -> Result<()> {
+        if value > self.value_max || value < self.value_min {
+            return Err(Error::JointValueOutOfLimits {
+                value,
+                min: self.value_min,
+                max: self.value_max,
+            });
         }
+        self.value = value;
+        Ok(())
     }
 }
