@@ -17,6 +17,17 @@ impl Segment {
     pub fn new(joint: Joint, dh: DHParams) -> Self {
         Self { joint, dh }
     }
+
+    pub fn dh_params(&self) -> (f64, f64, f64, f64) {
+        match self.joint.joint_type {
+            crate::domain::JointType::Revolute => {
+                (self.joint.value, self.dh.d, self.dh.a, self.dh.alpha)
+            }
+            crate::domain::JointType::Prismatic => {
+                (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha)
+            }
+        }
+    }
 }
 
 impl Robot {
