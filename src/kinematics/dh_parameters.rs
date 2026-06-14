@@ -1,6 +1,7 @@
 use nalgebra::{Isometry3, Rotation3, Translation3, UnitQuaternion, Vector3};
 
 use crate::domain::Segment;
+use crate::domain::Robot;
 
 pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64> {
     let (theta, d, a, alpha) = segment.dh_params();
