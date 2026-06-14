@@ -8,4 +8,4 @@ pub use base::Base;
 pub use chain::{Robot, Segment};
 pub use errors::{Error, Result};
 pub use joint::{Joint, JointType};
-pub use link::Link;
+pub use link::DHParams;

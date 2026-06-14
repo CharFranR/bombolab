@@ -1,21 +1,17 @@
-pub struct Link {
-    pub offset_to_next_joint: [f64; 3]
+pub struct DHParams {
+    pub theta: f64,
+    pub d: f64,
+    pub a: f64,
+    pub alpha: f64,
 }
 
-impl Link {
-    pub fn new (offset_to_next_joint: [f64; 3]) -> Self {
+impl DHParams {
+    pub fn new(theta: f64, d: f64, a: f64, alpha: f64) -> Self {
         Self {
-            offset_to_next_joint
+            theta,
+            d,
+            a,
+            alpha,
         }
-    }
-
-    pub fn set_offset (&mut self, offset: [f64; 3]) {
-        self.offset_to_next_joint = offset
-    }
-
-    pub fn length (&self) -> f64 {
-        let [x, y, z] = self.offset_to_next_joint;
-        let result: f64 = (x * x + y * y + z * z).sqrt();
-        result
     }
 }

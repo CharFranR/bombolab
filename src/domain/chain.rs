@@ -1,11 +1,11 @@
 use crate::domain::base::Base;
 use crate::domain::errors::{Error, Result};
 use crate::domain::joint::Joint;
-use crate::domain::link::Link;
+use crate::domain::link::DHParams;
 
 pub struct Segment {
     pub joint: Joint,
-    pub link: Link,
+    pub dh: DHParams,
 }
 
 pub struct Robot {
@@ -14,8 +14,8 @@ pub struct Robot {
 }
 
 impl Segment {
-    pub fn new(joint: Joint, link: Link) -> Self {
-        Self { joint, link }
+    pub fn new(joint: Joint, dh: DHParams) -> Self {
+        Self { joint, dh }
     }
 }
 
