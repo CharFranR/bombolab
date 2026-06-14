@@ -8,4 +8,8 @@ impl Base {
             position
         }
     }
+
+    pub fn set_position (&mut self, position: [f64;3]) {
+        self.position = position
+    }
 }

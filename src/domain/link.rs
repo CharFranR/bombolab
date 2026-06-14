@@ -9,6 +9,10 @@ impl Link {
         }
     }
 
+    pub fn set_offset (&mut self, offset: [f64; 3]) {
+        self.offset_to_next_joint = offset
+    }
+
     pub fn length (&self) -> f64 {
         let [x, y, z] = self.offset_to_next_joint;
         let result: f64 = (x * x + y * y + z * z).sqrt();

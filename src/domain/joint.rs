@@ -36,6 +36,9 @@ impl Joint {
     }
 
     pub fn set_value(&mut self, value: f64) {
-        self.value = value
+
+        if value < self.value_max && value > self.value_min{
+            self.value = value
+        }
     }
 }
