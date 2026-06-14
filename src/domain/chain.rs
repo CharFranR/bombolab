@@ -1,4 +1,3 @@
-use crate::domain::base::Base;
 use crate::domain::errors::{Error, Result};
 use crate::domain::joint::Joint;
 use crate::domain::link::DHParams;
@@ -9,7 +8,6 @@ pub struct Segment {
 }
 
 pub struct Robot {
-    pub base: Base,
     pub segments: Vec<Segment>,
 }
 
@@ -31,8 +29,8 @@ impl Segment {
 }
 
 impl Robot {
-    pub fn new(base: Base, segments: Vec<Segment>) -> Self {
-        Self { base, segments }
+    pub fn new(segments: Vec<Segment>) -> Self {
+        Self { segments }
     }
 
     pub fn dof(&self) -> usize {
