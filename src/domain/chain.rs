@@ -59,6 +59,17 @@ impl Robot {
                 got: new_joints.len(),
             });
         }
+
+        for joint in &new_joints {
+            if joint.value > joint.value_max || joint.value < joint.value_min {
+                return Err(Error::JointValueOutOfLimits {
+                    value: joint.value,
+                    min: joint.value_min,
+                    max: joint.value_max,
+                });
+            }
+        }
+
         for (segment, joint) in self.segments.iter_mut().zip(new_joints) {
             segment.joint = joint;
         }
