@@ -2,5 +2,5 @@ mod domain;
 mod kinematics;
 
 fn main (){
-    kinematics::init::run();
+    kinematics::init::test_forward_kinematics();
 }

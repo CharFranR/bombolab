@@ -6,4 +6,4 @@ pub use hmatrix::rotation_and_translation;
 pub use hmatrix::translation_and_rotation;
 pub use hmatrix::make_movement;
 pub use hmatrix::Movement;
-pub use dh_parameters::matrix_from_segment;
+pub use dh_parameters::{forward_kinematics, matrix_from_segment};
