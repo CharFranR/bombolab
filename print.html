@@ -1,0 +1,1936 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Bombolab</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Forward Kinematics Visualizer for Robotic Arms">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-0392ca55.css">
+        <link rel="stylesheet" href="css/chrome-fc474251.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-572f17a6.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-62e7cb07.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Bombolab</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/charfranr/bombolab" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="bombolab"><a class="header" href="#bombolab">Bombolab</a></h1>
+<p><strong>Forward Kinematics Visualizer for Robotic Arms</strong></p>
+<p>Bombolab computes where a robot arm is in 3D space given its joint angles. You describe a robot as a chain of joints and links using Denavit-Hartenberg (DH) parameters, Bombolab solves the math, and a desktop GUI shows the result.</p>
+<h2 id="what-it-does"><a class="header" href="#what-it-does">What It Does</a></h2>
+<ul>
+<li>Models robots as serial chains of revolute or prismatic joints</li>
+<li>Computes forward kinematics using DH parameters (Craig convention)</li>
+<li>Provides an interactive desktop GUI for visualization</li>
+<li>Includes CLI tools for DH table solving and quaternion operations</li>
+</ul>
+<h2 id="who-its-for"><a class="header" href="#who-its-for">Who It’s For</a></h2>
+<ul>
+<li>Robotics students learning kinematics</li>
+<li>Engineers prototyping robot configurations</li>
+<li>Anyone who needs to visualize how DH parameters map to 3D positions</li>
+</ul>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<ol>
+<li><strong>Define</strong> your robot as a chain of segments, each with a joint type and DH parameters</li>
+<li><strong>Solve</strong> forward kinematics to get the pose of every frame and the end-effector</li>
+<li><strong>Visualize</strong> the result in a GUI or inspect the matrices in the CLI</li>
+</ol>
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{
+    DHParams, Joint, JointType, Robot, Segment,
+    Isometry3, forward_kinematics,
+};
+
+// A simple 2-link planar arm
+let segments = vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.5, 3.14, -3.14),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.3, 3.14, -3.14),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+];
+
+let robot = Robot::new(segments);
+let (frames, end_effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+
+let pos = end_effector.translation.vector;
+println!("End-effector at: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
+<span class="boring">}</span></code></pre>
+<h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
+<p>Bombolab is a Rust workspace with two crates:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bombolab-core</code></td><td>Core library: math, robot model, kinematics solvers</td></tr>
+<tr><td><code>bombolab-gui</code></td><td>Desktop GUI built with egui/eframe</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><a href="#installation">Installation</a> – set up the project</li>
+<li><a href="#dh-parameters">DH Parameters</a> – understand the theory</li>
+<li><a href="#quick-start">Quick Start</a> – build your first robot</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li><strong>Rust</strong> (edition 2024) – install via <a href="https://rustup.rs/">rustup</a></li>
+<li><strong>Git</strong></li>
+</ul>
+<p>Verify your installation:</p>
+<pre><code class="language-bash">rustc --version   # should show 1.85+ (edition 2024)
+cargo --version
+</code></pre>
+<h2 id="clone-and-build"><a class="header" href="#clone-and-build">Clone and Build</a></h2>
+<pre><code class="language-bash">git clone https://github.com/charfranr/bombolab.git
+cd bombolab
+cargo build
+</code></pre>
+<p>The workspace builds two crates:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bombolab-core</code></td><td>Library + CLI binaries (<code>dh-solve</code>, <code>quaternion-solve</code>)</td></tr>
+<tr><td><code>bombolab-gui</code></td><td>Desktop application</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="build-the-gui-only"><a class="header" href="#build-the-gui-only">Build the GUI Only</a></h2>
+<pre><code class="language-bash">cargo build -p bombolab-gui
+</code></pre>
+<h2 id="run-the-cli-tools"><a class="header" href="#run-the-cli-tools">Run the CLI Tools</a></h2>
+<pre><code class="language-bash">cargo run --bin dh-solve
+cargo run --bin quaternion-solve
+</code></pre>
+<h2 id="run-the-gui"><a class="header" href="#run-the-gui">Run the GUI</a></h2>
+<pre><code class="language-bash">cargo run -p bombolab-gui
+</code></pre>
+<h2 id="run-tests"><a class="header" href="#run-tests">Run Tests</a></h2>
+<pre><code class="language-bash">cargo test
+</code></pre>
+<h2 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Version</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>nalgebra</code></td><td>0.35.0</td><td>Linear algebra, matrices, isometries</td></tr>
+<tr><td><code>egui</code></td><td>0.34.3</td><td>Immediate-mode GUI framework</td></tr>
+<tr><td><code>eframe</code></td><td>0.34.3</td><td>egui application wrapper</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<p><strong>Build fails with edition errors</strong>: Ensure your Rust toolchain supports edition 2024. Run <code>rustup update stable</code>.</p>
+<p><strong>GUI doesn’t launch</strong>: eframe requires a display server. On headless systems, use the CLI tools instead.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<p>Build a robot, solve its kinematics, and see where the end-effector lands.</p>
+<h2 id="1-define-a-robot"><a class="header" href="#1-define-a-robot">1. Define a Robot</a></h2>
+<p>A robot is a chain of <code>Segment</code>s. Each segment combines a <code>Joint</code> (the motor) with <code>DHParams</code> (the fixed geometry).</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{
+    DHParams, Joint, JointType, Robot, Segment,
+    Isometry3, forward_kinematics,
+};
+
+// 2-link planar arm: both joints revolute, links of length 1.0
+let segments = vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, std::f64::consts::PI, -std::f64::consts::PI),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, std::f64::consts::PI, -std::f64::consts::PI),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+];
+
+let robot = Robot::new(segments);
+<span class="boring">}</span></code></pre>
+<h2 id="2-solve-forward-kinematics"><a class="header" href="#2-solve-forward-kinematics">2. Solve Forward Kinematics</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let base = Isometry3::identity(); // robot at world origin
+let (frames, end_effector) = forward_kinematics(base, &amp;robot);
+<span class="boring">}</span></code></pre>
+<ul>
+<li><code>frames</code> – one <code>Isometry3</code> per segment, showing the cumulative pose at each joint</li>
+<li><code>end_effector</code> – the final pose after all joints</li>
+</ul>
+<h2 id="3-read-the-result"><a class="header" href="#3-read-the-result">3. Read the Result</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let pos = end_effector.translation.vector;
+println!("End-effector: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
+// With both angles at 0, the end-effector is at (2.0, 0.0, 0.0)
+
+let rot = end_effector.rotation;
+println!("Rotation: {:?}", rot);
+<span class="boring">}</span></code></pre>
+<h2 id="4-move-a-joint"><a class="header" href="#4-move-a-joint">4. Move a Joint</a></h2>
+<p>Change the joint value and re-solve:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::f64::consts::FRAC_PI_2;
+
+// Rotate first joint to 90 degrees
+robot.segments[0].joint.value = FRAC_PI_2;
+
+let (_, end_effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let pos = end_effector.translation.vector;
+println!("After rotation: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
+// Now the arm points upward
+<span class="boring">}</span></code></pre>
+<h2 id="5-use-the-cli"><a class="header" href="#5-use-the-cli">5. Use the CLI</a></h2>
+<p>For quick DH table solving without writing code:</p>
+<pre><code class="language-bash">cargo run --bin dh-solve
+</code></pre>
+<p>The interactive solver lets you:</p>
+<ol>
+<li>Choose degrees or radians</li>
+<li>Enter the number of links</li>
+<li>Input alpha, a, d, theta for each link</li>
+<li>See the full solution: A matrices, intermediate frames, and final pose</li>
+</ol>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<ul>
+<li><a href="#dh-parameters">DH Parameters</a> – understand what each parameter means</li>
+<li><a href="#robot-model">Robot Model</a> – learn about joints, segments, and the robot struct</li>
+<li><a href="#dh-solve">dh-solve CLI</a> – detailed CLI reference</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="dh-parameters"><a class="header" href="#dh-parameters">DH Parameters</a></h1>
+<p><strong>Denavit-Hartenberg parameters describe the geometry between consecutive joints in a robot arm.</strong> Each link has exactly four parameters that define how one frame is positioned relative to the next.</p>
+<p>Bombolab uses the <strong>Craig convention</strong> (also called the modified DH convention).</p>
+<h2 id="the-four-parameters"><a class="header" href="#the-four-parameters">The Four Parameters</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>Symbol</th><th>Meaning</th><th>Unit</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>theta</strong></td><td>θ</td><td>Rotation around Z axis</td><td>radians</td></tr>
+<tr><td><strong>d</strong></td><td>d</td><td>Translation along Z axis</td><td>length (m, mm)</td></tr>
+<tr><td><strong>a</strong></td><td>a</td><td>Translation along X axis (link length)</td><td>length (m, mm)</td></tr>
+<tr><td><strong>alpha</strong></td><td>α</td><td>Rotation around X axis (twist)</td><td>radians</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="what-each-parameter-does"><a class="header" href="#what-each-parameter-does">What Each Parameter Does</a></h2>
+<h3 id="theta-θ--rotation-around-z"><a class="header" href="#theta-θ--rotation-around-z">theta (θ) – Rotation Around Z</a></h3>
+<p>The angle the current frame rotates around its Z axis. For revolute joints, this is the joint variable.</p>
+<pre><code>theta = 0       →  link points in +X direction
+theta = π/2     →  link points in +Y direction
+theta = π       →  link points in -X direction
+</code></pre>
+<h3 id="d--translation-along-z"><a class="header" href="#d--translation-along-z">d – Translation Along Z</a></h3>
+<p>How far the current frame is offset from the previous one along Z. For prismatic joints, this is the joint variable.</p>
+<ul>
+<li><code>d = 5</code> → the base is 5 units tall</li>
+<li><code>d = 0</code> → no vertical offset</li>
+</ul>
+<h3 id="a--link-length-translation-along-x"><a class="header" href="#a--link-length-translation-along-x">a – Link Length (Translation Along X)</a></h3>
+<p>The distance from the current Z axis to the next Z axis, measured along X. This is the physical length of the link.</p>
+<p>When theta changes, the link length projects into the XY plane:</p>
+<pre><code>X component = a * cos(theta)
+Y component = a * sin(theta)
+</code></pre>
+<h3 id="alpha-α--twist-between-z-axes"><a class="header" href="#alpha-α--twist-between-z-axes">alpha (α) – Twist Between Z Axes</a></h3>
+<p><strong>This is the key to 3D robots.</strong> Alpha rotates the frame around X to reorient Z for the next joint.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>alpha</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>Z axes are parallel – arm stays in one plane</td></tr>
+<tr><td>π/2</td><td>Next Z is perpendicular – arm changes plane</td></tr>
+<tr><td>-π/2</td><td>Next Z is perpendicular (opposite direction)</td></tr>
+<tr><td>π</td><td>Z axes are anti-parallel</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Without alpha, all joints rotate in the same 2D plane.</strong> With alpha, you can model real 3D robots like articulated arms with shoulder elbows.</p>
+<h2 id="the-a-matrix"><a class="header" href="#the-a-matrix">The A Matrix</a></h2>
+<p>Each set of DH parameters produces a 4x4 transformation matrix:</p>
+<pre><code>A_i = RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)
+</code></pre>
+<p>Expanded:</p>
+<pre><code>A_i = ┌ cos(θ)  -sin(θ)cos(α)   sin(θ)sin(α)   a·cos(θ) ┐
+      │ sin(θ)   cos(θ)cos(α)  -cos(θ)sin(α)   a·sin(θ) │
+      │   0        sin(α)          cos(α)           d      │
+      └   0          0                0              1      ┘
+</code></pre>
+<p>Bombolab computes this with <code>compute_a_matrix()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{DHParameter, compute_a_matrix};
+
+let p = DHParameter::new(0.0, 1.0, 0.5, 0.0); // alpha, a, d, theta
+let a_matrix = compute_a_matrix(p);
+// a_matrix is a nalgebra::Matrix4&lt;f64&gt;
+<span class="boring">}</span></code></pre>
+<h2 id="dhparameter-vs-dhparams"><a class="header" href="#dhparameter-vs-dhparams">DHParameter vs DHParams</a></h2>
+<p>Bombolab has two DH parameter types for different contexts:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Module</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>DHParameter</code></td><td><code>math::dh</code></td><td>Standalone numeric parameters for the solver</td></tr>
+<tr><td><code>DHParams</code></td><td><code>robot::link</code></td><td>Fixed geometry stored in a robot segment</td></tr>
+</tbody>
+</table>
+</div>
+<p>They have the same four fields but live in different parts of the system. <code>DHParameter</code> is used by the math solver; <code>DHParams</code> is part of the robot model.</p>
+<h2 id="symbolic-support"><a class="header" href="#symbolic-support">Symbolic Support</a></h2>
+<p>The <code>dh-solve</code> CLI supports symbolic values. Instead of numbers, you can enter variable names:</p>
+<pre><code>α: 0
+a: L1
+d: 0
+θ: theta1
+</code></pre>
+<p>This produces symbolic A matrices showing the trigonometric expressions rather than numeric values. Useful for deriving closed-form solutions.</p>
+<p>The symbolic type is <code>DHParameterSymbolic</code> with <code>DHValue::Num(f64) | DHValue::Sym(String)</code>.</p>
+<h2 id="example-2-link-planar-arm"><a class="header" href="#example-2-link-planar-arm">Example: 2-Link Planar Arm</a></h2>
+<p>A simple arm with two revolute joints, both rotating in the XY plane:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Link</th><th>α</th><th>a</th><th>d</th><th>θ</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>0</td><td>1.0</td><td>0</td><td>θ₁</td></tr>
+<tr><td>2</td><td>0</td><td>1.0</td><td>0</td><td>θ₂</td></tr>
+</tbody>
+</table>
+</div>
+<p>With θ₁ = 0, θ₂ = 0: end-effector at (2.0, 0.0, 0.0)
+With θ₁ = π/2, θ₂ = 0: end-effector at (0.0, 2.0, 0.0)</p>
+<h2 id="example-3d-arm-with-plane-change"><a class="header" href="#example-3d-arm-with-plane-change">Example: 3D Arm with Plane Change</a></h2>
+<p>A shoulder-elbow robot that moves in 3D:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Link</th><th>α</th><th>a</th><th>d</th><th>θ</th></tr>
+</thead>
+<tbody>
+<tr><td>1 (base)</td><td>0</td><td>0</td><td>5.0</td><td>θ₁</td></tr>
+<tr><td>2 (shoulder)</td><td>π/2</td><td>3.0</td><td>0</td><td>θ₂</td></tr>
+<tr><td>3 (elbow)</td><td>0</td><td>2.0</td><td>0</td><td>θ₃</td></tr>
+</tbody>
+</table>
+</div>
+<p>The α = π/2 at the shoulder twists the plane so the arm can reach up and out.</p>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li><a href="#forward-kinematics">Forward Kinematics</a> – how A matrices compose into the full solution</li>
+<li><a href="#robot-model">Robot Model</a> – how DH parameters fit into the Segment/Robot structs</li>
+<li><a href="#dh-solve">dh-solve CLI</a> – interactive DH table solver</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="forward-kinematics"><a class="header" href="#forward-kinematics">Forward Kinematics</a></h1>
+<p><strong>Forward kinematics computes the position and orientation of every link in a robot given its joint values.</strong> You provide the joint angles (or displacements), and Bombolab tells you where each frame is in 3D space.</p>
+<h2 id="the-core-idea"><a class="header" href="#the-core-idea">The Core Idea</a></h2>
+<p>A robot is a chain of frames. Each frame is positioned relative to the previous one by a transformation matrix derived from DH parameters. Forward kinematics multiplies these matrices together:</p>
+<pre><code>T₀₁ = A₁
+T₀₂ = A₁ · A₂
+T₀₃ = A₁ · A₂ · A₃
+...
+T₀ₙ = A₁ · A₂ · ... · Aₙ
+</code></pre>
+<p>Each <code>T₀ᵢ</code> is the pose (position + rotation) of frame <code>i</code> expressed in the base frame.</p>
+<h2 id="how-bombolab-computes-it"><a class="header" href="#how-bombolab-computes-it">How Bombolab Computes It</a></h2>
+<h3 id="step-1-build-each-a-matrix"><a class="header" href="#step-1-build-each-a-matrix">Step 1: Build Each A Matrix</a></h3>
+<p>For each segment, <code>compute_a_matrix()</code> produces a 4x4 transformation from the DH parameters:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{DHParameter, compute_a_matrix};
+
+let p = DHParameter::new(alpha, a, d, theta);
+let a_i = compute_a_matrix(p);
+<span class="boring">}</span></code></pre>
+<h3 id="step-2-compose-the-chain"><a class="header" href="#step-2-compose-the-chain">Step 2: Compose the Chain</a></h3>
+<p><code>forward_kinematics()</code> multiplies them sequentially:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{Isometry3, Robot, forward_kinematics};
+
+let (frames, end_effector) = forward_kinematics(base, &amp;robot);
+<span class="boring">}</span></code></pre>
+<p>The function:</p>
+<ol>
+<li>Starts with the <code>base</code> transformation (usually <code>Isometry3::identity()</code>)</li>
+<li>For each segment, computes <code>current = current * matrix_from_segment(segment)</code></li>
+<li>Stores each cumulative result in <code>frames</code></li>
+<li>Returns the final frame as <code>end_effector</code></li>
+</ol>
+<h3 id="step-3-read-the-results"><a class="header" href="#step-3-read-the-results">Step 3: Read the Results</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Position of each frame
+for (i, frame) in frames.iter().enumerate() {
+    let pos = frame.translation.vector;
+    println!("Frame {}: ({:.3}, {:.3}, {:.3})", i + 1, pos.x, pos.y, pos.z);
+}
+
+// End-effector pose
+let pos = end_effector.translation.vector;
+let rot = end_effector.rotation;
+<span class="boring">}</span></code></pre>
+<h2 id="matrix_from_segment"><a class="header" href="#matrix_from_segment">matrix_from_segment</a></h2>
+<p>Each segment produces an <code>Isometry3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Isometry3&lt;f64&gt; {
+    let (theta, d, a, alpha) = segment.dh_params();
+
+    let rot_z = Rotation3::from_axis_angle(&amp;Vector3::z_axis(), theta);
+    let rot_x = Rotation3::from_axis_angle(&amp;Vector3::x_axis(), alpha);
+    let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
+
+    let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
+
+    Isometry3::from_parts(translation, rotation)
+}
+<span class="boring">}</span></code></pre>
+<h3 id="why-unitquaternion"><a class="header" href="#why-unitquaternion">Why UnitQuaternion?</a></h3>
+<p><code>Isometry3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rotation3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Isometry3::from_parts()</code> expects a quaternion.</p>
+<h3 id="the-translation"><a class="header" href="#the-translation">The Translation</a></h3>
+<p>The translation components are:</p>
+<ul>
+<li><strong>X</strong>: <code>a * cos(theta)</code> – link length projected after rotation</li>
+<li><strong>Y</strong>: <code>a * sin(theta)</code> – link length projected after rotation</li>
+<li><strong>Z</strong>: <code>d</code> – direct translation along Z</li>
+</ul>
+<p>This is not “movement in X” – it’s the result of rotating a link of length <code>a</code> by angle <code>theta</code>.</p>
+<h2 id="the-base-transformation"><a class="header" href="#the-base-transformation">The Base Transformation</a></h2>
+<p>The <code>base</code> parameter positions the robot in the world:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use nalgebra::{Isometry3, Translation3, UnitQuaternion};
+
+// Robot at world origin
+let base = Isometry3::identity();
+
+// Robot displaced 10 units up
+let base = Isometry3::from_parts(
+    Translation3::new(0.0, 0.0, 10.0),
+    UnitQuaternion::identity(),
+);
+<span class="boring">}</span></code></pre>
+<p>The same robot definition works in any world position – you don’t need to modify the robot to move it.</p>
+<h2 id="multiplication-order"><a class="header" href="#multiplication-order">Multiplication Order</a></h2>
+<p>The chain multiplies left-to-right:</p>
+<pre><code>current = current * T_i
+</code></pre>
+<p>Each <code>T_i</code> transforms <strong>from frame i-1 to frame i</strong>, expressed in frame i-1. This is post-multiplication, which is correct for serial chains where each movement is relative to the previous link.</p>
+<p>If you used <code>T_i * current</code>, each movement would be in the world’s global frame – wrong for an articulated robot.</p>
+<h2 id="the-dhsolution-struct"><a class="header" href="#the-dhsolution-struct">The DHSolution Struct</a></h2>
+<p>For the numeric solver (<code>solve()</code>), the result is a <code>DHSolution</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DHSolution {
+    pub table: Vec&lt;DHParameter&gt;,         // input parameters
+    pub a_matrices: Vec&lt;Matrix4&lt;f64&gt;&gt;,   // individual A_i matrices
+    pub intermediates: Vec&lt;Matrix4&lt;f64&gt;&gt;, // cumulative products T₀ᵢ
+    pub final_transform: Matrix4&lt;f64&gt;,    // T₀ₙ (end-effector)
+}
+<span class="boring">}</span></code></pre>
+<p>Access methods:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let solution = solve(&amp;table);
+
+let rotation = solution.rotation();    // Matrix3&lt;f64&gt; -- 3x3 rotation
+let translation = solution.translation(); // Vector3&lt;f64&gt; -- position
+<span class="boring">}</span></code></pre>
+<h2 id="example-planar-2r-robot"><a class="header" href="#example-planar-2r-robot">Example: Planar 2R Robot</a></h2>
+<p>Two revolute joints, both in the XY plane (alpha = 0):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{DHParameter, solve};
+
+let table = vec![
+    DHParameter::new(0.0, 1.0, 0.0, 0.5),  // link 1: a=1, theta=0.5 rad
+    DHParameter::new(0.0, 1.0, 0.0, 0.3),  // link 2: a=1, theta=0.3 rad
+];
+
+let solution = solve(&amp;table);
+let pos = solution.translation();
+println!("End-effector: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
+<span class="boring">}</span></code></pre>
+<h2 id="references-1"><a class="header" href="#references-1">References</a></h2>
+<ul>
+<li><a href="#dh-parameters">DH Parameters</a> – what goes into each A matrix</li>
+<li><a href="#robot-model">Robot Model</a> – how segments and joints work</li>
+<li><a href="#bombolab-core-api-reference">bombolab-core API</a> – full function signatures</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="robot-model"><a class="header" href="#robot-model">Robot Model</a></h1>
+<p><strong>A robot in Bombolab is a serial chain of segments, each combining a joint (the actuator) with fixed geometry (DH parameters).</strong> This page explains the data model and how to build robots programmatically.</p>
+<h2 id="the-chain-robot--segment--joint--dhparams"><a class="header" href="#the-chain-robot--segment--joint--dhparams">The Chain: Robot → Segment → Joint + DHParams</a></h2>
+<pre><code>Robot
+ └── segments: Vec&lt;Segment&gt;
+      ├── joint: Joint      (the motor: type, value, limits)
+      └── dh: DHParams      (fixed geometry: theta, d, a, alpha)
+</code></pre>
+<h3 id="joint"><a class="header" href="#joint">Joint</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Joint {
+    pub joint_type: JointType,  // Revolute or Prismatic
+    pub value: f64,             // current joint value (radians or meters)
+    pub value_max: f64,         // upper limit
+    pub value_min: f64,         // lower limit
+}
+<span class="boring">}</span></code></pre>
+<p><strong>JointType</strong> determines what <code>value</code> means:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>JointType</th><th><code>value</code> represents</th><th>Movement</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Revolute</code></td><td>angle (radians)</td><td>rotation around Z</td></tr>
+<tr><td><code>Prismatic</code></td><td>displacement (meters)</td><td>translation along Z</td></tr>
+</tbody>
+</table>
+</div>
+<p>Key methods:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let joint = Joint::new(JointType::Revolute, 0.5, PI, -PI);
+
+joint.is_within_limits()  // true if value_min &lt;= value &lt;= value_max
+joint.clamp()             // force value within limits
+joint.set_value(1.0)?     // set with bounds check (returns Err if out of limits)
+joint.range()             // returns [value_min, value_max]
+<span class="boring">}</span></code></pre>
+<h3 id="dhparams"><a class="header" href="#dhparams">DHParams</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DHParams {
+    pub theta: f64,  // rotation around Z (radians)
+    pub d: f64,      // translation along Z
+    pub a: f64,      // translation along X (link length)
+    pub alpha: f64,  // twist around X (radians)
+}
+<span class="boring">}</span></code></pre>
+<p>These are <strong>fixed</strong> for a given robot configuration. They don’t change at runtime – only the joint value changes.</p>
+<h3 id="segment"><a class="header" href="#segment">Segment</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Segment {
+    pub joint: Joint,
+    pub dh: DHParams,
+}
+<span class="boring">}</span></code></pre>
+<p>The <code>dh_params()</code> method resolves which DH parameter is the joint variable:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let (theta, d, a, alpha) = segment.dh_params();
+
+// Revolute:  theta = joint.value,  d = dh.d
+// Prismatic: theta = dh.theta,     d = joint.value
+<span class="boring">}</span></code></pre>
+<p>This is the key insight: <strong>the same struct handles both joint types</strong> by swapping which parameter comes from the joint.</p>
+<h3 id="robot"><a class="header" href="#robot">Robot</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Robot {
+    pub segments: Vec&lt;Segment&gt;,
+}
+<span class="boring">}</span></code></pre>
+<p>Methods:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Robot::new(segments)</code></td><td>Create a robot from a segment list</td></tr>
+<tr><td><code>robot.dof()</code></td><td>Number of degrees of freedom (segment count)</td></tr>
+<tr><td><code>robot.segment(i)</code></td><td>Get segment by index (returns <code>Result</code>)</td></tr>
+<tr><td><code>robot.segment_mut(i)</code></td><td>Get mutable segment by index</td></tr>
+<tr><td><code>robot.set_joint_values(joints)</code></td><td>Update all joint values at once (validates limits)</td></tr>
+<tr><td><code>robot.reset_to_zero()</code></td><td>Set all joint values to 0.0</td></tr>
+<tr><td><code>robot.add_segment(segment)</code></td><td>Append a segment</td></tr>
+<tr><td><code>robot.remove_segment(i)</code></td><td>Remove and return a segment by index</td></tr>
+<tr><td><code>robot.is_empty()</code></td><td>True if no segments</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="building-a-robot"><a class="header" href="#building-a-robot">Building a Robot</a></h2>
+<h3 id="revolute-arm-most-common"><a class="header" href="#revolute-arm-most-common">Revolute Arm (Most Common)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
+use std::f64::consts::{PI, FRAC_PI_2};
+
+let robot = Robot::new(vec![
+    // Base: rotates, height 5
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 5.0, 0.0, 0.0),
+    ),
+    // Shoulder: rotates, link length 3, twists plane
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 0.0, 3.0, FRAC_PI_2),
+    ),
+    // Elbow: rotates, link length 2
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 0.0, 2.0, 0.0),
+    ),
+]);
+
+assert_eq!(robot.dof(), 3);
+<span class="boring">}</span></code></pre>
+<h3 id="prismatic-joint"><a class="header" href="#prismatic-joint">Prismatic Joint</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let segment = Segment::new(
+    Joint::new(JointType::Prismatic, 0.5, 2.0, 0.0), // extended 0.5m
+    DHParams::new(0.0, 0.0, 1.0, 0.0),
+);
+
+// dh_params() returns: (theta=0.0, d=0.5, a=1.0, alpha=0.0)
+//                       ^^^joint.value goes to d for prismatic
+<span class="boring">}</span></code></pre>
+<h3 id="mixed-joint-types"><a class="header" href="#mixed-joint-types">Mixed Joint Types</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let robot = Robot::new(vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+    Segment::new(
+        Joint::new(JointType::Prismatic, 0.0, 2.0, 0.0),
+        DHParams::new(0.0, 0.0, 0.5, FRAC_PI_2),
+    ),
+]);
+<span class="boring">}</span></code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>The robot model uses a custom <code>Error</code> enum:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum Error {
+    JointCountMismatch { expected: usize, got: usize },
+    IndexOutOfBounds { index: usize, len: usize },
+    JointValueOutOfLimits { value: f64, min: f64, max: f64 },
+}
+<span class="boring">}</span></code></pre>
+<p>All fallible operations return <code>Result&lt;T&gt;</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::Error;
+
+match robot.set_joint_values(joints) {
+    Ok(()) =&gt; println!("Joints updated"),
+    Err(Error::JointCountMismatch { expected, got }) =&gt; {
+        eprintln!("Expected {} joints, got {}", expected, got);
+    }
+    Err(Error::JointValueOutOfLimits { value, min, max }) =&gt; {
+        eprintln!("Value {} out of limits [{}, {}]", value, min, max);
+    }
+    Err(e) =&gt; eprintln!("Error: {}", e),
+}
+<span class="boring">}</span></code></pre>
+<h2 id="gui-state-model"><a class="header" href="#gui-state-model">GUI State Model</a></h2>
+<p>The GUI layer adds its own types for UI state:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// UI representation of a segment
+pub struct SegmentUi {
+    pub joint_type: JointType,
+    pub theta: f64,
+    pub d: f64,
+    pub a: f64,
+    pub alpha: f64,
+}
+
+// Full robot definition for the UI
+pub struct RobotDef {
+    pub name: String,
+    pub segments: Vec&lt;SegmentUi&gt;,
+}
+<span class="boring">}</span></code></pre>
+<p><code>RobotDef::to_robot()</code> converts to a domain <code>Robot</code> for kinematics computation.</p>
+<h2 id="references-2"><a class="header" href="#references-2">References</a></h2>
+<ul>
+<li><a href="#dh-parameters">DH Parameters</a> – what the DHParams fields mean</li>
+<li><a href="#forward-kinematics">Forward Kinematics</a> – how the model is solved</li>
+<li><a href="#bombolab-core-api-reference">bombolab-core API</a> – full type reference</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="project-structure-1"><a class="header" href="#project-structure-1">Project Structure</a></h1>
+<p>Bombolab is a Rust workspace with a clean separation between the math/model layer and the GUI layer.</p>
+<h2 id="workspace-layout"><a class="header" href="#workspace-layout">Workspace Layout</a></h2>
+<pre><code>bombolab/
+├── Cargo.toml                    # Workspace root
+├── book.toml                     # mdBook configuration
+├── crates/
+│   ├── bombolab-core/            # Core library + CLI binaries
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs            # Public API re-exports
+│   │       ├── math/
+│   │       │   ├── mod.rs
+│   │       │   ├── dh.rs         # DH parameter types and solver
+│   │       │   ├── hmatrix.rs    # Isometry3 helpers
+│   │       │   ├── quaternion.rs # Quaternion type and operations
+│   │       │   └── constants.rs  # PI, DEG_TO_RAD, RAD_TO_DEG
+│   │       ├── robot/
+│   │       │   ├── mod.rs
+│   │       │   ├── joint.rs      # JointType, Joint
+│   │       │   ├── link.rs       # DHParams
+│   │       │   ├── segment.rs    # Segment, Robot
+│   │       │   └── errors.rs     # Error, Result types
+│   │       ├── kinematics/
+│   │       │   ├── mod.rs
+│   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
+│   │       │   └── init.rs       # Interactive CLI tester
+│   │       └── bin/
+│   │           ├── dh-solve.rs           # DH table solver CLI
+│   │           └── quaternion-solve.rs   # Quaternion operations CLI
+│   └── bombolab-gui/             # Desktop GUI
+│       ├── Cargo.toml
+│       └── src/
+│           ├── lib.rs
+│           └── ui/
+│               ├── main_page.rs  # egui rendering and layout
+│               └── state.rs      # AppState, RobotDef, SegmentUi
+└── docs/
+    ├── forward_kinematics.md     # Original FK documentation
+    └── src/                      # mdBook source
+        ├── SUMMARY.md
+        └── ...
+</code></pre>
+<h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate Responsibilities</a></h2>
+<h3 id="bombolab-core"><a class="header" href="#bombolab-core">bombolab-core</a></h3>
+<p>The core library contains all math, data models, and kinematics computation. It has <strong>no GUI dependency</strong>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Module</th><th>What It Contains</th></tr>
+</thead>
+<tbody>
+<tr><td><code>math::dh</code></td><td><code>DHParameter</code>, <code>DHParameterSymbolic</code>, <code>DHValue</code>, <code>compute_a_matrix()</code>, <code>solve()</code></td></tr>
+<tr><td><code>math::hmatrix</code></td><td><code>Movement</code>, <code>rotation_and_translation()</code>, <code>translation_and_rotation()</code>, <code>make_movement()</code></td></tr>
+<tr><td><code>math::quaternion</code></td><td><code>Quaternion</code>, <code>solve_add()</code>, <code>solve_subtract()</code>, <code>solve_multiply()</code>, <code>solve_divide()</code></td></tr>
+<tr><td><code>math::constants</code></td><td><code>PI</code>, <code>DEG_TO_RAD</code>, <code>RAD_TO_DEG</code>, <code>FRAC_PI_2</code>, <code>FRAC_PI_4</code>, <code>EPS</code>, <code>TAU</code></td></tr>
+<tr><td><code>robot::joint</code></td><td><code>JointType</code> (Revolute/Prismatic), <code>Joint</code></td></tr>
+<tr><td><code>robot::link</code></td><td><code>DHParams</code></td></tr>
+<tr><td><code>robot::segment</code></td><td><code>Segment</code>, <code>Robot</code></td></tr>
+<tr><td><code>robot::errors</code></td><td><code>Error</code> enum, <code>Result&lt;T&gt;</code> type alias</td></tr>
+<tr><td><code>kinematics::forward</code></td><td><code>forward_kinematics()</code>, <code>matrix_from_segment()</code></td></tr>
+<tr><td><code>kinematics::init</code></td><td>Interactive CLI for building robots and testing FK</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="bombolab-gui"><a class="header" href="#bombolab-gui">bombolab-gui</a></h3>
+<p>The GUI layer depends on <code>bombolab-core</code> and adds:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Module</th><th>What It Contains</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ui::state</code></td><td><code>AppState</code>, <code>RobotDef</code>, <code>SegmentUi</code>, <code>PanelView</code></td></tr>
+<tr><td><code>ui::main_page</code></td><td>egui panel layout, robot editor, FK visualization</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+<pre><code>User Input (GUI or CLI)
+        │
+        ▼
+┌─────────────────┐
+│  Robot / Table   │  ← robot model or raw DH parameters
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Forward Kin.    │  ← forward_kinematics() or solve()
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Isometry3 /     │  ← frames, end-effector pose
+│  Matrix4         │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Display         │  ← GUI rendering or CLI output
+└─────────────────┘
+</code></pre>
+<h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency Graph</a></h2>
+<pre><code>bombolab (workspace root)
+├── bombolab-core    (nalgebra only)
+└── bombolab-gui     (bombolab-core + egui + eframe)
+</code></pre>
+<p>The core crate has a single external dependency: <code>nalgebra</code> for linear algebra. The GUI crate adds <code>egui</code> and <code>eframe</code> for the desktop interface.</p>
+<h2 id="references-3"><a class="header" href="#references-3">References</a></h2>
+<ul>
+<li><a href="#design-decisions">Design Decisions</a> – why the code is structured this way</li>
+<li><a href="#bombolab-core-api-reference">bombolab-core API</a> – full API reference</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="design-decisions"><a class="header" href="#design-decisions">Design Decisions</a></h1>
+<p>Key architectural choices in Bombolab and the reasoning behind them.</p>
+<h2 id="1-two-crate-split-core-vs-gui"><a class="header" href="#1-two-crate-split-core-vs-gui">1. Two-Crate Split: Core vs GUI</a></h2>
+<p><strong>Decision</strong>: Separate <code>bombolab-core</code> (math + model) from <code>bombolab-gui</code> (egui rendering).</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li>The core library is testable without a display server</li>
+<li>CLI tools (<code>dh-solve</code>, <code>quaternion-solve</code>) can use core without pulling in egui</li>
+<li>The GUI can be swapped or extended without touching the math</li>
+<li>Core can be used as a library in other Rust projects</li>
+</ul>
+<p><strong>Tradeoff</strong>: Slightly more boilerplate for cross-crate imports, but the isolation is worth it.</p>
+<h2 id="2-craig-convention-modified-dh"><a class="header" href="#2-craig-convention-modified-dh">2. Craig Convention (Modified DH)</a></h2>
+<p><strong>Decision</strong>: Use the Craig convention for DH parameters, not the standard (Spong) convention.</p>
+<p><strong>Why</strong>: In the Craig convention:</p>
+<ul>
+<li><code>a</code> is measured along <code>X_i</code> (the current frame’s X axis)</li>
+<li><code>alpha</code> rotates around <code>X_i</code></li>
+<li>The transformation order is: RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)</li>
+</ul>
+<p>This matches the convention used in “Introduction to Robotics” by Craig, which is the most common textbook for robotics courses.</p>
+<p><strong>Tradeoff</strong>: Users trained on the standard convention need to remap their parameters.</p>
+<h2 id="3-isometry3-for-transformations"><a class="header" href="#3-isometry3-for-transformations">3. Isometry3 for Transformations</a></h2>
+<p><strong>Decision</strong>: Use <code>nalgebra::Isometry3&lt;f64&gt;</code> instead of raw <code>Matrix4&lt;f64&gt;</code> for forward kinematics.</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li><code>Isometry3</code> semantically represents a rigid body transformation (rotation + translation)</li>
+<li>It stores rotation as a <code>UnitQuaternion</code>, which is more numerically stable than a 3x3 rotation matrix</li>
+<li>nalgebra provides optimized multiplication for isometries</li>
+<li>The <code>forward_kinematics()</code> function returns <code>Vec&lt;Isometry3&gt;</code>, giving both position and rotation in a type-safe way</li>
+</ul>
+<p>The numeric solver (<code>solve()</code>) uses <code>Matrix4&lt;f64&gt;</code> directly because it works with the raw DH math and needs to display the full 4x4 matrix.</p>
+<h2 id="4-joint-value-as-the-only-dynamic-state"><a class="header" href="#4-joint-value-as-the-only-dynamic-state">4. Joint Value as the Only Dynamic State</a></h2>
+<p><strong>Decision</strong>: Only <code>Joint.value</code> changes at runtime. Everything else (DH parameters, limits) is fixed.</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li>Matches the physical reality: robot geometry doesn’t change, only joint angles do</li>
+<li>Simplifies the kinematics computation: no need to rebuild DH tables</li>
+<li>Makes the model easy to serialize/deserialize for saving robot configurations</li>
+</ul>
+<h2 id="5-segment-combines-joint--geometry"><a class="header" href="#5-segment-combines-joint--geometry">5. Segment Combines Joint + Geometry</a></h2>
+<p><strong>Decision</strong>: <code>Segment</code> wraps both <code>Joint</code> (actuator) and <code>DHParams</code> (geometry) together.</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li>Each link in a serial chain has exactly one joint and one set of DH parameters</li>
+<li>The <code>dh_params()</code> method resolves which parameter is the joint variable (theta for revolute, d for prismatic)</li>
+<li>This keeps the API simple: you work with segments, not separate joint and geometry lists</li>
+</ul>
+<h2 id="6-symbolic-dh-support"><a class="header" href="#6-symbolic-dh-support">6. Symbolic DH Support</a></h2>
+<p><strong>Decision</strong>: Support symbolic values (<code>DHValue::Sym</code>) in the DH solver, not just numeric.</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li>Robotics students need to derive symbolic expressions for homework/research</li>
+<li>The <code>dh-solve</code> CLI can output matrices with variable names (e.g., <code>cos(theta1)</code>)</li>
+<li>Useful for verifying closed-form solutions before implementing them numerically</li>
+</ul>
+<h2 id="7-immediate-mode-gui-egui"><a class="header" href="#7-immediate-mode-gui-egui">7. Immediate-Mode GUI (egui)</a></h2>
+<p><strong>Decision</strong>: Use egui (immediate-mode) instead of a retained-mode framework.</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li>egui is lightweight and easy to integrate with Rust</li>
+<li>Immediate-mode simplifies state management: no event handlers, no widget tree</li>
+<li>The GUI is relatively simple (parameter input + 3D viewport placeholder)</li>
+<li>eframe handles window creation and rendering backend</li>
+</ul>
+<p><strong>Tradeoff</strong>: egui’s 3D capabilities are limited. The current “3D Viewport” is a placeholder. For full 3D rendering, a future version might integrate <code>wgpu</code> or <code>three-d</code>.</p>
+<h2 id="8-custom-error-type"><a class="header" href="#8-custom-error-type">8. Custom Error Type</a></h2>
+<p><strong>Decision</strong>: Define a project-specific <code>Error</code> enum instead of using <code>anyhow</code> or <code>thiserror</code>.</p>
+<p><strong>Why</strong>:</p>
+<ul>
+<li>The error cases are well-defined and few (joint count mismatch, out of bounds, out of limits)</li>
+<li>A custom type gives precise error messages without pulling in error-handling frameworks</li>
+<li>The <code>Result&lt;T&gt;</code> alias keeps function signatures clean</li>
+</ul>
+<h2 id="9-left-to-right-matrix-multiplication"><a class="header" href="#9-left-to-right-matrix-multiplication">9. Left-to-Right Matrix Multiplication</a></h2>
+<p><strong>Decision</strong>: Forward kinematics multiplies <code>current = current * T_i</code> (post-multiplication).</p>
+<p><strong>Why</strong>: In a serial chain, each transformation is expressed in the previous frame’s coordinate system. Post-multiplication correctly composes relative transformations. Pre-multiplication (<code>T_i * current</code>) would apply movements in the world frame, which is wrong for articulated robots.</p>
+<h2 id="references-4"><a class="header" href="#references-4">References</a></h2>
+<ul>
+<li><a href="#project-structure-1">Project Structure</a> – how these decisions map to the code layout</li>
+<li><a href="#dh-parameters">DH Parameters</a> – the Craig convention explained</li>
+<li><a href="#forward-kinematics">Forward Kinematics</a> – how multiplication order works</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>
+<p><strong>Interactive CLI tool for solving DH parameter tables.</strong> Enter your robot’s Denavit-Hartenberg parameters and get the full solution: A matrices, intermediate frames, and end-effector pose.</p>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<pre><code class="language-bash">cargo run --bin dh-solve
+</code></pre>
+<h2 id="interactive-flow"><a class="header" href="#interactive-flow">Interactive Flow</a></h2>
+<h3 id="1-choose-angle-unit"><a class="header" href="#1-choose-angle-unit">1. Choose Angle Unit</a></h3>
+<pre><code>Unidad de ángulos:
+  1 = Grados
+  2 = Radianes
+Opción:
+</code></pre>
+<p>Select <strong>Grados</strong> (degrees) or <strong>Radianes</strong> (radians) for input. The tool converts to radians internally for computation.</p>
+<h3 id="2-enter-number-of-links"><a class="header" href="#2-enter-number-of-links">2. Enter Number of Links</a></h3>
+<pre><code>Número de eslabones:
+</code></pre>
+<p>Enter the number of links (joints) in your robot.</p>
+<h3 id="3-enter-dh-parameters"><a class="header" href="#3-enter-dh-parameters">3. Enter DH Parameters</a></h3>
+<p>For each link, you’re prompted:</p>
+<pre><code>--- Eslabón 1 ---
+  α (grados): 0
+  a: 1.0
+  d: 0.0
+  θ (grados): 45
+</code></pre>
+<h3 id="4-see-the-solution"><a class="header" href="#4-see-the-solution">4. See the Solution</a></h3>
+<p><strong>Numeric mode</strong> (all values are numbers):</p>
+<pre><code>  TABLA DH
+    i │          α │          a │          d │          θ
+  ────┼────────────┼────────────┼────────────┼────────────
+    1 │     0.0000 │     1.0000 │     0.0000 │     0.7854
+
+  MATRICES A_i
+
+  A1:
+    [  0.7071   -0.7071    0.0000    0.7071]
+    [  0.7071    0.7071    0.0000    0.7071]
+    [  0.0000    0.0000    1.0000    0.0000]
+    [  0.0000    0.0000    0.0000    1.0000]
+
+  FRAMES (posiciones de cada joint)
+  Frame 1: (  0.7071,   0.7071,   0.0000)
+
+  POSE FINAL (efector)
+  Posición: (  0.7071,   0.7071,   0.0000)
+  Rotación:
+    [  0.7071  -0.7071   0.0000]
+    [  0.7071   0.7071   0.0000]
+    [  0.0000   0.0000   1.0000]
+</code></pre>
+<p><strong>Symbolic mode</strong> (any value is a variable name):</p>
+<pre><code>  TABLA DH (simbólica)
+   i | α          | a          | d          | θ
+  --+------------+------------+------------+------------
+   1 | 0          | L1         | 0          | theta1
+
+  MATRICES A_i (simbólicas)
+
+  A1:
+  cos(theta1)   -sin(theta1)  0             L1·cos(theta1)
+  sin(theta1)    cos(theta1)  0             L1·sin(theta1)
+  0              0             1             0
+  0              0             0             1
+</code></pre>
+<h2 id="symbolic-mode"><a class="header" href="#symbolic-mode">Symbolic Mode</a></h2>
+<p>If any input value is not a valid number, it’s treated as a symbolic variable. Examples:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input</th><th>Parsed As</th></tr>
+</thead>
+<tbody>
+<tr><td><code>0</code></td><td><code>DHValue::Num(0.0)</code></td></tr>
+<tr><td><code>3.14</code></td><td><code>DHValue::Num(3.14)</code></td></tr>
+<tr><td><code>L1</code></td><td><code>DHValue::Sym("L1")</code></td></tr>
+<tr><td><code>theta1</code></td><td><code>DHValue::Sym("theta1")</code></td></tr>
+<tr><td><code>pi/2</code></td><td><code>DHValue::Sym("pi/2")</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Symbolic matrices show the trigonometric expressions, simplifying known values (e.g., <code>sin(90°)</code> becomes <code>1</code>).</p>
+<h2 id="input-format"><a class="header" href="#input-format">Input Format</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Parameter</th><th>What to Enter</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>α (alpha)</td><td>Twist angle</td><td><code>0</code>, <code>90</code>, <code>pi/2</code></td></tr>
+<tr><td>a</td><td>Link length</td><td><code>1.0</code>, <code>5.0</code></td></tr>
+<tr><td>d</td><td>Offset along Z</td><td><code>0.0</code>, <code>3.5</code></td></tr>
+<tr><td>θ (theta)</td><td>Joint angle</td><td><code>45</code>, <code>0.785</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="2-link-planar-arm"><a class="header" href="#2-link-planar-arm">2-Link Planar Arm</a></h3>
+<pre><code>Grados
+2 links
+Link 1: α=0, a=1, d=0, θ=0
+Link 2: α=0, a=1, d=0, θ=0
+</code></pre>
+<p>Result: end-effector at (2.0, 0.0, 0.0).</p>
+<h3 id="scara-robot"><a class="header" href="#scara-robot">SCARA Robot</a></h3>
+<pre><code>Grados
+3 links
+Link 1: α=0, a=0, d=5, θ=0
+Link 2: α=0, a=3, d=0, θ=45
+Link 3: α=0, a=2, d=0, θ=30
+</code></pre>
+<h2 id="implementation"><a class="header" href="#implementation">Implementation</a></h2>
+<p>The tool reads from stdin, parses inputs into <code>DHParameterSymbolic</code> values, checks if all are numeric, and either:</p>
+<ul>
+<li><strong>Numeric</strong>: converts to <code>DHParameter</code>, calls <code>solve()</code>, prints the <code>DHSolution</code></li>
+<li><strong>Symbolic</strong>: calls <code>format_symbolic_matrix()</code> for each link</li>
+</ul>
+<p>Source: <code>crates/bombolab-core/src/bin/dh-solve.rs</code></p>
+<h2 id="references-5"><a class="header" href="#references-5">References</a></h2>
+<ul>
+<li><a href="#dh-parameters">DH Parameters</a> – theory behind the parameters</li>
+<li><a href="#forward-kinematics">Forward Kinematics</a> – how the solution is computed</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="quaternion-solve"><a class="header" href="#quaternion-solve">quaternion-solve</a></h1>
+<p><strong>Interactive CLI tool for quaternion arithmetic.</strong> Perform addition, subtraction, multiplication (Hamilton product), and division on quaternions.</p>
+<h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
+<pre><code class="language-bash">cargo run --bin quaternion-solve
+</code></pre>
+<h2 id="interactive-flow-1"><a class="header" href="#interactive-flow-1">Interactive Flow</a></h2>
+<h3 id="1-choose-operation"><a class="header" href="#1-choose-operation">1. Choose Operation</a></h3>
+<pre><code>Operación:
+  1 = Suma
+  2 = Resta
+  3 = Multiplicación (Hamilton)
+  4 = División
+Opción:
+</code></pre>
+<h3 id="2-enter-number-of-quaternions"><a class="header" href="#2-enter-number-of-quaternions">2. Enter Number of Quaternions</a></h3>
+<pre><code>Número de cuaterniones:
+</code></pre>
+<h3 id="3-enter-each-quaternion"><a class="header" href="#3-enter-each-quaternion">3. Enter Each Quaternion</a></h3>
+<p>For each quaternion, enter the four components:</p>
+<pre><code>  --- Cuaternion 1 ---
+  a: 1.0
+  b: 2.0
+  c: 3.0
+  d: 4.0
+</code></pre>
+<p>The quaternion is stored as <code>a + bi + cj + dk</code>.</p>
+<h3 id="4-see-the-result"><a class="header" href="#4-see-the-result">4. See the Result</a></h3>
+<pre><code>  Resultado: (6 + 8i + 10j + 12k)
+</code></pre>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<h3 id="addition-suma"><a class="header" href="#addition-suma">Addition (Suma)</a></h3>
+<p>Component-wise addition:</p>
+<pre><code>q₁ + q₂ = (a₁+a₂) + (b₁+b₂)i + (c₁+c₂)j + (d₁+d₂)k
+</code></pre>
+<p>With multiple quaternions, adds all sequentially from zero.</p>
+<h3 id="subtraction-resta"><a class="header" href="#subtraction-resta">Subtraction (Resta)</a></h3>
+<p>Component-wise subtraction from zero:</p>
+<pre><code>result = 0 - q₁ - q₂ - ...
+</code></pre>
+<p>Note: subtract starts at zero and subtracts each quaternion, so <code>solve_subtract(&amp;[q1, q2])</code> returns <code>-q1 - q2</code>.</p>
+<h3 id="multiplication-hamilton-product"><a class="header" href="#multiplication-hamilton-product">Multiplication (Hamilton Product)</a></h3>
+<p>Sequential Hamilton product:</p>
+<pre><code>result = q₁ ⊗ q₂ ⊗ q₃ ⊗ ...
+</code></pre>
+<p>Starting from the identity quaternion <code>(1, 0, 0, 0)</code>. Quaternion multiplication is <strong>not commutative</strong> – order matters.</p>
+<p>The Hamilton product of two quaternions:</p>
+<pre><code>(a₁ + b₁i + c₁j + d₁k) ⊗ (a₂ + b₂i + c₂j + d₂k) =
+  (a₁a₂ - b₁b₂ - c₁c₂ - d₁d₂) +
+  (a₁b₂ + b₁a₂ + c₁d₂ - d₁c₂)i +
+  (a₁c₂ - b₁d₂ + c₁a₂ + d₁b₂)j +
+  (a₁d₂ + b₁c₂ - c₁b₂ + d₁a₂)k
+</code></pre>
+<h3 id="division-división"><a class="header" href="#division-división">Division (División)</a></h3>
+<p>Sequential right-division:</p>
+<pre><code>result = q₁ / q₂ / q₃ / ...
+</code></pre>
+<p>Starting from the identity quaternion. Division is implemented as multiplication by the inverse.</p>
+<h2 id="quaternion-type"><a class="header" href="#quaternion-type">Quaternion Type</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Quaternion {
+    pub a: f64,  // real part
+    pub b: f64,  // i component
+    pub c: f64,  // j component
+    pub d: f64,  // k component
+}
+<span class="boring">}</span></code></pre>
+<p>Display format: <code>(a + bi + cj + dk)</code></p>
+<h2 id="useful-properties"><a class="header" href="#useful-properties">Useful Properties</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>q.norm()</code></td><td>Magnitude: <code>√(a² + b² + c² + d²)</code></td></tr>
+<tr><td><code>q.normalize()</code></td><td>Unit quaternion (norm = 1)</td></tr>
+<tr><td><code>q.conjugate()</code></td><td><code>(a, -b, -c, -d)</code></td></tr>
+<tr><td><code>q.inverse()</code></td><td>Conjugate / norm²</td></tr>
+<tr><td><code>Quaternion::identity()</code></td><td><code>(1, 0, 0, 0)</code> – no rotation</td></tr>
+<tr><td><code>Quaternion::zero()</code></td><td><code>(0, 0, 0, 0)</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
+<h3 id="rotate-a-vector"><a class="header" href="#rotate-a-vector">Rotate a Vector</a></h3>
+<p>Quaternions represent rotations. To rotate a vector:</p>
+<ol>
+<li>Convert vector to pure quaternion: <code>q_v = (0, x, y, z)</code></li>
+<li>Apply rotation: <code>q_result = q_rotation ⊗ q_v ⊗ q_rotation*</code></li>
+</ol>
+<h3 id="compose-rotations"><a class="header" href="#compose-rotations">Compose Rotations</a></h3>
+<p>Multiply quaternions to compose rotations:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::math::quaternion::{Quaternion, solve_multiply};
+
+let rotate_x = Quaternion::new(0.7071, 0.7071, 0.0, 0.0); // 90° around X
+let rotate_y = Quaternion::new(0.7071, 0.0, 0.7071, 0.0); // 90° around Y
+
+let combined = solve_multiply(&amp;[rotate_x, rotate_y]);
+// Apply rotate_x first, then rotate_y
+<span class="boring">}</span></code></pre>
+<h2 id="implementation-1"><a class="header" href="#implementation-1">Implementation</a></h2>
+<p>Source: <code>crates/bombolab-core/src/bin/quaternion-solve.rs</code></p>
+<p>The tool uses <code>bombolab_core::math::quaternion</code> functions:</p>
+<ul>
+<li><code>solve_add()</code> – sum of quaternions</li>
+<li><code>solve_subtract()</code> – sequential subtraction from zero</li>
+<li><code>solve_multiply()</code> – sequential Hamilton product</li>
+<li><code>solve_divide()</code> – sequential right-division via inverse</li>
+</ul>
+<h2 id="references-6"><a class="header" href="#references-6">References</a></h2>
+<ul>
+<li><a href="#bombolab-core-api-reference">bombolab-core API</a> – Quaternion type and operations reference</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="bombolab-core-api-reference"><a class="header" href="#bombolab-core-api-reference">bombolab-core API Reference</a></h1>
+<p>Core library for Bombolab. Provides DH parameter math, robot modeling, and forward kinematics computation.</p>
+<p><strong>Crate</strong>: <code>bombolab-core</code>
+<strong>Dependency</strong>: <code>nalgebra = "0.35.0"</code></p>
+<h2 id="re-exports"><a class="header" href="#re-exports">Re-exports</a></h2>
+<p>The top-level <code>bombolab_core</code> module re-exports the most commonly used items:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Math
+pub use math::{DHParameter, DHSolution, DEG_TO_RAD, PI, RAD_TO_DEG, compute_a_matrix, solve};
+
+// Kinematics
+pub use kinematics::{forward_kinematics, matrix_from_segment};
+
+// Robot model
+pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
+
+// nalgebra types
+pub use nalgebra::Isometry3;
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="math-module-math"><a class="header" href="#math-module-math">Math Module (<code>math</code>)</a></h2>
+<h3 id="dhparameter"><a class="header" href="#dhparameter"><code>DHParameter</code></a></h3>
+<p>Numeric DH parameters for a single link.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DHParameter {
+    pub alpha: f64,
+    pub a: f64,
+    pub d: f64,
+    pub theta: f64,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(alpha: f64, a: f64, d: f64, theta: f64) -&gt; Self</code></td><td>Create parameters (Craig convention order)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="compute_a_matrix"><a class="header" href="#compute_a_matrix"><code>compute_a_matrix</code></a></h3>
+<p>Compute the 4x4 transformation matrix from DH parameters.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn compute_a_matrix(p: DHParameter) -&gt; Matrix4&lt;f64&gt;
+<span class="boring">}</span></code></pre>
+<p>Returns <code>A_i = RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)</code>.</p>
+<p><strong>Example</strong>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{DHParameter, compute_a_matrix};
+
+let p = DHParameter::new(0.0, 1.0, 0.5, 0.0);
+let m = compute_a_matrix(p);
+// m is a 4x4 identity-like matrix with translation (1.0, 0.0, 0.5)
+<span class="boring">}</span></code></pre>
+<h3 id="solve"><a class="header" href="#solve"><code>solve</code></a></h3>
+<p>Solve a complete DH table and return all intermediate results.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn solve(table: &amp;[DHParameter]) -&gt; DHSolution
+<span class="boring">}</span></code></pre>
+<p><strong>Parameters</strong>: slice of <code>DHParameter</code> (one per link)
+<strong>Returns</strong>: <code>DHSolution</code> with the full solution</p>
+<h3 id="dhsolution"><a class="header" href="#dhsolution"><code>DHSolution</code></a></h3>
+<p>Complete result of solving a DH table.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DHSolution {
+    pub table: Vec&lt;DHParameter&gt;,
+    pub a_matrices: Vec&lt;Matrix4&lt;f64&gt;&gt;,
+    pub intermediates: Vec&lt;Matrix4&lt;f64&gt;&gt;,
+    pub final_transform: Matrix4&lt;f64&gt;,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>rotation</code></td><td><code>(&amp;self) -&gt; Matrix3&lt;f64&gt;</code></td><td>3x3 rotation matrix from the final transform</td></tr>
+<tr><td><code>translation</code></td><td><code>(&amp;self) -&gt; Vector3&lt;f64&gt;</code></td><td>Position vector from the final transform</td></tr>
+</tbody>
+</table>
+</div>
+<p>Implements <code>Display</code> for formatted output (DH table, A matrices, frames, final pose).</p>
+<h3 id="dhvalue"><a class="header" href="#dhvalue"><code>DHValue</code></a></h3>
+<p>Numeric or symbolic value for DH parameters.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone)]
+pub enum DHValue {
+    Num(f64),
+    Sym(String),
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>is_numeric</code></td><td><code>(&amp;self) -&gt; bool</code></td><td>True if <code>Num</code> variant</td></tr>
+<tr><td><code>as_num</code></td><td><code>(&amp;self) -&gt; Option&lt;f64&gt;</code></td><td>Extract numeric value</td></tr>
+<tr><td><code>as_str</code></td><td><code>(&amp;self) -&gt; &amp;str</code></td><td>Extract symbolic string</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="dhparametersymbolic"><a class="header" href="#dhparametersymbolic"><code>DHParameterSymbolic</code></a></h3>
+<p>DH parameters that can contain symbolic variables.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone)]
+pub struct DHParameterSymbolic {
+    pub alpha: DHValue,
+    pub a: DHValue,
+    pub d: DHValue,
+    pub theta: DHValue,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(alpha: DHValue, a: DHValue, d: DHValue, theta: DHValue) -&gt; Self</code></td><td>Create symbolic parameters</td></tr>
+<tr><td><code>is_numeric</code></td><td><code>(&amp;self) -&gt; bool</code></td><td>True if all values are numeric</td></tr>
+<tr><td><code>to_numeric</code></td><td><code>(&amp;self) -&gt; Option&lt;DHParameter&gt;</code></td><td>Convert to numeric (if possible)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="format_symbolic_matrix"><a class="header" href="#format_symbolic_matrix"><code>format_symbolic_matrix</code></a></h3>
+<p>Format a symbolic DH matrix as a string.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn format_symbolic_matrix(p: &amp;DHParameterSymbolic, angle_unit: &amp;str) -&gt; String
+<span class="boring">}</span></code></pre>
+<p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>p</code> – symbolic DH parameters</li>
+<li><code>angle_unit</code> – <code>"grados"</code> or <code>"radianes"</code> (controls display format)</li>
+</ul>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub const PI: f64 = std::f64::consts::PI;
+pub const DEG_TO_RAD: f64 = PI / 180.0;
+pub const RAD_TO_DEG: f64 = 180.0 / PI;
+pub const FRAC_PI_2: f64 = std::f64::consts::FRAC_PI_2;
+pub const FRAC_PI_4: f64 = std::f64::consts::FRAC_PI_4;
+pub const EPS: f64 = f64::EPSILON;
+pub const TAU: f64 = std::f64::consts::TAU;
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="quaternion-module-mathquaternion"><a class="header" href="#quaternion-module-mathquaternion">Quaternion Module (<code>math::quaternion</code>)</a></h2>
+<h3 id="quaternion"><a class="header" href="#quaternion"><code>Quaternion</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone, PartialEq)]
+pub struct Quaternion {
+    pub a: f64,  // real
+    pub b: f64,  // i
+    pub c: f64,  // j
+    pub d: f64,  // k
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(a, b, c, d: f64) -&gt; Self</code></td><td>Create quaternion</td></tr>
+<tr><td><code>identity</code></td><td><code>() -&gt; Self</code></td><td><code>(1, 0, 0, 0)</code></td></tr>
+<tr><td><code>zero</code></td><td><code>() -&gt; Self</code></td><td><code>(0, 0, 0, 0)</code></td></tr>
+<tr><td><code>norm</code></td><td><code>(&amp;self) -&gt; f64</code></td><td>Magnitude</td></tr>
+<tr><td><code>norm_sq</code></td><td><code>(&amp;self) -&gt; f64</code></td><td>Squared magnitude</td></tr>
+<tr><td><code>normalize</code></td><td><code>(&amp;self) -&gt; Self</code></td><td>Unit quaternion</td></tr>
+<tr><td><code>conjugate</code></td><td><code>(&amp;self) -&gt; Self</code></td><td><code>(a, -b, -c, -d)</code></td></tr>
+<tr><td><code>inverse</code></td><td><code>(&amp;self) -&gt; Self</code></td><td>Conjugate / norm²</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="operations-1"><a class="header" href="#operations-1">Operations</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn solve_add(quaternions: &amp;[Quaternion]) -&gt; Quaternion
+pub fn solve_subtract(quaternions: &amp;[Quaternion]) -&gt; Quaternion
+pub fn solve_multiply(quaternions: &amp;[Quaternion]) -&gt; Quaternion
+pub fn solve_divide(quaternions: &amp;[Quaternion]) -&gt; Quaternion
+<span class="boring">}</span></code></pre>
+<p>All operations are sequential: <code>solve_op(&amp;[q1, q2, q3])</code> applies left to right.
+<code>solve_add</code> starts from zero; the others start from identity.</p>
+<hr>
+<h2 id="robot-module-robot"><a class="header" href="#robot-module-robot">Robot Module (<code>robot</code>)</a></h2>
+<h3 id="jointtype"><a class="header" href="#jointtype"><code>JointType</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JointType {
+    Revolute,
+    Prismatic,
+}
+<span class="boring">}</span></code></pre>
+<p>Implements <code>Display</code>: <code>"R"</code> for Revolute, <code>"P"</code> for Prismatic.</p>
+<h3 id="joint-1"><a class="header" href="#joint-1"><code>Joint</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Joint {
+    pub joint_type: JointType,
+    pub value: f64,
+    pub value_max: f64,
+    pub value_min: f64,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(joint_type, value, value_max, value_min: f64) -&gt; Self</code></td><td>Create joint</td></tr>
+<tr><td><code>range</code></td><td><code>(&amp;self) -&gt; Vec&lt;f64&gt;</code></td><td><code>[value_min, value_max]</code></td></tr>
+<tr><td><code>is_within_limits</code></td><td><code>(&amp;self) -&gt; bool</code></td><td>Check if value is in range</td></tr>
+<tr><td><code>clamp</code></td><td><code>(&amp;mut self)</code></td><td>Force value within limits</td></tr>
+<tr><td><code>set_value</code></td><td><code>(&amp;mut self, value: f64) -&gt; Result&lt;()&gt;</code></td><td>Set with bounds check</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="dhparams-1"><a class="header" href="#dhparams-1"><code>DHParams</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DHParams {
+    pub theta: f64,
+    pub d: f64,
+    pub a: f64,
+    pub alpha: f64,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(theta, d, a, alpha: f64) -&gt; Self</code></td><td>Create DH parameters</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="segment-1"><a class="header" href="#segment-1"><code>Segment</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Segment {
+    pub joint: Joint,
+    pub dh: DHParams,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(joint: Joint, dh: DHParams) -&gt; Self</code></td><td>Create segment</td></tr>
+<tr><td><code>dh_params</code></td><td><code>(&amp;self) -&gt; (f64, f64, f64, f64)</code></td><td>Resolve <code>(theta, d, a, alpha)</code> based on joint type</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="robot-1"><a class="header" href="#robot-1"><code>Robot</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Robot {
+    pub segments: Vec&lt;Segment&gt;,
+}
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(segments: Vec&lt;Segment&gt;) -&gt; Self</code></td><td>Create robot</td></tr>
+<tr><td><code>dof</code></td><td><code>(&amp;self) -&gt; usize</code></td><td>Degrees of freedom (segment count)</td></tr>
+<tr><td><code>segment</code></td><td><code>(&amp;self, index: usize) -&gt; Result&lt;&amp;Segment&gt;</code></td><td>Get segment by index</td></tr>
+<tr><td><code>segment_mut</code></td><td><code>(&amp;mut self, index: usize) -&gt; Result&lt;&amp;mut Segment&gt;</code></td><td>Get mutable segment</td></tr>
+<tr><td><code>set_joint_values</code></td><td><code>(&amp;mut self, joints: Vec&lt;Joint&gt;) -&gt; Result&lt;()&gt;</code></td><td>Update all joints (validates limits)</td></tr>
+<tr><td><code>reset_to_zero</code></td><td><code>(&amp;mut self)</code></td><td>Set all joint values to 0.0</td></tr>
+<tr><td><code>is_empty</code></td><td><code>(&amp;self) -&gt; bool</code></td><td>True if no segments</td></tr>
+<tr><td><code>add_segment</code></td><td><code>(&amp;mut self, segment: Segment)</code></td><td>Append segment</td></tr>
+<tr><td><code>remove_segment</code></td><td><code>(&amp;mut self, index: usize) -&gt; Result&lt;Segment&gt;</code></td><td>Remove and return segment</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="error"><a class="header" href="#error"><code>Error</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Clone, PartialEq)]
+pub enum Error {
+    JointCountMismatch { expected: usize, got: usize },
+    IndexOutOfBounds { index: usize, len: usize },
+    JointValueOutOfLimits { value: f64, min: f64, max: f64 },
+}
+<span class="boring">}</span></code></pre>
+<p>Implements <code>Display</code> and <code>std::error::Error</code>.</p>
+<hr>
+<h2 id="kinematics-module-kinematics"><a class="header" href="#kinematics-module-kinematics">Kinematics Module (<code>kinematics</code>)</a></h2>
+<h3 id="forward_kinematics"><a class="header" href="#forward_kinematics"><code>forward_kinematics</code></a></h3>
+<p>Compute forward kinematics for a robot chain.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn forward_kinematics(
+    base: Isometry3&lt;f64&gt;,
+    robot: &amp;Robot,
+) -&gt; (Vec&lt;Isometry3&lt;f64&gt;&gt;, Isometry3&lt;f64&gt;)
+<span class="boring">}</span></code></pre>
+<p><strong>Parameters</strong>:</p>
+<ul>
+<li><code>base</code> – world-to-base transformation (use <code>Isometry3::identity()</code> for origin)</li>
+<li><code>robot</code> – the robot to solve</li>
+</ul>
+<p><strong>Returns</strong>: <code>(frames, end_effector)</code></p>
+<ul>
+<li><code>frames</code> – one <code>Isometry3</code> per segment (cumulative pose at each joint)</li>
+<li><code>end_effector</code> – the final pose (last element of <code>frames</code>)</li>
+</ul>
+<p><strong>Example</strong>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Isometry3, forward_kinematics};
+
+let robot = Robot::new(vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, 3.14, -3.14),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+]);
+
+let (frames, effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+assert_eq!(frames.len(), 1);
+<span class="boring">}</span></code></pre>
+<h3 id="matrix_from_segment-1"><a class="header" href="#matrix_from_segment-1"><code>matrix_from_segment</code></a></h3>
+<p>Compute the transformation for a single segment.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Isometry3&lt;f64&gt;
+<span class="boring">}</span></code></pre>
+<p>Returns the isometry representing the segment’s DH transformation: <code>RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)</code>.</p>
+<hr>
+<h2 id="hmatrix-module-mathhmatrix"><a class="header" href="#hmatrix-module-mathhmatrix">HMatrix Module (<code>math::hmatrix</code>)</a></h2>
+<h3 id="movement"><a class="header" href="#movement"><code>Movement</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Movement {
+    pub translation: Vector3&lt;f64&gt;,
+    pub angles: f64,
+    pub axis: Vector3&lt;f64&gt;,
+    pub isometry: bool,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="functions"><a class="header" href="#functions">Functions</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn rotation_and_translation(
+    axis: Vector3&lt;f64&gt;, angle: f64, translation: Vector3&lt;f64&gt;
+) -&gt; Isometry3&lt;f64&gt;
+
+pub fn translation_and_rotation(
+    axis: Vector3&lt;f64&gt;, angle: f64, translation: Vector3&lt;f64&gt;
+) -&gt; Isometry3&lt;f64&gt;
+
+pub fn make_movement(
+    initial: Isometry3&lt;f64&gt;, movements: &amp;[Movement]
+) -&gt; (Vec&lt;Isometry3&lt;f64&gt;&gt;, Isometry3&lt;f64&gt;)
+<span class="boring">}</span></code></pre>
+<p><code>make_movement</code> composes a sequence of movements from an initial pose, returning the trajectory and final pose.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h1>
+<p>How to set up a development environment for contributing to Bombolab.</p>
+<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
+<ul>
+<li><strong>Rust</strong> (edition 2024, stable)</li>
+<li><strong>Git</strong></li>
+<li>An editor with rust-analyzer support (VS Code, Lapce, Neovim, etc.)</li>
+</ul>
+<h2 id="clone-the-repository"><a class="header" href="#clone-the-repository">Clone the Repository</a></h2>
+<pre><code class="language-bash">git clone https://github.com/charfranr/bombolab.git
+cd bombolab
+</code></pre>
+<h2 id="build"><a class="header" href="#build">Build</a></h2>
+<pre><code class="language-bash"># Build everything
+cargo build
+
+# Build with warnings
+cargo build 2&gt;&amp;1
+
+# Release build
+cargo build --release
+</code></pre>
+<h2 id="run"><a class="header" href="#run">Run</a></h2>
+<pre><code class="language-bash"># Run the GUI
+cargo run -p bombolab-gui
+
+# Run the DH solver CLI
+cargo run --bin dh-solve
+
+# Run the quaternion solver CLI
+cargo run --bin quaternion-solve
+</code></pre>
+<h2 id="test"><a class="header" href="#test">Test</a></h2>
+<pre><code class="language-bash"># Run all tests
+cargo test
+
+# Run tests for a specific crate
+cargo test -p bombolab-core
+
+# Run a specific test
+cargo test test_solve_single_joint
+
+# Show test output
+cargo test -- --nocapture
+</code></pre>
+<h2 id="project-layout"><a class="header" href="#project-layout">Project Layout</a></h2>
+<p>See <a href="#project-structure-1">Project Structure</a> for the full directory layout.</p>
+<h2 id="useful-commands"><a class="header" href="#useful-commands">Useful Commands</a></h2>
+<pre><code class="language-bash"># Check for compilation errors without building
+cargo check
+
+# Format code
+cargo fmt
+
+# Lint with clippy
+cargo clippy
+
+# Generate and open documentation
+cargo doc --open
+</code></pre>
+<h2 id="ide-setup"><a class="header" href="#ide-setup">IDE Setup</a></h2>
+<h3 id="vs-code"><a class="header" href="#vs-code">VS Code</a></h3>
+<p>Install the <code>rust-analyzer</code> extension. The workspace is automatically detected.</p>
+<p>Recommended settings:</p>
+<pre><code class="language-json">{
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.inlayHints.chainingHints.enable": true
+}
+</code></pre>
+<h3 id="other-editors"><a class="header" href="#other-editors">Other Editors</a></h3>
+<p>Any editor with rust-analyzer support will work. The workspace <code>Cargo.toml</code> at the project root provides all the context rust-analyzer needs.</p>
+<h2 id="making-changes"><a class="header" href="#making-changes">Making Changes</a></h2>
+<ol>
+<li>Create a branch: <code>git checkout -b feature/my-change</code></li>
+<li>Make your changes</li>
+<li>Run tests: <code>cargo test</code></li>
+<li>Run clippy: <code>cargo clippy</code></li>
+<li>Format: <code>cargo fmt</code></li>
+<li>Commit with a conventional message</li>
+<li>Push and create a PR</li>
+</ol>
+<h2 id="guidelines"><a class="header" href="#guidelines">Guidelines</a></h2>
+<p>See <a href="#contributing-guidelines">Guidelines</a> for coding standards and contribution rules.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contributing-guidelines"><a class="header" href="#contributing-guidelines">Contributing Guidelines</a></h1>
+<p>Standards and conventions for contributing to Bombolab.</p>
+<h2 id="code-style"><a class="header" href="#code-style">Code Style</a></h2>
+<h3 id="rust-edition"><a class="header" href="#rust-edition">Rust Edition</a></h3>
+<p>The project uses <strong>edition 2024</strong>. All new code must be compatible with it.</p>
+<h3 id="formatting"><a class="header" href="#formatting">Formatting</a></h3>
+<p>Run <code>cargo fmt</code> before committing. The project uses default rustfmt settings.</p>
+<h3 id="linting"><a class="header" href="#linting">Linting</a></h3>
+<p>Run <code>cargo clippy</code> and fix all warnings. Common things clippy catches:</p>
+<ul>
+<li>Unused imports</li>
+<li>Unnecessary clones</li>
+<li>Missing documentation on public items</li>
+<li>Non-idiomatic Rust patterns</li>
+</ul>
+<h2 id="naming-conventions"><a class="header" href="#naming-conventions">Naming Conventions</a></h2>
+<p>Follow standard Rust naming:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Item</th><th>Convention</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>Types</td><td>PascalCase</td><td><code>DHParameter</code>, <code>JointType</code></td></tr>
+<tr><td>Functions</td><td>snake_case</td><td><code>compute_a_matrix</code>, <code>forward_kinematics</code></td></tr>
+<tr><td>Constants</td><td>SCREAMING_SNAKE</td><td><code>PI</code>, <code>DEG_TO_RAD</code></td></tr>
+<tr><td>Modules</td><td>snake_case</td><td><code>robot::joint</code>, <code>math::dh</code></td></tr>
+<tr><td>Files</td><td>snake_case</td><td><code>dh.rs</code>, <code>joint.rs</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
+<h3 id="public-items"><a class="header" href="#public-items">Public Items</a></h3>
+<p>All public types, functions, and modules should have doc comments:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Compute the A_i transformation matrix from DH parameters.
+///
+/// Uses the Craig convention: RotZ(θ) · TransZ(d) · TransX(a) · RotX(α).
+///
+/// # Arguments
+/// * `p` - DH parameters for one link
+///
+/// # Returns
+/// A 4x4 transformation matrix.
+pub fn compute_a_matrix(p: DHParameter) -&gt; Matrix4&lt;f64&gt; {
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<h3 id="internal-code"><a class="header" href="#internal-code">Internal Code</a></h3>
+<p>Use comments to explain <em>why</em>, not <em>what</em>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: explains the reasoning
+// Isometry3 stores rotation as UnitQuaternion, so we must convert
+let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
+
+// Bad: restates the code
+// Convert rotation matrix to quaternion
+let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
+<span class="boring">}</span></code></pre>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<h3 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h3>
+<p>Every module should have tests. Place them in a <code>#[cfg(test)] mod tests</code> block at the end of the file.</p>
+<p>Test naming convention:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_DHParameter_new() { ... }
+
+#[test]
+fn test_solve_empty_table() { ... }
+
+#[test]
+fn test_robot_set_joint_values_out_of_limits() { ... }
+<span class="boring">}</span></code></pre>
+<p>Use the <code>approx</code> pattern for floating-point comparisons:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn approx(a: f64, b: f64) -&gt; bool {
+    (a - b).abs() &lt; 1e-10
+}
+<span class="boring">}</span></code></pre>
+<h3 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h3>
+<p>Key areas that must have tests:</p>
+<ul>
+<li>DH parameter computation (<code>compute_a_matrix</code>)</li>
+<li>DH table solving (<code>solve</code>)</li>
+<li>Forward kinematics (<code>forward_kinematics</code>, <code>matrix_from_segment</code>)</li>
+<li>Joint limits and error handling</li>
+<li>Robot model operations (add/remove segments, set joint values)</li>
+</ul>
+<h2 id="git-conventions"><a class="header" href="#git-conventions">Git Conventions</a></h2>
+<h3 id="commit-messages"><a class="header" href="#commit-messages">Commit Messages</a></h3>
+<p>Use conventional commits:</p>
+<pre><code>feat: add inverse kinematics solver
+fix: correct DH matrix for alpha=pi/2
+docs: update API reference for DHParameter
+test: add edge cases for solve_empty_table
+refactor: extract matrix formatting into separate function
+</code></pre>
+<h3 id="branch-naming"><a class="header" href="#branch-naming">Branch Naming</a></h3>
+<pre><code>feature/description
+fix/description
+docs/description
+</code></pre>
+<h2 id="architecture-rules"><a class="header" href="#architecture-rules">Architecture Rules</a></h2>
+<ol>
+<li><strong>Core has no GUI dependency</strong>. <code>bombolab-core</code> must never import <code>egui</code> or <code>eframe</code>.</li>
+<li><strong>GUI depends on core</strong>, never the reverse.</li>
+<li><strong>New math goes in <code>math::</code></strong>. New robot model types go in <code>robot::</code>. New kinematics algorithms go in <code>kinematics::</code>.</li>
+<li><strong>Error types are explicit</strong>. Use the <code>Error</code> enum, don’t panic in library code.</li>
+<li><strong>DH parameters use Craig convention</strong>. Document this clearly when adding new DH-related code.</li>
+</ol>
+<h2 id="adding-a-new-feature"><a class="header" href="#adding-a-new-feature">Adding a New Feature</a></h2>
+<ol>
+<li>Check if it belongs in <code>bombolab-core</code> or <code>bombolab-gui</code></li>
+<li>Add types to the appropriate module</li>
+<li>Write tests first (or alongside implementation)</li>
+<li>Update the API reference in <code>docs/src/api/core.md</code></li>
+<li>Update this guide if you establish new patterns</li>
+</ol>
+<h2 id="adding-a-new-cli-tool"><a class="header" href="#adding-a-new-cli-tool">Adding a New CLI Tool</a></h2>
+<ol>
+<li>Create <code>crates/bombolab-core/src/bin/your-tool.rs</code></li>
+<li>Add <code>[[bin]]</code> entry to <code>crates/bombolab-core/Cargo.toml</code></li>
+<li>Add a chapter in <code>docs/src/cli/</code></li>
+<li>Update <code>SUMMARY.md</code></li>
+</ol>
+<h2 id="questions"><a class="header" href="#questions">Questions?</a></h2>
+<p>Open an issue on GitHub or start a discussion.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-09f2665d.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-c22b7243.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
