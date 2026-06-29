@@ -9,5 +9,9 @@ license = "MIT"
 name = "dh-solve"
 path = "src/bin/dh-solve.rs"
 
+[[bin]]
+name = "quaternion-solve"
+path = "src/bin/quaternion-solve.rs"
+
 [dependencies]
 nalgebra = "0.35.0"
