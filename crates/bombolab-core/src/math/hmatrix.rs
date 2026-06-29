@@ -1,6 +1,5 @@
 use nalgebra::{Isometry3, Rotation3, Unit, Vector3};
 
-/// Describes an end-effector movement: rotation around an axis + translation.
 pub struct Movement {
     pub translation: Vector3<f64>,
     pub angles: f64,
@@ -8,12 +7,16 @@ pub struct Movement {
     pub isometry: bool,
 }
 
+// R T  =  T * R
+// 0 1
 pub fn rotation_and_translation( axis: Vector3<f64>, angle: f64, translation: Vector3<f64>) -> Isometry3<f64> {
     let axis_unit = Unit::new_normalize(axis);
     let axisangle = axis_unit.as_ref() * angle;
     Isometry3::new(translation, axisangle)
 }
 
+// R RT  =  R * T
+// 0 1
 pub fn translation_and_rotation(axis: Vector3<f64>, angle: f64, translation: Vector3<f64>) -> Isometry3<f64> {
     let axis_unit = Unit::new_normalize(axis);
     let axisangle = axis_unit.as_ref() * angle;
