@@ -25,6 +25,15 @@ impl Quaternion {
         self.a * self.a + self.b * self.b + self.c * self.c + self.d * self.d
     }
 
+    pub fn norm(&self) -> f64 {
+        self.norm_sq().sqrt()
+    }
+
+    pub fn normalize(&self) -> Self {
+        let n = self.norm();
+        Self::new(self.a / n, self.b / n, self.c / n, self.d / n)
+    }
+
     pub fn conjugate(&self) -> Self {
         Self::new(self.a, -self.b, -self.c, -self.d)
     }
@@ -134,6 +143,27 @@ mod tests {
     fn test_norm_sq() {
         let q = Quaternion::new(1.0, 2.0, 3.0, 4.0);
         assert!(approx_eq(q.norm_sq(), 30.0));
+    }
+
+    #[test]
+    fn test_norm() {
+        let q = Quaternion::new(0.0, 3.0, 4.0, 0.0);
+        assert!(approx_eq(q.norm(), 5.0));
+    }
+
+    #[test]
+    fn test_normalize() {
+        let q = Quaternion::new(0.0, 3.0, 4.0, 0.0);
+        let n = q.normalize();
+        assert!(approx_eq(n.norm(), 1.0));
+        assert!(approx_eq(n.b, 0.6));
+        assert!(approx_eq(n.c, 0.8));
+    }
+
+    #[test]
+    fn test_normalize_identity() {
+        let q = Quaternion::identity();
+        assert!(quat_approx_eq(&q.normalize(), &q));
     }
 
     #[test]
