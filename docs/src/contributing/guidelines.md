@@ -60,7 +60,7 @@ Use comments to explain *why*, not *what*:
 
 ```rust
 // Good: explains the reasoning
-// Isometry3 stores rotation as UnitQuaternion, so we must convert
+// Iso3 stores rotation as UnitQuaternion, so we must convert
 let rotation = UnitQuaternion::from_rotation_matrix(&(rot_z * rot_x));
 
 // Bad: restates the code

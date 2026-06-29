@@ -34,14 +34,14 @@ let a_i = compute_a_matrix(p);
 `forward_kinematics()` multiplies them sequentially:
 
 ```rust
-use bombolab_core::{Isometry3, Robot, forward_kinematics};
+use bombolab_core::{Iso3, Robot, forward_kinematics};
 
 let (frames, end_effector) = forward_kinematics(base, &robot);
 ```
 
 The function:
 
-1. Starts with the `base` transformation (usually `Isometry3::identity()`)
+1. Starts with the `base` transformation (usually `Iso3::identity()`)
 2. For each segment, computes `current = current * matrix_from_segment(segment)`
 3. Stores each cumulative result in `frames`
 4. Returns the final frame as `end_effector`
@@ -62,25 +62,25 @@ let rot = end_effector.rotation;
 
 ## matrix_from_segment
 
-Each segment produces an `Isometry3<f64>` (a combined rotation + translation from nalgebra):
+Each segment produces an `Iso3<f64>` (a combined rotation + translation from nalgebra):
 
 ```rust
-pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64> {
+pub fn matrix_from_segment(segment: &Segment) -> Iso3<f64> {
     let (theta, d, a, alpha) = segment.dh_params();
 
-    let rot_z = Rotation3::from_axis_angle(&Vector3::z_axis(), theta);
-    let rot_x = Rotation3::from_axis_angle(&Vector3::x_axis(), alpha);
+    let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
+    let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
     let rotation = UnitQuaternion::from_rotation_matrix(&(rot_z * rot_x));
 
     let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
 
-    Isometry3::from_parts(translation, rotation)
+    Iso3::from_parts(translation, rotation)
 }
 ```
 
 ### Why UnitQuaternion?
 
-`Isometry3` stores rotation internally as a `UnitQuaternion`, not a `Rotation3`. The conversion via `UnitQuaternion::from_rotation_matrix()` is necessary because `Isometry3::from_parts()` expects a quaternion.
+`Iso3` stores rotation internally as a `UnitQuaternion`, not a `Rot3`. The conversion via `UnitQuaternion::from_rotation_matrix()` is necessary because `Iso3::from_parts()` expects a quaternion.
 
 ### The Translation
 
@@ -97,13 +97,13 @@ This is not "movement in X" -- it's the result of rotating a link of length `a` 
 The `base` parameter positions the robot in the world:
 
 ```rust
-use nalgebra::{Isometry3, Translation3, UnitQuaternion};
+use nalgebra::{Iso3, Translation3, UnitQuaternion};
 
 // Robot at world origin
-let base = Isometry3::identity();
+let base = Iso3::identity();
 
 // Robot displaced 10 units up
-let base = Isometry3::from_parts(
+let base = Iso3::from_parts(
     Translation3::new(0.0, 0.0, 10.0),
     UnitQuaternion::identity(),
 );
@@ -142,7 +142,7 @@ Access methods:
 let solution = solve(&table);
 
 let rotation = solution.rotation();    // Matrix3<f64> -- 3x3 rotation
-let translation = solution.translation(); // Vector3<f64> -- position
+let translation = solution.translation(); // Vec3<f64> -- position
 ```
 
 ## Example: Planar 2R Robot

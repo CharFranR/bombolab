@@ -103,38 +103,38 @@ With alpha, you can model real 3D robots.
 
 ---
 
-## 3. The Trick with Isometry3 in `matrix_from_segment`
+## 3. The Trick with Iso3 in `matrix_from_segment`
 
 The function that builds each segment's matrix:
 
 ```rust
-pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64> {
+pub fn matrix_from_segment(segment: &Segment) -> Iso3<f64> {
     let (theta, d, a, alpha) = segment.dh_params();
 
     // Final rotation: RotZ(theta) * RotX(alpha)
-    let rot_z = Rotation3::from_axis_angle(&Vector3::z_axis(), theta);
-    let rot_x = Rotation3::from_axis_angle(&Vector3::x_axis(), alpha);
+    let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
+    let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
     let rotation = UnitQuaternion::from_rotation_matrix(&(rot_z * rot_x));
 
     // Translation: a*cos(theta) in X, a*sin(theta) in Y, d in Z
     let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
 
-    Isometry3::from_parts(translation, rotation)
+    Iso3::from_parts(translation, rotation)
 }
 ```
 
 ### Why UnitQuaternion?
 
-`Isometry3<f64>` stores rotation internally as `UnitQuaternion<f64>`,
-not as `Rotation3<f64>`. That's why we need to convert with
+`Iso3<f64>` stores rotation internally as `UnitQuaternion<f64>`,
+not as `Rot3<f64>`. That's why we need to convert with
 `UnitQuaternion::from_rotation_matrix()`.
 
-You can also write `rot.into()` if you have a `Rotation3` -- the conversion
+You can also write `rot.into()` if you have a `Rot3` -- the conversion
 is automatic:
 
 ```rust
-let r: Rotation3<f64> = rot_z * rot_x;
-Isometry3::from_parts(translation, r.into())
+let r: Rot3<f64> = rot_z * rot_x;
+Iso3::from_parts(translation, r.into())
 ```
 
 ### Why rot_z * rot_x?
@@ -171,9 +171,9 @@ affect it, but in the DH formula the translation is applied BEFORE RotX(alpha).
 
 ```rust
 pub fn forward_kinematics(
-    base: Isometry3<f64>,   // where the world is relative to the robot
+    base: Iso3<f64>,   // where the world is relative to the robot
     robot: &Robot,
-) -> (Vec<Isometry3<f64>>, Isometry3<f64>) {
+) -> (Vec<Iso3<f64>>, Iso3<f64>) {
     let mut frames = Vec::new();
     let mut current = base;
 
@@ -186,14 +186,14 @@ pub fn forward_kinematics(
 }
 ```
 
-- **frames**: `Vec<Isometry3<f64>>` -- the pose of EACH link. `frames[i]` is
+- **frames**: `Vec<Iso3<f64>>` -- the pose of EACH link. `frames[i]` is
   the position of frame i+1 after applying joints 0..=i.
 - **current** (end-effector): the pose of the last frame, after all joints.
 
 ### What about the base?
 
-`base` is an external `Isometry3<f64>` -- it's not tied to the robot. You can pass
-`Isometry3::identity()` if the robot is at the origin, or any transformation
+`base` is an external `Iso3<f64>` -- it's not tied to the robot. You can pass
+`Iso3::identity()` if the robot is at the origin, or any transformation
 if it's displaced/rotated in the world. The same robot can be used in different
 positions without modifying it.
 

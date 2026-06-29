@@ -27,15 +27,15 @@ This matches the convention used in "Introduction to Robotics" by Craig, which i
 
 **Tradeoff**: Users trained on the standard convention need to remap their parameters.
 
-## 3. Isometry3 for Transformations
+## 3. Iso3 for Transformations
 
-**Decision**: Use `nalgebra::Isometry3<f64>` instead of raw `Matrix4<f64>` for forward kinematics.
+**Decision**: Use `nalgebra::Iso3<f64>` instead of raw `Matrix4<f64>` for forward kinematics.
 
 **Why**:
-- `Isometry3` semantically represents a rigid body transformation (rotation + translation)
+- `Iso3` semantically represents a rigid body transformation (rotation + translation)
 - It stores rotation as a `UnitQuaternion`, which is more numerically stable than a 3x3 rotation matrix
 - nalgebra provides optimized multiplication for isometries
-- The `forward_kinematics()` function returns `Vec<Isometry3>`, giving both position and rotation in a type-safe way
+- The `forward_kinematics()` function returns `Vec<Iso3>`, giving both position and rotation in a type-safe way
 
 The numeric solver (`solve()`) uses `Matrix4<f64>` directly because it works with the raw DH math and needs to display the full 4x4 matrix.
 

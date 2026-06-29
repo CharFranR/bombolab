@@ -20,7 +20,7 @@ pub use kinematics::{forward_kinematics, matrix_from_segment};
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
 
 // nalgebra types
-pub use nalgebra::Isometry3;
+pub use nalgebra::Iso3;
 ```
 
 ---
@@ -92,7 +92,7 @@ pub struct DHSolution {
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `rotation` | `(&self) -> Matrix3<f64>` | 3x3 rotation matrix from the final transform |
-| `translation` | `(&self) -> Vector3<f64>` | Position vector from the final transform |
+| `translation` | `(&self) -> Vec3<f64>` | Position vector from the final transform |
 
 Implements `Display` for formatted output (DH table, A matrices, frames, final pose).
 
@@ -304,23 +304,23 @@ Compute forward kinematics for a robot chain.
 
 ```rust
 pub fn forward_kinematics(
-    base: Isometry3<f64>,
+    base: Iso3<f64>,
     robot: &Robot,
-) -> (Vec<Isometry3<f64>>, Isometry3<f64>)
+) -> (Vec<Iso3<f64>>, Iso3<f64>)
 ```
 
 **Parameters**:
-- `base` -- world-to-base transformation (use `Isometry3::identity()` for origin)
+- `base` -- world-to-base transformation (use `Iso3::identity()` for origin)
 - `robot` -- the robot to solve
 
 **Returns**: `(frames, end_effector)`
-- `frames` -- one `Isometry3` per segment (cumulative pose at each joint)
+- `frames` -- one `Iso3` per segment (cumulative pose at each joint)
 - `end_effector` -- the final pose (last element of `frames`)
 
 **Example**:
 
 ```rust
-use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Isometry3, forward_kinematics};
+use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Iso3, forward_kinematics};
 
 let robot = Robot::new(vec![
     Segment::new(
@@ -329,7 +329,7 @@ let robot = Robot::new(vec![
     ),
 ]);
 
-let (frames, effector) = forward_kinematics(Isometry3::identity(), &robot);
+let (frames, effector) = forward_kinematics(Iso3::identity(), &robot);
 assert_eq!(frames.len(), 1);
 ```
 
@@ -338,7 +338,7 @@ assert_eq!(frames.len(), 1);
 Compute the transformation for a single segment.
 
 ```rust
-pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64>
+pub fn matrix_from_segment(segment: &Segment) -> Iso3<f64>
 ```
 
 Returns the isometry representing the segment's DH transformation: `RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)`.
@@ -351,9 +351,9 @@ Returns the isometry representing the segment's DH transformation: `RotZ(θ) · 
 
 ```rust
 pub struct Movement {
-    pub translation: Vector3<f64>,
+    pub translation: Vec3<f64>,
     pub angles: f64,
-    pub axis: Vector3<f64>,
+    pub axis: Vec3<f64>,
     pub isometry: bool,
 }
 ```
@@ -362,16 +362,16 @@ pub struct Movement {
 
 ```rust
 pub fn rotation_and_translation(
-    axis: Vector3<f64>, angle: f64, translation: Vector3<f64>
-) -> Isometry3<f64>
+    axis: Vec3<f64>, angle: f64, translation: Vec3<f64>
+) -> Iso3<f64>
 
 pub fn translation_and_rotation(
-    axis: Vector3<f64>, angle: f64, translation: Vector3<f64>
-) -> Isometry3<f64>
+    axis: Vec3<f64>, angle: f64, translation: Vec3<f64>
+) -> Iso3<f64>
 
 pub fn make_movement(
-    initial: Isometry3<f64>, movements: &[Movement]
-) -> (Vec<Isometry3<f64>>, Isometry3<f64>)
+    initial: Iso3<f64>, movements: &[Movement]
+) -> (Vec<Iso3<f64>>, Iso3<f64>)
 ```
 
 `make_movement` composes a sequence of movements from an initial pose, returning the trajectory and final pose.

@@ -16,7 +16,7 @@ bombolab/
 │   │       ├── math/
 │   │       │   ├── mod.rs
 │   │       │   ├── dh.rs         # DH parameter types and solver
-│   │       │   ├── hmatrix.rs    # Isometry3 helpers
+│   │       │   ├── hmatrix.rs    # Iso3 helpers
 │   │       │   ├── quaternion.rs # Quaternion type and operations
 │   │       │   └── constants.rs  # PI, DEG_TO_RAD, RAD_TO_DEG
 │   │       ├── robot/
@@ -91,7 +91,7 @@ User Input (GUI or CLI)
          │
          ▼
 ┌─────────────────┐
-│  Isometry3 /     │  ← frames, end-effector pose
+│  Iso3 /     │  ← frames, end-effector pose
 │  Matrix4         │
 └────────┬────────┘
          │

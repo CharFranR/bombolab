@@ -78,7 +78,7 @@ The project is organized into three layers:
 
 | Crate | Version | Purpose |
 |-------|---------|---------|
-| [nalgebra](https://crates.io/crates/nalgebra) | 0.35.0 | Linear algebra: Isometry3, Rotation3, Vector3 |
+| [nalgebra](https://crates.io/crates/nalgebra) | 0.35.0 | Linear algebra: Iso3, Rot3, Vec3 |
 | [egui](https://crates.io/crates/egui) | 0.34.3 | Immediate-mode GUI framework |
 | [eframe](https://crates.io/crates/eframe) | 0.34.3 | Native application wrapper for egui |
 

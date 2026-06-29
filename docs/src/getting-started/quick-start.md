@@ -9,7 +9,7 @@ A robot is a chain of `Segment`s. Each segment combines a `Joint` (the motor) wi
 ```rust
 use bombolab_core::{
     DHParams, Joint, JointType, Robot, Segment,
-    Isometry3, forward_kinematics,
+    Iso3, forward_kinematics,
 };
 
 // 2-link planar arm: both joints revolute, links of length 1.0
@@ -30,11 +30,11 @@ let robot = Robot::new(segments);
 ## 2. Solve Forward Kinematics
 
 ```rust
-let base = Isometry3::identity(); // robot at world origin
+let base = Iso3::identity(); // robot at world origin
 let (frames, end_effector) = forward_kinematics(base, &robot);
 ```
 
-- `frames` -- one `Isometry3` per segment, showing the cumulative pose at each joint
+- `frames` -- one `Iso3` per segment, showing the cumulative pose at each joint
 - `end_effector` -- the final pose after all joints
 
 ## 3. Read the Result
@@ -58,7 +58,7 @@ use std::f64::consts::FRAC_PI_2;
 // Rotate first joint to 90 degrees
 robot.segments[0].joint.value = FRAC_PI_2;
 
-let (_, end_effector) = forward_kinematics(Isometry3::identity(), &robot);
+let (_, end_effector) = forward_kinematics(Iso3::identity(), &robot);
 let pos = end_effector.translation.vector;
 println!("After rotation: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
 // Now the arm points upward

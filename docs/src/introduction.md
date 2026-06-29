@@ -28,7 +28,7 @@ Bombolab computes where a robot arm is in 3D space given its joint angles. You d
 ```rust
 use bombolab_core::{
     DHParams, Joint, JointType, Robot, Segment,
-    Isometry3, forward_kinematics,
+    Iso3, forward_kinematics,
 };
 
 // A simple 2-link planar arm
@@ -44,7 +44,7 @@ let segments = vec![
 ];
 
 let robot = Robot::new(segments);
-let (frames, end_effector) = forward_kinematics(Isometry3::identity(), &robot);
+let (frames, end_effector) = forward_kinematics(Iso3::identity(), &robot);
 
 let pos = end_effector.translation.vector;
 println!("End-effector at: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
