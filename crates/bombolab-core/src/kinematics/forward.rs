@@ -1,5 +1,4 @@
-use crate::math::{Iso3, Rot3, Tras, Quat, Vec3};
-
+use crate::math::{Iso3, Quat, Rot3, Tras, Vec3};
 
 use crate::robot::{Robot, Segment};
 

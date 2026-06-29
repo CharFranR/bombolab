@@ -1,6 +1,8 @@
 use std::io::{self, Write};
 
-use bombolab_core::math::quaternion::{Quaternion, solve_add, solve_divide, solve_multiply, solve_subtract};
+use bombolab_core::math::quaternion::{
+    Quaternion, solve_add, solve_divide, solve_multiply, solve_subtract,
+};
 
 fn read_input(prompt: &str) -> String {
     print!("{}", prompt);
@@ -38,7 +40,9 @@ fn main() {
         }
     };
 
-    let n: usize = read_input("\nNúmero de cuaterniones: ").parse().expect("número válido");
+    let n: usize = read_input("\nNúmero de cuaterniones: ")
+        .parse()
+        .expect("número válido");
 
     let mut quats: Vec<Quaternion> = Vec::new();
     for i in 0..n {

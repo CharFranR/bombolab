@@ -186,7 +186,10 @@ mod tests {
         let q1 = Quaternion::new(1.0, 2.0, 3.0, 4.0);
         let q2 = Quaternion::new(5.0, 6.0, 7.0, 8.0);
         let result = solve_add(&[q1, q2]);
-        assert!(quat_approx_eq(&result, &Quaternion::new(6.0, 8.0, 10.0, 12.0)));
+        assert!(quat_approx_eq(
+            &result,
+            &Quaternion::new(6.0, 8.0, 10.0, 12.0)
+        ));
     }
 
     #[test]
@@ -201,7 +204,10 @@ mod tests {
         let q2 = Quaternion::new(1.0, 2.0, 3.0, 4.0);
         // solve_subtract empieza en 0 y resta cada uno: 0 - q1 - q2
         let result = solve_subtract(&[q1, q2]);
-        assert!(quat_approx_eq(&result, &Quaternion::new(-6.0, -8.0, -10.0, -12.0)));
+        assert!(quat_approx_eq(
+            &result,
+            &Quaternion::new(-6.0, -8.0, -10.0, -12.0)
+        ));
     }
 
     #[test]
@@ -243,7 +249,10 @@ mod tests {
     fn test_add_multiple() {
         let q = Quaternion::new(1.0, 1.0, 1.0, 1.0);
         let result = solve_add(&[q.clone(), q.clone(), q.clone()]);
-        assert!(quat_approx_eq(&result, &Quaternion::new(3.0, 3.0, 3.0, 3.0)));
+        assert!(quat_approx_eq(
+            &result,
+            &Quaternion::new(3.0, 3.0, 3.0, 3.0)
+        ));
     }
 
     #[test]

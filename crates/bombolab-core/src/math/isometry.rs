@@ -1,4 +1,4 @@
-use crate::math::{Iso3, UnitVec, Rot3, Vec3};
+use crate::math::{Iso3, Rot3, UnitVec, Vec3};
 
 pub struct Movement {
     pub translation: Vec3,
@@ -9,7 +9,7 @@ pub struct Movement {
 
 // R T  =  T * R
 // 0 1
-pub fn rotation_and_translation( axis: Vec3, angle: f64, translation: Vec3) -> Iso3 {
+pub fn rotation_and_translation(axis: Vec3, angle: f64, translation: Vec3) -> Iso3 {
     let axis_unit = UnitVec::new_normalize(axis);
     let axisangle = axis_unit.as_ref() * angle;
     Iso3::new(translation, axisangle)
