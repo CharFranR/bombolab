@@ -111,17 +111,23 @@ T_i = RotZ(theta) * TransZ(d) * TransX(a) * RotX(alpha)
 
 For more details, see [docs/forward_kinematics.md](docs/forward_kinematics.md).
 
-## Current Status
+## Status
 
-- [x] Domain model (joints, links, segments, robot)
-- [x] Forward kinematics computation
-- [x] GUI with egui/eframe
-- [x] DH parameter editor
-- [x] Transformation matrix display
-- [ ] 3D viewport rendering
-- [ ] Robot model catalog
-- [ ] Jacobian computation
-- [ ] Inverse kinematics
+### Implemented
+
+- Domain model (joints, links, segments, robot)
+- Forward kinematics computation
+- GUI with egui/eframe
+- DH parameter editor
+- Transformation matrix display
+- CLI tools: `dh-solve` (numeric/symbolic) and `quaternion-solve`
+
+### Planned
+
+- 3D viewport rendering
+- Robot model catalog
+- Jacobian computation
+- Inverse kinematics
 
 ## Contributing
 
