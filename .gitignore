@@ -27,3 +27,6 @@ target
 
 
 .atl
+
+# mdBook build output
+docs/book/
