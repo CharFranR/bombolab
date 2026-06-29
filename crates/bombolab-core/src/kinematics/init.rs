@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use nalgebra::{Isometry3, Vector3};
 
-use super::hmatrix::{Movement, make_movement};
+use crate::math::hmatrix::{Movement, make_movement};
 
 use crate::kinematics::forward::forward_kinematics;
 use crate::robot::{DHParams, Joint, JointType, Result, Robot, Segment};
