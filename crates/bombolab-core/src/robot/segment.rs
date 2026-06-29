@@ -1,6 +1,6 @@
-use crate::domain::errors::{Error, Result};
-use crate::domain::joint::Joint;
-use crate::domain::link::DHParams;
+use super::errors::{Error, Result};
+use super::joint::{Joint, JointType};
+use super::link::DHParams;
 
 pub struct Segment {
     pub joint: Joint,
@@ -18,12 +18,8 @@ impl Segment {
 
     pub fn dh_params(&self) -> (f64, f64, f64, f64) {
         match self.joint.joint_type {
-            crate::domain::JointType::Revolute => {
-                (self.joint.value, self.dh.d, self.dh.a, self.dh.alpha)
-            }
-            crate::domain::JointType::Prismatic => {
-                (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha)
-            }
+            JointType::Revolute => (self.joint.value, self.dh.d, self.dh.a, self.dh.alpha),
+            JointType::Prismatic => (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha),
         }
     }
 }
@@ -104,7 +100,6 @@ impl Robot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::JointType;
 
     fn make_test_segment(joint_type: JointType, value: f64) -> Segment {
         let joint = Joint::new(joint_type, value, 1.0, -1.0);

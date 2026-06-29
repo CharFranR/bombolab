@@ -1,6 +1,6 @@
 use nalgebra::{Isometry3, Rotation3, Unit, Vector3};
 
-/// Describe un movimiento del efector final: rotación alrededor de un eje + traslación.
+/// Describes an end-effector movement: rotation around an axis + translation.
 pub struct Movement {
     pub translation: Vector3<f64>,
     pub angles: f64,

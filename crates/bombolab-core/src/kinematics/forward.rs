@@ -1,7 +1,6 @@
 use nalgebra::{Isometry3, Rotation3, Translation3, UnitQuaternion, Vector3};
 
-use crate::domain::Robot;
-use crate::domain::Segment;
+use crate::robot::{Robot, Segment};
 
 pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64> {
     let (theta, d, a, alpha) = segment.dh_params();
@@ -32,7 +31,7 @@ pub fn forward_kinematics(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{DHParams, Joint, JointType, Robot, Segment};
+    use crate::robot::{DHParams, Joint, JointType, Robot, Segment};
 
     fn make_segment(joint_type: JointType, value: f64, dh: DHParams) -> Segment {
         let joint = Joint::new(

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::domain::errors::{Error, Result};
+use super::errors::{Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JointType {

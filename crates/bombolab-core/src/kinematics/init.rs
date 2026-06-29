@@ -4,8 +4,8 @@ use nalgebra::{Isometry3, Vector3};
 
 use super::hmatrix::{Movement, make_movement};
 
-use crate::domain::{DHParams, Joint, JointType, Result, Robot, Segment};
-use crate::kinematics::dh_parameters::forward_kinematics;
+use crate::kinematics::forward::forward_kinematics;
+use crate::robot::{DHParams, Joint, JointType, Result, Robot, Segment};
 
 fn read_vec3(prompt: &str) -> Vector3<f64> {
     print!("{}", prompt);
