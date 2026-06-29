@@ -9,6 +9,13 @@ pub enum Error {
     JointValueOutOfLimits { value: f64, min: f64, max: f64 },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum MathError {
+    ZeroVectorNormalization,
+    ZeroQuaternionNormalization,
+    ZeroQuaternionInverse { norm_sq: f64 },
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -30,3 +37,25 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl fmt::Display for MathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MathError::ZeroVectorNormalization => {
+                write!(f, "cannot normalize a zero-length vector")
+            }
+            MathError::ZeroQuaternionNormalization => {
+                write!(f, "cannot normalize a zero quaternion")
+            }
+            MathError::ZeroQuaternionInverse { norm_sq } => {
+                write!(
+                    f,
+                    "cannot invert a zero quaternion (norm² = {})",
+                    norm_sq
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for MathError {}
