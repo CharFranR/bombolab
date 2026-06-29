@@ -1,31 +1,30 @@
-use nalgebra::{Isometry3, Rotation3, Unit, Vector3};
+use crate::math::{Iso3, UnitVec, Rot3, Vec3};
 
 pub struct Movement {
-    pub translation: Vector3<f64>,
+    pub translation: Vec3,
     pub angles: f64,
-    pub axis: Vector3<f64>,
+    pub axis: Vec3,
     pub isometry: bool,
 }
 
 // R T  =  T * R
 // 0 1
-pub fn rotation_and_translation( axis: Vector3<f64>, angle: f64, translation: Vector3<f64>) -> Isometry3<f64> {
-    let axis_unit = Unit::new_normalize(axis);
+pub fn rotation_and_translation( axis: Vec3, angle: f64, translation: Vec3) -> Iso3 {
+    let axis_unit = UnitVec::new_normalize(axis);
     let axisangle = axis_unit.as_ref() * angle;
-    Isometry3::new(translation, axisangle)
+    Iso3::new(translation, axisangle)
 }
 
 // R RT  =  R * T
 // 0 1
-pub fn translation_and_rotation(axis: Vector3<f64>, angle: f64, translation: Vector3<f64>) -> Isometry3<f64> {
-    let axis_unit = Unit::new_normalize(axis);
-    let axisangle = axis_unit.as_ref() * angle;
-    let rotation = Rotation3::from_axis_angle(&axis_unit, angle);
-    Isometry3::new(rotation * translation, axisangle)
+pub fn translation_and_rotation(axis: Vec3, angle: f64, translation: Vec3) -> Iso3 {
+    let axis_unit = UnitVec::new_normalize(axis);
+    let rotation = Rot3::from_axis_angle(&axis_unit, angle);
+    Iso3::new(rotation * translation, Vec3::zeros())
 }
 
-pub fn make_movement(initial: Isometry3<f64>, movements: &[Movement]) -> (Vec<Isometry3<f64>>, Isometry3<f64>) {
-    let mut trajectory: Vec<Isometry3<f64>> = Vec::new();
+pub fn make_movement(initial: Iso3, movements: &[Movement]) -> (Vec<Iso3>, Iso3) {
+    let mut trajectory: Vec<Iso3> = Vec::new();
     let mut current = initial;
 
     for movement in movements {

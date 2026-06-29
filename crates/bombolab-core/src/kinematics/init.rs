@@ -1,13 +1,13 @@
 use std::io::{self, Write};
 
-use nalgebra::{Isometry3, Vector3};
+use crate::math::{Iso3, Vec3};
 
-use crate::math::hmatrix::{Movement, make_movement};
+use crate::math::isometry::{Movement, make_movement};
 
 use crate::kinematics::forward::forward_kinematics;
 use crate::robot::{DHParams, Joint, JointType, Result, Robot, Segment};
 
-fn read_vec3(prompt: &str) -> Vector3<f64> {
+fn read_vec3(prompt: &str) -> Vec3 {
     print!("{}", prompt);
     io::stdout().flush().unwrap();
     let mut input = String::new();
@@ -17,7 +17,7 @@ fn read_vec3(prompt: &str) -> Vector3<f64> {
         .split_whitespace()
         .map(|s| s.parse().unwrap())
         .collect();
-    Vector3::new(parts[0], parts[1], parts[2])
+    Vec3::new(parts[0], parts[1], parts[2])
 }
 
 fn read_f64(prompt: &str) -> f64 {
@@ -69,7 +69,7 @@ pub fn run() {
     println!("=== make_movement test ===\n");
 
     let initial_pos = read_vec3("Initial effector position (x y z): ");
-    let initial = Isometry3::new(initial_pos, nalgebra::zero());
+    let initial = Iso3::new(initial_pos, nalgebra::zero());
 
     let mov1 = read_movement(1);
     let mov2 = read_movement(2);
@@ -145,7 +145,7 @@ pub fn move_robot(robot: &mut Robot) -> Result<()> {
 pub fn test_forward_kinematics() {
     let mut pajatron = make_robot();
 
-    let base = Isometry3::<f64>::identity();
+    let base = Iso3::identity();
 
     let (frames, effector) = forward_kinematics(base, &pajatron);
 

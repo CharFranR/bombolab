@@ -1,6 +1,6 @@
 use std::fmt;
 
-use nalgebra::Matrix4;
+use crate::math::{Vec3, Mat3, Mat4};
 
 /// Parámetros DH para un eslabón (convención Craig).
 ///
@@ -89,11 +89,11 @@ impl DHParameterSymbolic {
 }
 
 /// Calcula la matriz A_i 4×4 a partir de parámetros DH.
-pub fn compute_a_matrix(p: DHParameter) -> Matrix4<f64> {
+pub fn compute_a_matrix(p: DHParameter) -> Mat4 {
     let (st, ct) = p.theta.sin_cos();
     let (sa, ca) = p.alpha.sin_cos();
 
-    Matrix4::new(
+    Mat4::new(
         ct, -st * ca,  st * sa, p.a * ct,
         st,  ct * ca, -ct * sa, p.a * st,
         0.0, sa,       ca,      p.d,
@@ -104,18 +104,18 @@ pub fn compute_a_matrix(p: DHParameter) -> Matrix4<f64> {
 /// Resultado de resolver una tabla DH.
 pub struct DHSolution {
     pub table: Vec<DHParameter>,
-    pub a_matrices: Vec<Matrix4<f64>>,
-    pub intermediates: Vec<Matrix4<f64>>,
-    pub final_transform: Matrix4<f64>,
+    pub a_matrices: Vec<Mat4>,
+    pub intermediates: Vec<Mat4>,
+    pub final_transform: Mat4,
 }
 
 impl DHSolution {
-    pub fn rotation(&self) -> nalgebra::Matrix3<f64> {
-        self.final_transform.fixed_view::<3, 3>(0, 0).into()
+    pub fn rotation(&self) -> Mat3 {
+        self.final_transform.fixed_view::<3, 3>(0, 0).into_owned()
     }
 
-    pub fn translation(&self) -> nalgebra::Vector3<f64> {
-        self.final_transform.fixed_view::<3, 1>(0, 3).into()
+    pub fn translation(&self) -> Vec3 {
+        self.final_transform.fixed_view::<3, 1>(0, 3).into_owned()
     }
 }
 
@@ -124,7 +124,7 @@ pub fn solve(table: &[DHParameter]) -> DHSolution {
     let a_matrices: Vec<_> = table.iter().map(|p| compute_a_matrix(*p)).collect();
 
     let mut intermediates = Vec::with_capacity(a_matrices.len());
-    let mut acc = Matrix4::<f64>::identity();
+    let mut acc = Mat4::identity();
     for a in &a_matrices {
         acc = acc * a;
         intermediates.push(acc);
@@ -133,7 +133,7 @@ pub fn solve(table: &[DHParameter]) -> DHSolution {
     let final_transform = intermediates
         .last()
         .copied()
-        .unwrap_or_else(Matrix4::identity);
+        .unwrap_or_else(Mat4::identity);
 
     DHSolution {
         table: table.to_vec(),
@@ -193,7 +193,7 @@ impl fmt::Display for DHSolution {
     }
 }
 
-fn write_matrix(f: &mut fmt::Formatter<'_>, m: &Matrix4<f64>) -> fmt::Result {
+fn write_matrix(f: &mut fmt::Formatter<'_>, m: &Mat4) -> fmt::Result {
     for row in 0..4 {
         writeln!(
             f,
@@ -298,7 +298,7 @@ mod tests {
         (a - b).abs() < EPS
     }
 
-    fn matrix_approx(a: &Matrix4<f64>, b: &Matrix4<f64>) -> bool {
+    fn matrix_approx(a: &Mat4, b: &Mat4) -> bool {
         a.iter().zip(b.iter()).all(|(x, y)| approx(*x, *y))
     }
 
@@ -332,13 +332,13 @@ mod tests {
     #[test]
     fn identity_params() {
         let m = compute_a_matrix(DHParameter::new(0.0, 0.0, 0.0, 0.0));
-        assert!(matrix_approx(&m, &Matrix4::identity()));
+        assert!(matrix_approx(&m, &Mat4::identity()));
     }
 
     #[test]
     fn solve_empty_table() {
         let sol = solve(&[]);
-        assert!(matrix_approx(&sol.final_transform, &Matrix4::identity()));
+        assert!(matrix_approx(&sol.final_transform, &Mat4::identity()));
         assert!(sol.a_matrices.is_empty());
         assert!(sol.intermediates.is_empty());
     }

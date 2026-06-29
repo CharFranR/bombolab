@@ -1,4 +1,4 @@
-use bombolab_core::{Isometry3, JointType, forward_kinematics};
+use bombolab_core::{Iso3, JointType, forward_kinematics};
 
 use crate::ui::state::{PanelView, RobotDef, SegmentUi};
 
@@ -89,7 +89,7 @@ fn render_main(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         let robot = &state.robots[idx];
         if !robot.segments.is_empty() {
             let domain_robot = robot.to_robot();
-            let base = Isometry3::identity();
+            let base = Iso3::identity();
             let (_frames, effector) = forward_kinematics(base, &domain_robot);
 
             let pos = effector.translation.vector;
@@ -371,7 +371,7 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
 
     // Compute real FK for end-effector
     let domain_robot = state.robots[idx].to_robot();
-    let base = Isometry3::identity();
+    let base = Iso3::identity();
     let (_frames, effector) = forward_kinematics(base, &domain_robot);
 
     // Format the real transformation matrix

@@ -1,22 +1,20 @@
-use nalgebra::{Isometry3, Rotation3, Translation3, UnitQuaternion, Vector3};
+use crate::math::{Iso3, Rot3, Tras, Quat, Vec3};
+
 
 use crate::robot::{Robot, Segment};
 
-pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64> {
+pub fn matrix_from_segment(segment: &Segment) -> Iso3 {
     let (theta, d, a, alpha) = segment.dh_params();
 
-    let rot_z = Rotation3::from_axis_angle(&Vector3::z_axis(), theta);
-    let rot_x = Rotation3::from_axis_angle(&Vector3::x_axis(), alpha);
-    let rotation = UnitQuaternion::from_rotation_matrix(&(rot_z * rot_x));
-    let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
+    let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
+    let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
+    let rotation = Quat::from_rotation_matrix(&(rot_z * rot_x));
+    let translation = Tras::new(a * theta.cos(), a * theta.sin(), d);
 
-    Isometry3::from_parts(translation, rotation)
+    Iso3::from_parts(translation, rotation)
 }
 
-pub fn forward_kinematics(
-    base: Isometry3<f64>,
-    robot: &Robot,
-) -> (Vec<Isometry3<f64>>, Isometry3<f64>) {
+pub fn forward_kinematics(base: Iso3, robot: &Robot) -> (Vec<Iso3>, Iso3) {
     let mut frames = Vec::new();
     let mut current = base;
 
@@ -90,7 +88,7 @@ mod tests {
         let segments = vec![make_segment(JointType::Revolute, 0.0, dh)];
         let robot = Robot::new(segments);
 
-        let base = Isometry3::identity();
+        let base = Iso3::identity();
         let (frames, effector) = forward_kinematics(base, &robot);
 
         assert_eq!(frames.len(), 1);
@@ -114,7 +112,7 @@ mod tests {
         ];
         let robot = Robot::new(segments);
 
-        let base = Isometry3::identity();
+        let base = Iso3::identity();
         let (frames, effector) = forward_kinematics(base, &robot);
 
         assert_eq!(frames.len(), 2);
@@ -137,7 +135,7 @@ mod tests {
         )];
         let robot = Robot::new(segments);
 
-        let base = Isometry3::identity();
+        let base = Iso3::identity();
         let (_frames, effector) = forward_kinematics(base, &robot);
 
         // Should be at (0, 1, 0)
