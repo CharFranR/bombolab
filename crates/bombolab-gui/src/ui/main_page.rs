@@ -1,29 +1,28 @@
-use crate::ui::state::{JointType, PanelView, RobotDef, SegmentUi};
+use bombolab_core::{Isometry3, JointType, forward_kinematics};
+
+use crate::ui::state::{PanelView, RobotDef, SegmentUi};
 
 pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
-    egui::Panel::top("top_bar")
-        .show_inside(ui, |ui| {
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.heading("Bombolab");
-                ui.separator();
-                ui.label("Forward Kinematics Visualizer");
-            });
-            ui.add_space(4.0);
+    egui::Panel::top("top_bar").show_inside(ui, |ui| {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.heading("Bombolab");
+            ui.separator();
+            ui.label("Forward Kinematics Visualizer");
         });
+        ui.add_space(4.0);
+    });
 
     egui::Panel::left("side_panel")
         .default_size(280.0)
-        .show_inside(ui, |ui| {
-            match &state.view {
-                PanelView::Main => render_main(ui, state),
-                PanelView::RobotList => render_robot_list(ui, state),
-                PanelView::RobotEditor(idx) => {
-                    let idx = *idx;
-                    render_robot_editor(ui, state, idx);
-                }
-                PanelView::Movements => render_movements(ui, state),
+        .show_inside(ui, |ui| match &state.view {
+            PanelView::Main => render_main(ui, state),
+            PanelView::RobotList => render_robot_list(ui, state),
+            PanelView::RobotEditor(idx) => {
+                let idx = *idx;
+                render_robot_editor(ui, state, idx);
             }
+            PanelView::Movements => render_movements(ui, state),
         });
 
     egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -85,18 +84,58 @@ fn render_main(ui: &mut egui::Ui, state: &mut super::state::AppState) {
     ui.label("Results");
     ui.separator();
 
-    ui.label("End-Effector");
-    ui.indent("ee_pos", |ui| {
-        ui.label("Pos: —");
-        ui.label("Rot: —");
-    });
+    // Compute FK if a robot is selected
+    if let Some(idx) = state.selected_robot {
+        let robot = &state.robots[idx];
+        if !robot.segments.is_empty() {
+            let domain_robot = robot.to_robot();
+            let base = Isometry3::identity();
+            let (_frames, effector) = forward_kinematics(base, &domain_robot);
 
-    ui.add_space(4.0);
+            let pos = effector.translation.vector;
+            ui.label("End-Effector");
+            ui.indent("ee_pos", |ui| {
+                ui.label(format!("Pos: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z));
+                ui.label("Rot: (see details)");
+            });
 
-    ui.label("Frames");
-    ui.indent("frames", |ui| {
-        ui.label("Frame 0: —");
-    });
+            ui.add_space(4.0);
+
+            ui.label("Frames");
+            ui.indent("frames", |ui| {
+                ui.label(format!(
+                    "Frame 0: ({:.3}, {:.3}, {:.3})",
+                    pos.x, pos.y, pos.z
+                ));
+            });
+        } else {
+            ui.label("End-Effector");
+            ui.indent("ee_pos", |ui| {
+                ui.label("Pos: --");
+                ui.label("Rot: --");
+            });
+
+            ui.add_space(4.0);
+
+            ui.label("Frames");
+            ui.indent("frames", |ui| {
+                ui.label("Frame 0: --");
+            });
+        }
+    } else {
+        ui.label("End-Effector");
+        ui.indent("ee_pos", |ui| {
+            ui.label("Pos: --");
+            ui.label("Rot: --");
+        });
+
+        ui.add_space(4.0);
+
+        ui.label("Frames");
+        ui.indent("frames", |ui| {
+            ui.label("Frame 0: --");
+        });
+    }
 
     ui.add_space(8.0);
     if ui.button("View Details").clicked() {
@@ -122,7 +161,10 @@ fn render_robot_list(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         for (i, robot) in state.robots.iter().enumerate() {
             ui.horizontal(|ui| {
                 let label = format!("{} — {} DOF", robot.name, robot.dof());
-                if ui.selectable_label(state.selected_robot == Some(i), &label).clicked() {
+                if ui
+                    .selectable_label(state.selected_robot == Some(i), &label)
+                    .clicked()
+                {
                     state.selected_robot = Some(i);
                 }
                 if ui.small_button("Edit").clicked() {
@@ -260,7 +302,11 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         return;
     }
 
-    ui.label(format!("Robot: {} — {} DOF", state.robots[idx].name, state.robots[idx].dof()));
+    ui.label(format!(
+        "Robot: {} — {} DOF",
+        state.robots[idx].name,
+        state.robots[idx].dof()
+    ));
     ui.separator();
 
     // ── Per-segment transformation matrices ──
@@ -268,7 +314,11 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
     ui.add_space(4.0);
 
     for i in 0..state.robots[idx].segments.len() {
-        let label = format!("Segment {} [{}]", i + 1, state.robots[idx].segments[i].joint_type);
+        let label = format!(
+            "Segment {} [{}]",
+            i + 1,
+            state.robots[idx].segments[i].joint_type
+        );
         let default_open = i == 0;
 
         egui::CollapsingHeader::new(label)
@@ -318,15 +368,41 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
     ui.separator();
     ui.heading("End-Effector Pose (T_0_n)");
     ui.add_space(4.0);
-    ui.monospace("┌                    ┐");
-    ui.monospace("│ — — — —           │");
-    ui.monospace("│ — — — —           │");
-    ui.monospace("│ — — — —           │");
-    ui.monospace("│ 0  0  0  1        │");
-    ui.monospace("└                    ┘");
+
+    // Compute real FK for end-effector
+    let domain_robot = state.robots[idx].to_robot();
+    let base = Isometry3::identity();
+    let (_frames, effector) = forward_kinematics(base, &domain_robot);
+
+    // Format the real transformation matrix
+    let t = effector;
+    let m = t.to_matrix();
+    ui.monospace(format!(
+        "┌ {:7.3} {:7.3} {:7.3} {:7.3} ┐\n\
+         │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
+         │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
+         │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
+         └                    ┘",
+        m[(0, 0)],
+        m[(0, 1)],
+        m[(0, 2)],
+        m[(0, 3)],
+        m[(1, 0)],
+        m[(1, 1)],
+        m[(1, 2)],
+        m[(1, 3)],
+        m[(2, 0)],
+        m[(2, 1)],
+        m[(2, 2)],
+        m[(2, 3)],
+        m[(3, 0)],
+        m[(3, 1)],
+        m[(3, 2)],
+        m[(3, 3)]
+    ));
 }
 
-fn format_matrix(i: usize, theta: f64, d: f64, a: f64, alpha: f64) -> String {
+fn format_matrix(_i: usize, theta: f64, d: f64, a: f64, alpha: f64) -> String {
     let t = theta.to_radians();
     let al = alpha.to_radians();
     let ct = t.cos();
@@ -340,9 +416,21 @@ fn format_matrix(i: usize, theta: f64, d: f64, a: f64, alpha: f64) -> String {
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          └                    ┘",
-        ct, -st * ca,  st * sa, a * ct,
-        st,  ct * ca, -ct * sa, a * st,
-        0.0, sa,       ca,      d,
-        0.0, 0.0,      0.0,     1.0
+        ct,
+        -st * ca,
+        st * sa,
+        a * ct,
+        st,
+        ct * ca,
+        -ct * sa,
+        a * st,
+        0.0,
+        sa,
+        ca,
+        d,
+        0.0,
+        0.0,
+        0.0,
+        1.0
     )
 }

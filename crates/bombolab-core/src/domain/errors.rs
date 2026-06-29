@@ -13,17 +13,17 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::JointCountMismatch { expected, got } => {
-                write!(f, "se esperaban {} joints, se recibieron {}", expected, got)
+                write!(f, "expected {} joints, got {}", expected, got)
             }
             Error::IndexOutOfBounds { index, len } => {
                 write!(
                     f,
-                    "índice {} fuera de rango, el robot tiene {} segments",
+                    "index {} out of bounds, robot has {} segments",
                     index, len
                 )
             }
             Error::JointValueOutOfLimits { value, min, max } => {
-                write!(f, "valor {} fuera de los límites [{}, {}]", value, min, max)
+                write!(f, "value {} out of limits [{}, {}]", value, min, max)
             }
         }
     }

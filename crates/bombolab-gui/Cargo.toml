@@ -1,0 +1,11 @@
+[package]
+name = "bombolab-gui"
+version = "0.1.0"
+edition = "2024"
+description = "GUI layer for Bombolab"
+license = "MIT"
+
+[dependencies]
+bombolab-core = { path = "../bombolab-core" }
+egui = "0.34.3"
+eframe = "0.34.3"

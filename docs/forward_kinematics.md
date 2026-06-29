@@ -1,21 +1,21 @@
-# Forward Kinematics con DH
+# Forward Kinematics with DH Parameters
 
-## De qué va esto
+## Overview
 
-Este documento explica cómo funciona la cinemática directa en bombolab:
-cómo describís un robot, cómo se arma cada matriz de transformación, y cómo se
-componen para obtener la posición de cada eslabón y del efector final.
+This document explains how forward kinematics works in Bombolab:
+how you describe a robot, how each transformation matrix is built, and how they
+are composed to obtain the position of each link and the end-effector.
 
 ---
 
-## 1. Cómo describís un robot
+## 1. How You Describe a Robot
 
-Un robot es una cadena de **Segmentos**. Cada segmento tiene dos partes:
+A robot is a chain of **Segments**. Each segment has two parts:
 
 ```
 Segment {
-    joint: Joint,    // el motor: qué tipo, cuánto gira, límites
-    dh: DHParams,    // la geometría fija entre este joint y el siguiente
+    joint: Joint,    // the motor: type, rotation, limits
+    dh: DHParams,    // fixed geometry between this joint and the next
 }
 ```
 
@@ -24,155 +24,154 @@ Segment {
 ```rust
 pub struct Joint {
     pub joint_type: JointType,  // Revolute | Prismatic
-    pub value: f64,             // valor ACTUAL del joint (radianes)
+    pub value: f64,             // CURRENT joint value (radians)
     pub value_max: f64,
     pub value_min: f64,
 }
 ```
 
-- **Revolute**: el joint **rota** sobre su eje Z. `value` es un ángulo (θ).
-- **Prismatic**: el joint **desliza** sobre su eje Z. `value` es una distancia (d).
+- **Revolute**: the joint **rotates** around its Z axis. `value` is an angle (theta).
+- **Prismatic**: the joint **slides** along its Z axis. `value` is a distance (d).
 
-Siempre se mueve sobre Z. Si necesitás movimiento en otra dirección, se
-reorienta el Z con `alpha` (explicado más abajo).
+Movement is always along Z. If you need movement in another direction, you
+reorient Z with `alpha` (explained below).
 
 ### DHParams
 
 ```rust
 pub struct DHParams {
-    pub theta: f64,  // ángulo sobre Z (radianes)
-    pub d: f64,      // traslación sobre Z
-    pub a: f64,      // traslación sobre X — "largo del link"
-    pub alpha: f64,  // twist sobre X — ángulo entre Zs (radianes)
+    pub theta: f64,  // angle around Z (radians)
+    pub d: f64,      // translation along Z
+    pub a: f64,      // translation along X -- "link length"
+    pub alpha: f64,  // twist around X -- angle between Zs (radians)
 }
 ```
 
-Son los 4 parámetros de Denavit–Hartenberg. Definen la **geometría fija** del
-link. El único valor que cambia dinámicamente es el del joint:
+These are the 4 Denavit-Hartenberg parameters. They define the **fixed geometry**
+of the link. The only value that changes dynamically is the joint value:
 
-| JointType  | theta viene de | d viene de |
-|------------|---------------|------------|
-| Revolute   | joint.value   | dh.d (fijo) |
-| Prismatic  | dh.theta (fijo) | joint.value |
+| JointType  | theta comes from | d comes from |
+|------------|-----------------|--------------|
+| Revolute   | joint.value     | dh.d (fixed) |
+| Prismatic  | dh.theta (fixed)| joint.value  |
 
-Esto lo resuelve automáticamente `segment.dh_params()`.
-
----
-
-## 2. Parámetro por parámetro
-
-### theta — rotación sobre Z (radianes)
-
-Es el ángulo del joint si es Revolute. **Siempre sobre Z del frame local.**
-
-theta = 0 → el link apunta en X pura.
-theta = 90° → el link apunta en Y pura.
-
-### d — traslación sobre Z
-
-Separa el frame actual del anterior sobre el eje Z. Representa:
-
-- Altura de una base (d = 5 → la base mide 5 hacia arriba).
-- Offset vertical entre joints.
-- Desplazamiento prismático si el joint es Prismatic.
-
-**d no genera movimiento en X ni en Y.** Es puro Z.
-
-### a — traslación sobre X ("largo del link")
-
-La distancia desde el eje Z actual hasta el próximo eje Z, medida sobre X.
-Es el largo del eslabón. Cuando theta cambia, este largo se proyecta en X e Y:
-
-```
-a·cos(θ)  → componente en X
-a·sin(θ)  → componente en Y
-```
-
-Con theta=0, `a` va todo en X. Con theta=90°, `a` va todo en Y.
-
-### alpha — twist entre Zs (radianes)
-
-**La clave de DH.** Es el ángulo de rotación alrededor de X que tuerce el Z
-actual para alinearlo con el Z del próximo joint.
-
-- alpha = 0 → Zs paralelos (el brazo sigue en el mismo plano).
-- alpha = 90° (π/2) → el próximo Z es perpendicular al actual (codo que
-  cambia de plano).
-
-**Sin alpha, todos los joints de tu robot giran en el mismo plano 2D.**
-Con alpha, podés modelar robots 3D reales.
+This is resolved automatically by `segment.dh_params()`.
 
 ---
 
-## 3. El truco con Isometry3 en `matrix_from_segment`
+## 2. Parameter by Parameter
 
-La función que construye la matriz de cada segmento:
+### theta -- rotation around Z (radians)
+
+This is the joint angle if Revolute. **Always around the local frame's Z axis.**
+
+theta = 0 -- the link points in pure X direction.
+theta = 90 degrees -- the link points in pure Y direction.
+
+### d -- translation along Z
+
+Separates the current frame from the previous one along the Z axis. It represents:
+
+- Base height (d = 5 -- the base is 5 units tall)
+- Vertical offset between joints
+- Prismatic displacement if the joint is Prismatic
+
+**d does not generate movement in X or Y.** It is purely Z.
+
+### a -- translation along X ("link length")
+
+The distance from the current Z axis to the next Z axis, measured along X.
+This is the link length. When theta changes, this length is projected into X and Y:
+
+```
+a*cos(theta)  -- X component
+a*sin(theta)  -- Y component
+```
+
+With theta = 0, `a` goes entirely in X. With theta = 90 degrees, `a` goes entirely in Y.
+
+### alpha -- twist between Zs (radians)
+
+**The key to DH.** It is the rotation angle around X that twists the current Z
+to align with the next joint's Z.
+
+- alpha = 0 -- Zs are parallel (the arm stays in the same plane)
+- alpha = 90 degrees (pi/2) -- the next Z is perpendicular to the current one (an elbow that changes plane)
+
+**Without alpha, all joints of your robot rotate in the same 2D plane.**
+With alpha, you can model real 3D robots.
+
+---
+
+## 3. The Trick with Isometry3 in `matrix_from_segment`
+
+The function that builds each segment's matrix:
 
 ```rust
 pub fn matrix_from_segment(segment: &Segment) -> Isometry3<f64> {
     let (theta, d, a, alpha) = segment.dh_params();
 
-    // Rotación final: RotZ(theta) * RotX(alpha)
+    // Final rotation: RotZ(theta) * RotX(alpha)
     let rot_z = Rotation3::from_axis_angle(&Vector3::z_axis(), theta);
     let rot_x = Rotation3::from_axis_angle(&Vector3::x_axis(), alpha);
     let rotation = UnitQuaternion::from_rotation_matrix(&(rot_z * rot_x));
 
-    // Traslación: a·cos(θ) en X, a·sin(θ) en Y, d en Z
+    // Translation: a*cos(theta) in X, a*sin(theta) in Y, d in Z
     let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
 
     Isometry3::from_parts(translation, rotation)
 }
 ```
 
-### ¿Por qué UnitQuaternion?
+### Why UnitQuaternion?
 
-`Isometry3<f64>` guarda la rotación internamente como `UnitQuaternion<f64>`,
-no como `Rotation3<f64>`. Por eso necesitamos convertir con
+`Isometry3<f64>` stores rotation internally as `UnitQuaternion<f64>`,
+not as `Rotation3<f64>`. That's why we need to convert with
 `UnitQuaternion::from_rotation_matrix()`.
 
-También podés escribir `rot.into()` si tenés un `Rotation3` — la conversión
-es automática:
+You can also write `rot.into()` if you have a `Rotation3` -- the conversion
+is automatic:
 
 ```rust
 let r: Rotation3<f64> = rot_z * rot_x;
 Isometry3::from_parts(translation, r.into())
 ```
 
-### ¿Por qué rot_z * rot_x?
+### Why rot_z * rot_x?
 
-El orden de la fórmula DH canónica es:
+The canonical DH formula order is:
 
 ```
-T = RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)
+T = RotZ(theta) * TransZ(d) * TransX(a) * RotX(alpha)
 ```
 
-1. RotZ(θ) — gira el frame
-2. TransZ(d) — sube/baja sobre Z
-3. TransX(a) — avanza sobre X (largo del link)
-4. RotX(α) — tuerce el Z para el próximo frame
+1. RotZ(theta) -- rotates the frame
+2. TransZ(d) -- moves up/down along Z
+3. TransX(a) -- advances along X (link length)
+4. RotX(alpha) -- twists Z for the next frame
 
-RotZ y RotX se componen como `rot_z * rot_x` porque en la fórmula parámetros
-DH, RotX(α) se post-multiplica: primero se aplica RotZ(θ), después RotX(α)
-al frame de salida.
+RotZ and RotX compose as `rot_z * rot_x` because in the DH formula,
+RotX(alpha) is post-multiplied: first RotZ(theta) is applied, then RotX(alpha)
+to the output frame.
 
-**Si alpha = 0**, RotX(α) es identidad y toda la rotación se reduce a RotZ(θ).
+**If alpha = 0**, RotX(alpha) is identity and all rotation reduces to RotZ(theta).
 
-### La traslación no es un vector libre
+### The translation is not a free vector
 
-Fijate que `a·cos(θ)` y `a·sin(θ)` aparecen en X e Y — eso es el **largo del
-link proyectado después de rotar**. No es "movimiento en X", es el resultado
-de rotar un link de largo `a`.
+Note that `a*cos(theta)` and `a*sin(theta)` appear in X and Y -- this is the
+**link length projected after rotation**. It's not "movement in X", it's the
+result of rotating a link of length `a`.
 
-d va directo a Z porque RotZ(θ) no afecta Z. RotX(α) sí podría afectarlo,
-pero en la fórmula DH la traslación se aplica ANTES de RotX(α).
+d goes directly to Z because RotZ(theta) doesn't affect Z. RotX(alpha) could
+affect it, but in the DH formula the translation is applied BEFORE RotX(alpha).
 
 ---
 
-## 4. Forward kinematics completa
+## 4. Complete Forward Kinematics
 
 ```rust
 pub fn forward_kinematics(
-    base: Isometry3<f64>,   // dónde está el mundo respecto al robot
+    base: Isometry3<f64>,   // where the world is relative to the robot
     robot: &Robot,
 ) -> (Vec<Isometry3<f64>>, Isometry3<f64>) {
     let mut frames = Vec::new();
@@ -187,77 +186,75 @@ pub fn forward_kinematics(
 }
 ```
 
-- **frames**: `Vec<Isometry3<f64>>` — la pose de CADA eslabón. `frames[i]` es
-  la posición del frame i+1 después de aplicar los joints 0..=i.
-- **current** (efector final): la pose del último frame, después de todos los
-  joints.
+- **frames**: `Vec<Isometry3<f64>>` -- the pose of EACH link. `frames[i]` is
+  the position of frame i+1 after applying joints 0..=i.
+- **current** (end-effector): the pose of the last frame, after all joints.
 
-### ¿Y la base?
+### What about the base?
 
-`base` es un `Isometry3<f64>` externo — no está atado al robot. Podés pasar
-`Isometry3::identity()` si el robot está en el origen, o una transformación
-cualquiera si está desplazado/rotado en el mundo. El mismo robot puede usarse
-en distintas posiciones sin modificarlo.
-
----
-
-## 5. Cómo describirle tu robot al sistema
-
-### Robot 2D (brazo plano, SCARA)
-
-```
-Segmento 1 (base):  Revolute | articular + d (altura)
-Segmento 2 (brazo): Revolute | a (largo)
-Segmento 3 (brazo): Revolute | a (largo)
-alpha = 0 siempre   → el brazo se mueve en XY
-
-Ejemplo:
-  S1: d=5, a=0          → base de 5 de altura
-  S2: d=0, a=3          → antebrazo de 3
-  S3: d=0, a=3          → brazo de 3
-```
-
-### Robot 3D (con cambio de plano)
-
-```
-Segmento 1 (base):    Revolute | d + alpha=0
-Segmento 2 (hombro):  Revolute | a + alpha=π/2 (torce el plano)
-Segmento 3 (codo):    Revolute | a + alpha=0   (sigue el nuevo plano)
-```
-
-alpha = π/2 en el hombro hace que el brazo se mueva en vertical en vez de
-horizontal.
-
-### Tabla rápida
-
-| Parámetro | Representa | Unidad |
-|-----------|-----------|--------|
-| theta | rotación del joint sobre Z | radianes |
-| d | traslación sobre Z | mm / m |
-| a | largo del link (sobre X) | mm / m |
-| alpha | twist entre Zs | radianes |
-
-### Lo que NO es cada parámetro
-
-- theta **no es** el largo del link.
-- d **no es** movimiento horizontal.
-- a **no es** la altura de un segmento.
-- alpha **no es** el ángulo del joint.
+`base` is an external `Isometry3<f64>` -- it's not tied to the robot. You can pass
+`Isometry3::identity()` if the robot is at the origin, or any transformation
+if it's displaced/rotated in the world. The same robot can be used in different
+positions without modifying it.
 
 ---
 
-## 6. Orden de multiplicación: local vs global
+## 5. How to Describe Your Robot to the System
 
-La cinemática directa compone así:
+### 2D Robot (planar arm, SCARA)
+
+```
+Segment 1 (base):    Revolute | joint + d (height)
+Segment 2 (arm):     Revolute | a (length)
+Segment 3 (forearm): Revolute | a (length)
+alpha = 0 always      -> arm moves in XY plane
+
+Example:
+  S1: d=5, a=0    -> base of height 5
+  S2: d=0, a=3    -> forearm of length 3
+  S3: d=0, a=3    -> arm of length 3
+```
+
+### 3D Robot (with plane change)
+
+```
+Segment 1 (base):    Revolute | d + alpha=0
+Segment 2 (shoulder): Revolute | a + alpha=pi/2 (twists the plane)
+Segment 3 (elbow):   Revolute | a + alpha=0    (follows the new plane)
+```
+
+alpha = pi/2 at the shoulder makes the arm move vertically instead of horizontally.
+
+### Quick Reference
+
+| Parameter | Represents | Unit |
+|-----------|-----------|------|
+| theta | joint rotation around Z | radians |
+| d | translation along Z | mm / m |
+| a | link length (along X) | mm / m |
+| alpha | twist between Zs | radians |
+
+### What Each Parameter Is NOT
+
+- theta is **not** the link length.
+- d is **not** horizontal movement.
+- a is **not** the segment height.
+- alpha is **not** the joint angle.
+
+---
+
+## 6. Multiplication Order: Local vs Global
+
+Forward kinematics composes like this:
 
 ```
 current = current * T_i
 ```
 
-Cada `T_i` es la transformación **del frame i-1 al frame i**, expresada en
-el frame i-1. Post-multiplicar significa que cada paso es relativo al frame
-anterior — que es exactamente cómo funciona una cadena cinemática.
+Each `T_i` is the transformation **from frame i-1 to frame i**, expressed in
+frame i-1. Post-multiplying means each step is relative to the previous frame --
+which is exactly how a kinematic chain works.
 
-Si cambiás a `current = T_i * current`, estarías aplicando cada movimiento
-en el marco global del mundo. Eso sirve para mover un cuerpo rígido libre
-por el espacio, **no** para un robot articulado.
+If you change to `current = T_i * current`, you would be applying each movement
+in the world's global frame. That's useful for moving a free rigid body in space,
+**not** for an articulated robot.

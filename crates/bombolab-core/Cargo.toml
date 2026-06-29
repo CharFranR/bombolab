@@ -1,0 +1,9 @@
+[package]
+name = "bombolab-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core data model and kinematics for Bombolab"
+license = "MIT"
+
+[dependencies]
+nalgebra = "0.35.0"

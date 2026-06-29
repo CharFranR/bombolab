@@ -494,9 +494,26 @@ dependencies = [
 name = "bombolab"
 version = "0.1.0"
 dependencies = [
+ "bombolab-core",
+ "bombolab-gui",
  "eframe",
  "egui",
+]
+
+[[package]]
+name = "bombolab-core"
+version = "0.1.0"
+dependencies = [
  "nalgebra",
+]
+
+[[package]]
+name = "bombolab-gui"
+version = "0.1.0"
+dependencies = [
+ "bombolab-core",
+ "eframe",
+ "egui",
 ]
 
 [[package]]

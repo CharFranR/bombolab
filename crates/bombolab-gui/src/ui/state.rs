@@ -1,19 +1,4 @@
-use std::fmt;
-
-#[derive(PartialEq)]
-pub enum JointType {
-    Revolute,
-    Prismatic,
-}
-
-impl fmt::Display for JointType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JointType::Revolute => write!(f, "R"),
-            JointType::Prismatic => write!(f, "P"),
-        }
-    }
-}
+use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
 
 pub struct SegmentUi {
     pub joint_type: JointType,
@@ -33,6 +18,12 @@ impl SegmentUi {
             alpha: 0.0,
         }
     }
+
+    pub fn to_segment(&self, joint_value: f64) -> Segment {
+        let joint = Joint::new(self.joint_type, joint_value, 0.0, 0.0);
+        let dh = DHParams::new(self.theta, self.d, self.a, self.alpha);
+        Segment::new(joint, dh)
+    }
 }
 
 pub struct RobotDef {
@@ -50,6 +41,11 @@ impl RobotDef {
 
     pub fn dof(&self) -> usize {
         self.segments.len()
+    }
+
+    pub fn to_robot(&self) -> Robot {
+        let segments: Vec<Segment> = self.segments.iter().map(|s| s.to_segment(0.0)).collect();
+        Robot::new(segments)
     }
 }
 

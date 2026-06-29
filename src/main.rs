@@ -1,8 +1,4 @@
-mod domain;
-mod kinematics;
-mod ui;
-
-use ui::state::AppState;
+use bombolab_gui::AppState;
 
 struct App {
     state: AppState,
@@ -10,7 +6,7 @@ struct App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        ui::main_page::render(ui, &mut self.state);
+        bombolab_gui::render(ui, &mut self.state);
     }
 }
 
@@ -22,9 +18,13 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    eframe::run_native("Bombolab", options, Box::new(|_cc| {
-        Ok(Box::new(App {
-            state: AppState::new(),
-        }))
-    }))
+    eframe::run_native(
+        "Bombolab",
+        options,
+        Box::new(|_cc| {
+            Ok(Box::new(App {
+                state: AppState::new(),
+            }))
+        }),
+    )
 }

@@ -2,8 +2,11 @@
 name = "bombolab"
 version = "0.1.0"
 edition = "2024"
+description = "Forward Kinematics Visualizer for robotic arms"
+license = "MIT"
 
 [dependencies]
-nalgebra = "0.35.0"
+bombolab-core = { path = "crates/bombolab-core" }
+bombolab-gui = { path = "crates/bombolab-gui" }
 egui = "0.34.3"
 eframe = "0.34.3"

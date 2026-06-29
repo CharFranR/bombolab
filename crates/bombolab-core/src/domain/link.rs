@@ -7,11 +7,6 @@ pub struct DHParams {
 
 impl DHParams {
     pub fn new(theta: f64, d: f64, a: f64, alpha: f64) -> Self {
-        Self {
-            theta,
-            d,
-            a,
-            alpha,
-        }
+        Self { theta, d, a, alpha }
     }
 }
