@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "../searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-62e7cb07.js"></script>
@@ -188,7 +188,7 @@
 </span><span class="boring">fn main() {
 </span>use bombolab_core::{
     DHParams, Joint, JointType, Robot, Segment,
-    Isometry3, forward_kinematics,
+    Iso3, forward_kinematics,
 };
 
 // 2-link planar arm: both joints revolute, links of length 1.0
@@ -208,11 +208,11 @@ let robot = Robot::new(segments);
 <h2 id="2-solve-forward-kinematics"><a class="header" href="#2-solve-forward-kinematics">2. Solve Forward Kinematics</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let base = Isometry3::identity(); // robot at world origin
+</span>let base = Iso3::identity(); // robot at world origin
 let (frames, end_effector) = forward_kinematics(base, &amp;robot);
 <span class="boring">}</span></code></pre>
 <ul>
-<li><code>frames</code> – one <code>Isometry3</code> per segment, showing the cumulative pose at each joint</li>
+<li><code>frames</code> – one <code>Iso3</code> per segment, showing the cumulative pose at each joint</li>
 <li><code>end_effector</code> – the final pose after all joints</li>
 </ul>
 <h2 id="3-read-the-result"><a class="header" href="#3-read-the-result">3. Read the Result</a></h2>
@@ -234,7 +234,7 @@ println!("Rotation: {:?}", rot);
 // Rotate first joint to 90 degrees
 robot.segments[0].joint.value = FRAC_PI_2;
 
-let (_, end_effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let (_, end_effector) = forward_kinematics(Iso3::identity(), &amp;robot);
 let pos = end_effector.translation.vector;
 println!("After rotation: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
 // Now the arm points upward

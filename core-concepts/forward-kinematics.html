@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "../searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-62e7cb07.js"></script>
@@ -205,13 +205,13 @@ let a_i = compute_a_matrix(p);
 <p><code>forward_kinematics()</code> multiplies them sequentially:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{Isometry3, Robot, forward_kinematics};
+</span>use bombolab_core::{Iso3, Robot, forward_kinematics};
 
 let (frames, end_effector) = forward_kinematics(base, &amp;robot);
 <span class="boring">}</span></code></pre>
 <p>The function:</p>
 <ol>
-<li>Starts with the <code>base</code> transformation (usually <code>Isometry3::identity()</code>)</li>
+<li>Starts with the <code>base</code> transformation (usually <code>Iso3::identity()</code>)</li>
 <li>For each segment, computes <code>current = current * matrix_from_segment(segment)</code></li>
 <li>Stores each cumulative result in <code>frames</code></li>
 <li>Returns the final frame as <code>end_effector</code></li>
@@ -230,23 +230,23 @@ let pos = end_effector.translation.vector;
 let rot = end_effector.rotation;
 <span class="boring">}</span></code></pre>
 <h2 id="matrix_from_segment"><a class="header" href="#matrix_from_segment">matrix_from_segment</a></h2>
-<p>Each segment produces an <code>Isometry3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
+<p>Each segment produces an <code>Iso3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Isometry3&lt;f64&gt; {
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt; {
     let (theta, d, a, alpha) = segment.dh_params();
 
-    let rot_z = Rotation3::from_axis_angle(&amp;Vector3::z_axis(), theta);
-    let rot_x = Rotation3::from_axis_angle(&amp;Vector3::x_axis(), alpha);
+    let rot_z = Rot3::from_axis_angle(&amp;Vec3::z_axis(), theta);
+    let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
     let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
 
     let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
 
-    Isometry3::from_parts(translation, rotation)
+    Iso3::from_parts(translation, rotation)
 }
 <span class="boring">}</span></code></pre>
 <h3 id="why-unitquaternion"><a class="header" href="#why-unitquaternion">Why UnitQuaternion?</a></h3>
-<p><code>Isometry3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rotation3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Isometry3::from_parts()</code> expects a quaternion.</p>
+<p><code>Iso3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rot3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Iso3::from_parts()</code> expects a quaternion.</p>
 <h3 id="the-translation"><a class="header" href="#the-translation">The Translation</a></h3>
 <p>The translation components are:</p>
 <ul>
@@ -259,13 +259,13 @@ let rot = end_effector.rotation;
 <p>The <code>base</code> parameter positions the robot in the world:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use nalgebra::{Isometry3, Translation3, UnitQuaternion};
+</span>use nalgebra::{Iso3, Translation3, UnitQuaternion};
 
 // Robot at world origin
-let base = Isometry3::identity();
+let base = Iso3::identity();
 
 // Robot displaced 10 units up
-let base = Isometry3::from_parts(
+let base = Iso3::from_parts(
     Translation3::new(0.0, 0.0, 10.0),
     UnitQuaternion::identity(),
 );
@@ -294,7 +294,7 @@ let base = Isometry3::from_parts(
 </span>let solution = solve(&amp;table);
 
 let rotation = solution.rotation();    // Matrix3&lt;f64&gt; -- 3x3 rotation
-let translation = solution.translation(); // Vector3&lt;f64&gt; -- position
+let translation = solution.translation(); // Vec3&lt;f64&gt; -- position
 <span class="boring">}</span></code></pre>
 <h2 id="example-planar-2r-robot"><a class="header" href="#example-planar-2r-robot">Example: Planar 2R Robot</a></h2>
 <p>Two revolute joints, both in the XY plane (alpha = 0):</p>

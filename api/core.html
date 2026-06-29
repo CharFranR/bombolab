@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "../searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-62e7cb07.js"></script>
@@ -198,7 +198,7 @@ pub use kinematics::{forward_kinematics, matrix_from_segment};
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
 
 // nalgebra types
-pub use nalgebra::Isometry3;
+pub use nalgebra::Iso3;
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="math-module-math"><a class="header" href="#math-module-math">Math Module (<code>math</code>)</a></h2>
@@ -266,7 +266,7 @@ let m = compute_a_matrix(p);
 </thead>
 <tbody>
 <tr><td><code>rotation</code></td><td><code>(&amp;self) -&gt; Matrix3&lt;f64&gt;</code></td><td>3x3 rotation matrix from the final transform</td></tr>
-<tr><td><code>translation</code></td><td><code>(&amp;self) -&gt; Vector3&lt;f64&gt;</code></td><td>Position vector from the final transform</td></tr>
+<tr><td><code>translation</code></td><td><code>(&amp;self) -&gt; Vec3&lt;f64&gt;</code></td><td>Position vector from the final transform</td></tr>
 </tbody>
 </table>
 </div>
@@ -497,24 +497,24 @@ pub enum Error {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub fn forward_kinematics(
-    base: Isometry3&lt;f64&gt;,
+    base: Iso3&lt;f64&gt;,
     robot: &amp;Robot,
-) -&gt; (Vec&lt;Isometry3&lt;f64&gt;&gt;, Isometry3&lt;f64&gt;)
+) -&gt; (Vec&lt;Iso3&lt;f64&gt;&gt;, Iso3&lt;f64&gt;)
 <span class="boring">}</span></code></pre>
 <p><strong>Parameters</strong>:</p>
 <ul>
-<li><code>base</code> – world-to-base transformation (use <code>Isometry3::identity()</code> for origin)</li>
+<li><code>base</code> – world-to-base transformation (use <code>Iso3::identity()</code> for origin)</li>
 <li><code>robot</code> – the robot to solve</li>
 </ul>
 <p><strong>Returns</strong>: <code>(frames, end_effector)</code></p>
 <ul>
-<li><code>frames</code> – one <code>Isometry3</code> per segment (cumulative pose at each joint)</li>
+<li><code>frames</code> – one <code>Iso3</code> per segment (cumulative pose at each joint)</li>
 <li><code>end_effector</code> – the final pose (last element of <code>frames</code>)</li>
 </ul>
 <p><strong>Example</strong>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Isometry3, forward_kinematics};
+</span>use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Iso3, forward_kinematics};
 
 let robot = Robot::new(vec![
     Segment::new(
@@ -523,14 +523,14 @@ let robot = Robot::new(vec![
     ),
 ]);
 
-let (frames, effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let (frames, effector) = forward_kinematics(Iso3::identity(), &amp;robot);
 assert_eq!(frames.len(), 1);
 <span class="boring">}</span></code></pre>
 <h3 id="matrix_from_segment"><a class="header" href="#matrix_from_segment"><code>matrix_from_segment</code></a></h3>
 <p>Compute the transformation for a single segment.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Isometry3&lt;f64&gt;
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt;
 <span class="boring">}</span></code></pre>
 <p>Returns the isometry representing the segment’s DH transformation: <code>RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)</code>.</p>
 <hr>
@@ -539,9 +539,9 @@ assert_eq!(frames.len(), 1);
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub struct Movement {
-    pub translation: Vector3&lt;f64&gt;,
+    pub translation: Vec3&lt;f64&gt;,
     pub angles: f64,
-    pub axis: Vector3&lt;f64&gt;,
+    pub axis: Vec3&lt;f64&gt;,
     pub isometry: bool,
 }
 <span class="boring">}</span></code></pre>
@@ -549,16 +549,16 @@ assert_eq!(frames.len(), 1);
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub fn rotation_and_translation(
-    axis: Vector3&lt;f64&gt;, angle: f64, translation: Vector3&lt;f64&gt;
-) -&gt; Isometry3&lt;f64&gt;
+    axis: Vec3&lt;f64&gt;, angle: f64, translation: Vec3&lt;f64&gt;
+) -&gt; Iso3&lt;f64&gt;
 
 pub fn translation_and_rotation(
-    axis: Vector3&lt;f64&gt;, angle: f64, translation: Vector3&lt;f64&gt;
-) -&gt; Isometry3&lt;f64&gt;
+    axis: Vec3&lt;f64&gt;, angle: f64, translation: Vec3&lt;f64&gt;
+) -&gt; Iso3&lt;f64&gt;
 
 pub fn make_movement(
-    initial: Isometry3&lt;f64&gt;, movements: &amp;[Movement]
-) -&gt; (Vec&lt;Isometry3&lt;f64&gt;&gt;, Isometry3&lt;f64&gt;)
+    initial: Iso3&lt;f64&gt;, movements: &amp;[Movement]
+) -&gt; (Vec&lt;Iso3&lt;f64&gt;&gt;, Iso3&lt;f64&gt;)
 <span class="boring">}</span></code></pre>
 <p><code>make_movement</code> composes a sequence of movements from an initial pose, returning the trajectory and final pose.</p>
 

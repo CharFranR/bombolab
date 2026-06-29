@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-62e7cb07.js"></script>
@@ -207,7 +207,7 @@
 </span><span class="boring">fn main() {
 </span>use bombolab_core::{
     DHParams, Joint, JointType, Robot, Segment,
-    Isometry3, forward_kinematics,
+    Iso3, forward_kinematics,
 };
 
 // A simple 2-link planar arm
@@ -223,7 +223,7 @@ let segments = vec![
 ];
 
 let robot = Robot::new(segments);
-let (frames, end_effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let (frames, end_effector) = forward_kinematics(Iso3::identity(), &amp;robot);
 
 let pos = end_effector.translation.vector;
 println!("End-effector at: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);

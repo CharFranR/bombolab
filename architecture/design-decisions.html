@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "../searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-62e7cb07.js"></script>
@@ -202,14 +202,14 @@
 </ul>
 <p>This matches the convention used in “Introduction to Robotics” by Craig, which is the most common textbook for robotics courses.</p>
 <p><strong>Tradeoff</strong>: Users trained on the standard convention need to remap their parameters.</p>
-<h2 id="3-isometry3-for-transformations"><a class="header" href="#3-isometry3-for-transformations">3. Isometry3 for Transformations</a></h2>
-<p><strong>Decision</strong>: Use <code>nalgebra::Isometry3&lt;f64&gt;</code> instead of raw <code>Matrix4&lt;f64&gt;</code> for forward kinematics.</p>
+<h2 id="3-iso3-for-transformations"><a class="header" href="#3-iso3-for-transformations">3. Iso3 for Transformations</a></h2>
+<p><strong>Decision</strong>: Use <code>nalgebra::Iso3&lt;f64&gt;</code> instead of raw <code>Matrix4&lt;f64&gt;</code> for forward kinematics.</p>
 <p><strong>Why</strong>:</p>
 <ul>
-<li><code>Isometry3</code> semantically represents a rigid body transformation (rotation + translation)</li>
+<li><code>Iso3</code> semantically represents a rigid body transformation (rotation + translation)</li>
 <li>It stores rotation as a <code>UnitQuaternion</code>, which is more numerically stable than a 3x3 rotation matrix</li>
 <li>nalgebra provides optimized multiplication for isometries</li>
-<li>The <code>forward_kinematics()</code> function returns <code>Vec&lt;Isometry3&gt;</code>, giving both position and rotation in a type-safe way</li>
+<li>The <code>forward_kinematics()</code> function returns <code>Vec&lt;Iso3&gt;</code>, giving both position and rotation in a type-safe way</li>
 </ul>
 <p>The numeric solver (<code>solve()</code>) uses <code>Matrix4&lt;f64&gt;</code> directly because it works with the raw DH math and needs to display the full 4x4 matrix.</p>
 <h2 id="4-joint-value-as-the-only-dynamic-state"><a class="header" href="#4-joint-value-as-the-only-dynamic-state">4. Joint Value as the Only Dynamic State</a></h2>

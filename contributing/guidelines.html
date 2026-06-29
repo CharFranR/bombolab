@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "../searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-62e7cb07.js"></script>
@@ -234,7 +234,7 @@ pub fn compute_a_matrix(p: DHParameter) -&gt; Matrix4&lt;f64&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Good: explains the reasoning
-// Isometry3 stores rotation as UnitQuaternion, so we must convert
+// Iso3 stores rotation as UnitQuaternion, so we must convert
 let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
 
 // Bad: restates the code

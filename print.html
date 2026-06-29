@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-572f17a6.js";
+            window.path_to_searchindex_js = "searchindex-7facaa62.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-62e7cb07.js"></script>
@@ -205,7 +205,7 @@
 </span><span class="boring">fn main() {
 </span>use bombolab_core::{
     DHParams, Joint, JointType, Robot, Segment,
-    Isometry3, forward_kinematics,
+    Iso3, forward_kinematics,
 };
 
 // A simple 2-link planar arm
@@ -221,7 +221,7 @@ let segments = vec![
 ];
 
 let robot = Robot::new(segments);
-let (frames, end_effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let (frames, end_effector) = forward_kinematics(Iso3::identity(), &amp;robot);
 
 let pos = end_effector.translation.vector;
 println!("End-effector at: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
@@ -311,7 +311,7 @@ cargo run --bin quaternion-solve
 </span><span class="boring">fn main() {
 </span>use bombolab_core::{
     DHParams, Joint, JointType, Robot, Segment,
-    Isometry3, forward_kinematics,
+    Iso3, forward_kinematics,
 };
 
 // 2-link planar arm: both joints revolute, links of length 1.0
@@ -331,11 +331,11 @@ let robot = Robot::new(segments);
 <h2 id="2-solve-forward-kinematics"><a class="header" href="#2-solve-forward-kinematics">2. Solve Forward Kinematics</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let base = Isometry3::identity(); // robot at world origin
+</span>let base = Iso3::identity(); // robot at world origin
 let (frames, end_effector) = forward_kinematics(base, &amp;robot);
 <span class="boring">}</span></code></pre>
 <ul>
-<li><code>frames</code> – one <code>Isometry3</code> per segment, showing the cumulative pose at each joint</li>
+<li><code>frames</code> – one <code>Iso3</code> per segment, showing the cumulative pose at each joint</li>
 <li><code>end_effector</code> – the final pose after all joints</li>
 </ul>
 <h2 id="3-read-the-result"><a class="header" href="#3-read-the-result">3. Read the Result</a></h2>
@@ -357,7 +357,7 @@ println!("Rotation: {:?}", rot);
 // Rotate first joint to 90 degrees
 robot.segments[0].joint.value = FRAC_PI_2;
 
-let (_, end_effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let (_, end_effector) = forward_kinematics(Iso3::identity(), &amp;robot);
 let pos = end_effector.translation.vector;
 println!("After rotation: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
 // Now the arm points upward
@@ -536,13 +536,13 @@ let a_i = compute_a_matrix(p);
 <p><code>forward_kinematics()</code> multiplies them sequentially:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{Isometry3, Robot, forward_kinematics};
+</span>use bombolab_core::{Iso3, Robot, forward_kinematics};
 
 let (frames, end_effector) = forward_kinematics(base, &amp;robot);
 <span class="boring">}</span></code></pre>
 <p>The function:</p>
 <ol>
-<li>Starts with the <code>base</code> transformation (usually <code>Isometry3::identity()</code>)</li>
+<li>Starts with the <code>base</code> transformation (usually <code>Iso3::identity()</code>)</li>
 <li>For each segment, computes <code>current = current * matrix_from_segment(segment)</code></li>
 <li>Stores each cumulative result in <code>frames</code></li>
 <li>Returns the final frame as <code>end_effector</code></li>
@@ -561,23 +561,23 @@ let pos = end_effector.translation.vector;
 let rot = end_effector.rotation;
 <span class="boring">}</span></code></pre>
 <h2 id="matrix_from_segment"><a class="header" href="#matrix_from_segment">matrix_from_segment</a></h2>
-<p>Each segment produces an <code>Isometry3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
+<p>Each segment produces an <code>Iso3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Isometry3&lt;f64&gt; {
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt; {
     let (theta, d, a, alpha) = segment.dh_params();
 
-    let rot_z = Rotation3::from_axis_angle(&amp;Vector3::z_axis(), theta);
-    let rot_x = Rotation3::from_axis_angle(&amp;Vector3::x_axis(), alpha);
+    let rot_z = Rot3::from_axis_angle(&amp;Vec3::z_axis(), theta);
+    let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
     let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
 
     let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
 
-    Isometry3::from_parts(translation, rotation)
+    Iso3::from_parts(translation, rotation)
 }
 <span class="boring">}</span></code></pre>
 <h3 id="why-unitquaternion"><a class="header" href="#why-unitquaternion">Why UnitQuaternion?</a></h3>
-<p><code>Isometry3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rotation3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Isometry3::from_parts()</code> expects a quaternion.</p>
+<p><code>Iso3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rot3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Iso3::from_parts()</code> expects a quaternion.</p>
 <h3 id="the-translation"><a class="header" href="#the-translation">The Translation</a></h3>
 <p>The translation components are:</p>
 <ul>
@@ -590,13 +590,13 @@ let rot = end_effector.rotation;
 <p>The <code>base</code> parameter positions the robot in the world:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use nalgebra::{Isometry3, Translation3, UnitQuaternion};
+</span>use nalgebra::{Iso3, Translation3, UnitQuaternion};
 
 // Robot at world origin
-let base = Isometry3::identity();
+let base = Iso3::identity();
 
 // Robot displaced 10 units up
-let base = Isometry3::from_parts(
+let base = Iso3::from_parts(
     Translation3::new(0.0, 0.0, 10.0),
     UnitQuaternion::identity(),
 );
@@ -625,7 +625,7 @@ let base = Isometry3::from_parts(
 </span>let solution = solve(&amp;table);
 
 let rotation = solution.rotation();    // Matrix3&lt;f64&gt; -- 3x3 rotation
-let translation = solution.translation(); // Vector3&lt;f64&gt; -- position
+let translation = solution.translation(); // Vec3&lt;f64&gt; -- position
 <span class="boring">}</span></code></pre>
 <h2 id="example-planar-2r-robot"><a class="header" href="#example-planar-2r-robot">Example: Planar 2R Robot</a></h2>
 <p>Two revolute joints, both in the XY plane (alpha = 0):</p>
@@ -862,7 +862,7 @@ pub struct RobotDef {
 │   │       ├── math/
 │   │       │   ├── mod.rs
 │   │       │   ├── dh.rs         # DH parameter types and solver
-│   │       │   ├── hmatrix.rs    # Isometry3 helpers
+│   │       │   ├── hmatrix.rs    # Iso3 helpers
 │   │       │   ├── quaternion.rs # Quaternion type and operations
 │   │       │   └── constants.rs  # PI, DEG_TO_RAD, RAD_TO_DEG
 │   │       ├── robot/
@@ -941,7 +941,7 @@ pub struct RobotDef {
          │
          ▼
 ┌─────────────────┐
-│  Isometry3 /     │  ← frames, end-effector pose
+│  Iso3 /     │  ← frames, end-effector pose
 │  Matrix4         │
 └────────┬────────┘
          │
@@ -984,14 +984,14 @@ pub struct RobotDef {
 </ul>
 <p>This matches the convention used in “Introduction to Robotics” by Craig, which is the most common textbook for robotics courses.</p>
 <p><strong>Tradeoff</strong>: Users trained on the standard convention need to remap their parameters.</p>
-<h2 id="3-isometry3-for-transformations"><a class="header" href="#3-isometry3-for-transformations">3. Isometry3 for Transformations</a></h2>
-<p><strong>Decision</strong>: Use <code>nalgebra::Isometry3&lt;f64&gt;</code> instead of raw <code>Matrix4&lt;f64&gt;</code> for forward kinematics.</p>
+<h2 id="3-iso3-for-transformations"><a class="header" href="#3-iso3-for-transformations">3. Iso3 for Transformations</a></h2>
+<p><strong>Decision</strong>: Use <code>nalgebra::Iso3&lt;f64&gt;</code> instead of raw <code>Matrix4&lt;f64&gt;</code> for forward kinematics.</p>
 <p><strong>Why</strong>:</p>
 <ul>
-<li><code>Isometry3</code> semantically represents a rigid body transformation (rotation + translation)</li>
+<li><code>Iso3</code> semantically represents a rigid body transformation (rotation + translation)</li>
 <li>It stores rotation as a <code>UnitQuaternion</code>, which is more numerically stable than a 3x3 rotation matrix</li>
 <li>nalgebra provides optimized multiplication for isometries</li>
-<li>The <code>forward_kinematics()</code> function returns <code>Vec&lt;Isometry3&gt;</code>, giving both position and rotation in a type-safe way</li>
+<li>The <code>forward_kinematics()</code> function returns <code>Vec&lt;Iso3&gt;</code>, giving both position and rotation in a type-safe way</li>
 </ul>
 <p>The numeric solver (<code>solve()</code>) uses <code>Matrix4&lt;f64&gt;</code> directly because it works with the raw DH math and needs to display the full 4x4 matrix.</p>
 <h2 id="4-joint-value-as-the-only-dynamic-state"><a class="header" href="#4-joint-value-as-the-only-dynamic-state">4. Joint Value as the Only Dynamic State</a></h2>
@@ -1304,7 +1304,7 @@ pub use kinematics::{forward_kinematics, matrix_from_segment};
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
 
 // nalgebra types
-pub use nalgebra::Isometry3;
+pub use nalgebra::Iso3;
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="math-module-math"><a class="header" href="#math-module-math">Math Module (<code>math</code>)</a></h2>
@@ -1372,7 +1372,7 @@ let m = compute_a_matrix(p);
 </thead>
 <tbody>
 <tr><td><code>rotation</code></td><td><code>(&amp;self) -&gt; Matrix3&lt;f64&gt;</code></td><td>3x3 rotation matrix from the final transform</td></tr>
-<tr><td><code>translation</code></td><td><code>(&amp;self) -&gt; Vector3&lt;f64&gt;</code></td><td>Position vector from the final transform</td></tr>
+<tr><td><code>translation</code></td><td><code>(&amp;self) -&gt; Vec3&lt;f64&gt;</code></td><td>Position vector from the final transform</td></tr>
 </tbody>
 </table>
 </div>
@@ -1603,24 +1603,24 @@ pub enum Error {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub fn forward_kinematics(
-    base: Isometry3&lt;f64&gt;,
+    base: Iso3&lt;f64&gt;,
     robot: &amp;Robot,
-) -&gt; (Vec&lt;Isometry3&lt;f64&gt;&gt;, Isometry3&lt;f64&gt;)
+) -&gt; (Vec&lt;Iso3&lt;f64&gt;&gt;, Iso3&lt;f64&gt;)
 <span class="boring">}</span></code></pre>
 <p><strong>Parameters</strong>:</p>
 <ul>
-<li><code>base</code> – world-to-base transformation (use <code>Isometry3::identity()</code> for origin)</li>
+<li><code>base</code> – world-to-base transformation (use <code>Iso3::identity()</code> for origin)</li>
 <li><code>robot</code> – the robot to solve</li>
 </ul>
 <p><strong>Returns</strong>: <code>(frames, end_effector)</code></p>
 <ul>
-<li><code>frames</code> – one <code>Isometry3</code> per segment (cumulative pose at each joint)</li>
+<li><code>frames</code> – one <code>Iso3</code> per segment (cumulative pose at each joint)</li>
 <li><code>end_effector</code> – the final pose (last element of <code>frames</code>)</li>
 </ul>
 <p><strong>Example</strong>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Isometry3, forward_kinematics};
+</span>use bombolab_core::{DHParams, Joint, JointType, Robot, Segment, Iso3, forward_kinematics};
 
 let robot = Robot::new(vec![
     Segment::new(
@@ -1629,14 +1629,14 @@ let robot = Robot::new(vec![
     ),
 ]);
 
-let (frames, effector) = forward_kinematics(Isometry3::identity(), &amp;robot);
+let (frames, effector) = forward_kinematics(Iso3::identity(), &amp;robot);
 assert_eq!(frames.len(), 1);
 <span class="boring">}</span></code></pre>
 <h3 id="matrix_from_segment-1"><a class="header" href="#matrix_from_segment-1"><code>matrix_from_segment</code></a></h3>
 <p>Compute the transformation for a single segment.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Isometry3&lt;f64&gt;
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt;
 <span class="boring">}</span></code></pre>
 <p>Returns the isometry representing the segment’s DH transformation: <code>RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)</code>.</p>
 <hr>
@@ -1645,9 +1645,9 @@ assert_eq!(frames.len(), 1);
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub struct Movement {
-    pub translation: Vector3&lt;f64&gt;,
+    pub translation: Vec3&lt;f64&gt;,
     pub angles: f64,
-    pub axis: Vector3&lt;f64&gt;,
+    pub axis: Vec3&lt;f64&gt;,
     pub isometry: bool,
 }
 <span class="boring">}</span></code></pre>
@@ -1655,16 +1655,16 @@ assert_eq!(frames.len(), 1);
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub fn rotation_and_translation(
-    axis: Vector3&lt;f64&gt;, angle: f64, translation: Vector3&lt;f64&gt;
-) -&gt; Isometry3&lt;f64&gt;
+    axis: Vec3&lt;f64&gt;, angle: f64, translation: Vec3&lt;f64&gt;
+) -&gt; Iso3&lt;f64&gt;
 
 pub fn translation_and_rotation(
-    axis: Vector3&lt;f64&gt;, angle: f64, translation: Vector3&lt;f64&gt;
-) -&gt; Isometry3&lt;f64&gt;
+    axis: Vec3&lt;f64&gt;, angle: f64, translation: Vec3&lt;f64&gt;
+) -&gt; Iso3&lt;f64&gt;
 
 pub fn make_movement(
-    initial: Isometry3&lt;f64&gt;, movements: &amp;[Movement]
-) -&gt; (Vec&lt;Isometry3&lt;f64&gt;&gt;, Isometry3&lt;f64&gt;)
+    initial: Iso3&lt;f64&gt;, movements: &amp;[Movement]
+) -&gt; (Vec&lt;Iso3&lt;f64&gt;&gt;, Iso3&lt;f64&gt;)
 <span class="boring">}</span></code></pre>
 <p><code>make_movement</code> composes a sequence of movements from an initial pose, returning the trajectory and final pose.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -1806,7 +1806,7 @@ pub fn compute_a_matrix(p: DHParameter) -&gt; Matrix4&lt;f64&gt; {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Good: explains the reasoning
-// Isometry3 stores rotation as UnitQuaternion, so we must convert
+// Iso3 stores rotation as UnitQuaternion, so we must convert
 let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
 
 // Bad: restates the code
