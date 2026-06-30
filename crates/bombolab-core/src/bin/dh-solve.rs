@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use bombolab_core::math::dh::{
+use bombolab_core::kinematics::dh::{
     DHParameter, DHParameterSymbolic, DHValue, format_symbolic_matrix, solve,
 };
 
