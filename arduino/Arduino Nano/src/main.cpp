@@ -71,7 +71,7 @@ void read_positions_from_serial(int *positions) {
   }
 
   for (int i = 0; i < NUM_SERVOS; i++) {
-    positions[i] = constrain(positions[i], 0, 180);
+    positions[i] = constrain(positions[i], 10, 170);
   }
 
   Serial.println(F("OK"));
