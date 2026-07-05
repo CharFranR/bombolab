@@ -9,6 +9,10 @@ pub struct Segment {
 
 pub struct Robot {
     pub segments: Vec<Segment>,
+    /// Kinematic home pose in radians — the "zero" for all FK/IK/Jacobians.
+    pub home_pose: Vec<f64>,
+    /// Servo offsets: servo_angle = q + offset (radians).
+    pub servo_offsets: Vec<f64>,
 }
 
 impl Segment {
@@ -25,8 +29,53 @@ impl Segment {
 }
 
 impl Robot {
+    /// Create a robot with default (zero) home pose and servo offsets.
+    /// All joint values in segments are treated as kinematic coordinates (q).
     pub fn new(segments: Vec<Segment>) -> Self {
-        Self { segments }
+        let n = segments.len();
+        Self {
+            segments,
+            home_pose: vec![0.0; n],
+            servo_offsets: vec![0.0; n],
+        }
+    }
+
+    /// Create a robot with explicit home pose and servo offsets.
+    ///
+    /// - `home_pose`: the servo angles (radians) at kinematic zero (q=[0,0,...,0]).
+    /// - `servo_offsets`: servo_angle = q + offset (radians).
+    pub fn with_offsets(
+        segments: Vec<Segment>,
+        home_pose: Vec<f64>,
+        servo_offsets: Vec<f64>,
+    ) -> Self {
+        Self {
+            segments,
+            home_pose,
+            servo_offsets,
+        }
+    }
+
+    /// Convert kinematic coordinates (q) to servo angles.
+    pub fn q_to_servo(&self, q: &[f64]) -> Vec<f64> {
+        q.iter()
+            .zip(&self.servo_offsets)
+            .map(|(qi, off)| qi + off)
+            .collect()
+    }
+
+    /// Convert servo angles to kinematic coordinates (q).
+    pub fn servo_to_q(&self, servo: &[f64]) -> Vec<f64> {
+        servo
+            .iter()
+            .zip(&self.servo_offsets)
+            .map(|(s, off)| s - off)
+            .collect()
+    }
+
+    /// Get the home pose expressed in kinematic coordinates (should be all zeros).
+    pub fn kinematic_home(&self) -> Vec<f64> {
+        self.servo_to_q(&self.home_pose)
     }
 
     pub fn dof(&self) -> usize {
