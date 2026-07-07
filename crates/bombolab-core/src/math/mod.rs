@@ -1,9 +1,11 @@
 pub mod constants;
 pub mod isometry;
+pub mod jacobian;
 pub mod quaternion;
 
 pub use constants::{DEG_TO_RAD, EPS, FRAC_PI_2, FRAC_PI_4, PI, RAD_TO_DEG, TAU};
 pub use isometry::{Movement, make_movement, rotation_and_translation, translation_and_rotation};
+pub use jacobian::{geometric_jacobian, JacobianError, JointKind};
 pub use quaternion::{Quaternion, solve_add, solve_divide, solve_multiply, solve_subtract};
 
 // Alias que apuntan a nalgebra
@@ -15,3 +17,4 @@ pub type UnitVec = nalgebra::Unit<nalgebra::Vector3<f64>>;
 pub type Quat = nalgebra::UnitQuaternion<f64>;
 pub type Mat3 = nalgebra::Matrix3<f64>;
 pub type Mat4 = nalgebra::Matrix4<f64>;
+pub type MatDyn = nalgebra::DMatrix<f64>;
