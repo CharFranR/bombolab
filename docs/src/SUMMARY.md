@@ -15,6 +15,7 @@
 - [FABRI Creator](./core-concepts/fabri-creator.md)
 - [Serial Communication](./core-concepts/communication.md)
 - [Jacobian](./core-concepts/jacobian.md)
+- [Inverse Kinematics](./core-concepts/inverse-kinematics.md)
 
 # Architecture
 
