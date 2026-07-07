@@ -1,8 +1,31 @@
-use bombolab_core::{Iso3, JointType, forward_kinematics};
+// ---------------------------------------------------------------------------
+// main_page.rs — Punto de entrada del renderizado de la UI.
+//
+// Organiza la ventana en tres áreas principales:
+//   1. Barra superior (título)
+//   2. Panel lateral izquierdo con pestañas [Simulación | Robot Físico]
+//   3. Panel central (viewport 3D isométrico)
+//
+// El panel lateral cambia completamente según la pestaña activa, y el
+// viewport 3D decide de dónde tomar los datos según el modo.
+// ---------------------------------------------------------------------------
 
-use crate::ui::state::{PanelView, RobotDef, SegmentUi};
+use bombolab_core::{forward_kinematics, Iso3, JointType};
 
+use crate::ui::state::{AppMode, PanelView, RobotDef, SegmentUi};
+use crate::ui::viewport::{draw_robot_skeleton, Point3D};
+// ---------------------------------------------------------------------------
+// Render principal (llamado desde lib.rs → main.rs)
+// ---------------------------------------------------------------------------
+
+/// Renderiza todos los elementos de la ventana principal.
+///
+/// No modifica la firma para mantener compatibilidad con `main.rs`, que
+/// ya llama a `bombolab_gui::render(ui, &mut self.state)`.
 pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
+    // ────────────────────────────────────────────────────────────────────────
+    // 1. Barra superior (título)
+    // ────────────────────────────────────────────────────────────────────────
     egui::Panel::top("top_bar").show_inside(ui, |ui| {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
@@ -13,33 +36,104 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         ui.add_space(4.0);
     });
 
+    // ────────────────────────────────────────────────────────────────────────
+    // 2. Panel lateral izquierdo (con pestañas)
+    // ────────────────────────────────────────────────────────────────────────
     egui::Panel::left("side_panel")
         .default_size(280.0)
-        .show_inside(ui, |ui| match &state.view {
-            PanelView::Main => render_main(ui, state),
-            PanelView::RobotList => render_robot_list(ui, state),
-            PanelView::RobotEditor(idx) => {
-                let idx = *idx;
-                render_robot_editor(ui, state, idx);
+        .show_inside(ui, |ui| {
+            // 2a. Pestañas en la parte superior del panel
+            ui.horizontal(|ui| {
+                let sim_selected = state.mode == AppMode::Simulation;
+                if ui
+                    .selectable_label(sim_selected, "  Simulación  ")
+                    .clicked()
+                {
+                    state.mode = AppMode::Simulation;
+                }
+
+                let phys_selected = state.mode == AppMode::PhysicalRobot;
+                if ui
+                    .selectable_label(phys_selected, "  Robot Físico  ")
+                    .clicked()
+                {
+                    state.mode = AppMode::PhysicalRobot;
+                }
+            });
+            ui.separator();
+
+            // 2b. Contenido según la pestaña activa
+            match state.mode {
+                AppMode::Simulation => render_simulation_panel(ui, state),
+                AppMode::PhysicalRobot => render_physical_panel(ui, state),
             }
-            PanelView::Movements => render_movements(ui, state),
         });
 
+    // ────────────────────────────────────────────────────────────────────────
+    // 3. Panel central (viewport 3D)
+    // ────────────────────────────────────────────────────────────────────────
     egui::CentralPanel::default().show_inside(ui, |ui| {
         let rect = ui.available_rect_before_wrap();
         let painter = ui.painter();
+
+        // Fondo oscuro tipo viewport 3D
         painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(30, 30, 30));
-        painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "3D Viewport",
-            egui::FontId::proportional(16.0),
-            egui::Color32::from_rgb(100, 100, 100),
-        );
+
+        // Calcular los puntos 3D según el modo activo
+        let points: Vec<Point3D> = match state.mode {
+            AppMode::Simulation => compute_simulation_points(state),
+            AppMode::PhysicalRobot => {
+                compute_physical_robot_points(&state.physical_robot.angles)
+            }
+        };
+
+        // Decidir si hay datos suficientes para dibujar
+        let has_valid_data = {
+            let non_zero = points
+                .iter()
+                .any(|p| p.x != 0.0 || p.y != 0.0 || p.z != 0.0);
+            points.len() >= 2 && non_zero
+        };
+
+        if has_valid_data {
+            // ── Renderizar esqueleto 3D ──
+            draw_robot_skeleton(
+                &painter,
+                rect,
+                &points,
+                egui::Color32::from_rgb(255, 200, 50),   // Color articulaciones (amarillo)
+                egui::Color32::from_rgb(220, 180, 60),   // Color eslabones (oro)
+                3.0,                                      // Grosor de líneas (px)
+                6.0,                                      // Radio de círculos (px)
+            );
+        } else {
+            // ── Placeholder ──
+            let msg = match state.mode {
+                AppMode::Simulation => {
+                    if state.selected_robot.is_none() {
+                        "3D Viewport\nSeleccione o cree un robot en 'Simulación'"
+                    } else {
+                        "3D Viewport\nRobot sin segmentos definidos"
+                    }
+                }
+                AppMode::PhysicalRobot => {
+                    "3D Viewport\nConecte el robot físico para ver la telemetría"
+                }
+            };
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                msg,
+                egui::FontId::proportional(16.0),
+                egui::Color32::from_rgb(100, 100, 100),
+            );
+        }
     });
 
-    // Details popup
-    if state.show_details {
+    // ────────────────────────────────────────────────────────────────────────
+    // 4. Ventana de detalles (solo en modo simulación)
+    // ────────────────────────────────────────────────────────────────────────
+    if state.show_details && state.mode == AppMode::Simulation {
         let mut open = state.show_details;
         egui::Window::new("Transformation Details")
             .open(&mut open)
@@ -53,6 +147,318 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         state.show_details = open;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Panel de simulación
+// ---------------------------------------------------------------------------
+
+/// Renderiza el contenido del panel lateral en modo simulación.
+///
+/// Delega en las funciones existentes según la vista activa (`PanelView`).
+fn render_simulation_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) {
+    match &state.view {
+        PanelView::Main => render_main(ui, state),
+        PanelView::RobotList => render_robot_list(ui, state),
+        PanelView::RobotEditor(idx) => {
+            let idx = *idx;
+            render_robot_editor(ui, state, idx);
+        }
+        PanelView::Movements => render_movements(ui, state),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Panel de robot físico
+// ---------------------------------------------------------------------------
+
+/// Renderiza el contenido del panel lateral en modo robot físico.
+///
+/// Incluye:
+///   - Controles de conexión serie (Conectar / Desconectar)
+///   - Indicador de estado de conexión
+///   - Sección de telemetría con sliders para cada articulación
+///   - Botones para leer y enviar ángulos
+fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) {
+    ui.add_space(8.0);
+    ui.heading("Robot Físico");
+    ui.separator();
+
+    // ─── Controles de conexión ─────────────────────────────────────────────
+    ui.add_space(8.0);
+    ui.label("Conexión");
+    ui.separator();
+
+    if !state.physical_robot.connected {
+        // Botón Conectar
+        if ui
+            .button("🔌  Conectar Puerto Serie")
+            .on_hover_text("Abrir conexión con el robot físico")
+            .clicked()
+        {
+            // TODO: Reemplazar MockRobotController por SerialRobotController
+            //       que use la crate `serialport`:
+            //
+            //   let port = serialport::new("/dev/ttyUSB0", 115200)
+            //       .timeout(Duration::from_millis(100))
+            //       .open();
+            //   match port {
+            //       Ok(p) => state.robot_controller = Box::new(SerialRobotController::new(p)),
+            //       Err(e) => state.physical_robot.connection_error = Some(e.to_string()),
+            //   }
+            match state.robot_controller.connect() {
+                Ok(()) => {
+                    state.physical_robot.connected = true;
+                    state.physical_robot.connection_error = None;
+                }
+                Err(e) => {
+                    state.physical_robot.connection_error = Some(e);
+                }
+            }
+        }
+
+        // Mostrar error si existe
+        if let Some(ref error) = state.physical_robot.connection_error {
+            ui.add_space(4.0);
+            ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
+        }
+    } else {
+        // Botón Desconectar
+        if ui
+            .button("🔌  Desconectar Puerto Serie")
+            .on_hover_text("Cerrar conexión con el robot físico")
+            .clicked()
+        {
+            // TODO: Aquí se cerraría el puerto serie real.
+            let _ = state.robot_controller.disconnect();
+            state.physical_robot.connected = false;
+        }
+
+        // Indicador de estado conectado
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("Estado:");
+            ui.colored_label(egui::Color32::GREEN, "● Conectado");
+        });
+
+        // TODO: Mostrar información del puerto (velocidad, puerto, etc.)
+        // ui.label("Puerto: /dev/ttyUSB0");
+        // ui.label("Baud rate: 115200");
+    }
+
+    // ─── Telemetría ────────────────────────────────────────────────────────
+    ui.add_space(16.0);
+    ui.heading("Telemetría");
+    ui.separator();
+
+    // Sliders para cada articulación
+    let joint_labels = ["Base", "Hombro", "Codo", "Muñeca"];
+    for i in 0..4 {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label(format!("{}:", joint_labels[i]));
+
+            // TODO: En lugar de slider, cuando el hardware real esté conectado
+            //       estos valores deberían venir de `read_angles()`. El slider
+            //       permite simular el envío de ángulos objetivo.
+            ui.add(
+                egui::Slider::new(&mut state.physical_robot.angles[i], -180.0..=180.0)
+                    .suffix("°")
+                    .text(format!("J{}", i + 1)),
+            )
+            .on_hover_text(format!(
+                "Ángulo de la articulación {} ({})",
+                i + 1,
+                joint_labels[i]
+            ));
+        });
+    }
+
+    ui.add_space(8.0);
+
+    // Botones de acción (solo visibles cuando hay conexión)
+    if state.physical_robot.connected {
+        ui.horizontal(|ui| {
+            if ui
+                .button("📡  Leer telemetría")
+                .on_hover_text("Solicitar ángulos actuales al robot")
+                .clicked()
+            {
+                // TODO: Llamar al controlador real para leer ángulos desde
+                //       el buffer serie. Por ahora usa el mock.
+                //
+                //   match state.robot_controller.read_angles() {
+                //       Ok(angles) => { ... }
+                //       Err(e) => { ... }
+                //   }
+                state.physical_robot.pending_read = true;
+            }
+
+            if ui
+                .button("📤  Enviar ángulos")
+                .on_hover_text("Enviar ángulos objetivo al robot")
+                .clicked()
+            {
+                // TODO: Llamar al controlador real para escribir ángulos al
+                //       puerto serie.
+                //
+                //   let angles = state.physical_robot.angles.to_vec();
+                //   match state.robot_controller.send_angles(&angles) {
+                //       Ok(()) => { ... }
+                //       Err(e) => { ... }
+                //   }
+                state.physical_robot.pending_send = true;
+            }
+        });
+
+        // Procesar acciones pendientes (se ejecutan aquí para mantener
+        // la propiedad prestada de state limpia)
+        if state.physical_robot.pending_read {
+            state.physical_robot.pending_read = false;
+            match state.robot_controller.read_angles() {
+                Ok(angles) => {
+                    // Copiar los ángulos recibidos al estado (como f32)
+                    for (i, angle) in angles.iter().enumerate().take(4) {
+                        state.physical_robot.angles[i] = *angle;
+                    }
+                    state.physical_robot.connection_error = None;
+                }
+                Err(e) => {
+                    state.physical_robot.connection_error = Some(e);
+                }
+            }
+        }
+
+        if state.physical_robot.pending_send {
+            state.physical_robot.pending_send = false;
+            let angles_vec = state.physical_robot.angles.to_vec();
+            match state.robot_controller.send_angles(&angles_vec) {
+                Ok(()) => {
+                    state.physical_robot.connection_error = None;
+                }
+                Err(e) => {
+                    state.physical_robot.connection_error = Some(e);
+                }
+            }
+        }
+    } else {
+        ui.add_space(8.0);
+        ui.colored_label(
+            egui::Color32::DARK_GRAY,
+            "Conecte el robot para habilitar la telemetría.",
+        );
+    }
+
+    // Mostrar errores de telemetría si los hay
+    if let Some(ref error) = state.physical_robot.connection_error {
+        ui.add_space(4.0);
+        ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cálculo de puntos 3D para el viewport
+// ---------------------------------------------------------------------------
+
+/// Calcula los puntos 3D del robot seleccionado en modo simulación.
+///
+/// Ejecuta cinemática directa sobre el robot definido por el usuario y
+/// extrae las posiciones (translaciones) de cada frame, incluyendo la base.
+///
+/// Retorna un vector con: [base, joint_1, joint_2, ..., end_effector].
+fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
+    let Some(idx) = state.selected_robot else {
+        return vec![Point3D::origin()];
+    };
+
+    let robot = &state.robots[idx];
+    if robot.segments.is_empty() {
+        return vec![Point3D::origin()];
+    }
+
+    // Ejecutar cinemática directa
+    let domain_robot = robot.to_robot();
+    let base = Iso3::identity();
+    let (frames, _effector) = forward_kinematics(base, &domain_robot);
+
+    // Construir lista de puntos: base + cada frame
+    let mut points = vec![Point3D::origin()]; // base en el origen
+    for frame in &frames {
+        let t = frame.translation.vector;
+        points.push(Point3D::new(t.x as f32, t.y as f32, t.z as f32));
+    }
+    points
+}
+
+/// Calcula los puntos 3D del robot físico a partir de los ángulos de telemetría.
+///
+/// Usa un modelo DH fijo de 4 DOF (brazo antropomórfico) y los ángulos
+/// actuales del estado `PhysicalRobotState` para computar la cadena
+/// cinemática y extraer las posiciones de cada articulación.
+///
+/// TODO: Permitir que el modelo DH del robot físico sea configurable
+///       (idealmente cargado desde un archivo de configuración).
+fn compute_physical_robot_points(angles: &[f32; 4]) -> Vec<Point3D> {
+    use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
+
+    // -----------------------------------------------------------------------
+    // Modelo DH para un brazo antropomórfico de 4 DOF (típico SCARA/ABB).
+    //
+    //   Joint  |  θ (rad)  |  d  |  a  |  α
+    //   --------|-----------|------|------|--------
+    //   Base    |  angle[0] |  0.0 | 0.0  | -π/2
+    //   Hombro  |  angle[1] |  0.0 | 1.0  |  0.0
+    //   Codo    |  angle[2] |  0.0 | 1.0  |  0.0
+    //   Muñeca  |  angle[3] |  0.0 | 0.5  |  0.0
+    //
+    // Los valores de a (longitud de eslabón) están en unidades arbitrarias.
+    // TODO: Cargar estos parámetros desde un archivo de configuración YAML/JSON.
+    // -----------------------------------------------------------------------
+    let dh_configs: [(f64, f64, f64, f64); 4] = [
+        (0.0, 0.0, 0.0, -std::f64::consts::FRAC_PI_2), // Base: rotación Z
+        (0.0, 0.0, 1.0, 0.0),                            // Hombro: elevación
+        (0.0, 0.0, 1.0, 0.0),                            // Codo: elevación
+        (0.0, 0.0, 0.5, 0.0),                            // Muñeca: elevación
+    ];
+
+    // Convertir ángulos de grados a radianes y construir segmentos
+    let segments: Vec<Segment> = angles
+        .iter()
+        .zip(dh_configs.iter())
+        .map(|(angle, &(theta_offset, d, a, alpha))| {
+            // TODO: El joint value debería ser leído desde el hardware real.
+            //       Por ahora usamos el slider de la UI (ya en grados).
+            let joint_value: f64 = (*angle as f64).to_radians();
+            let joint = Joint::new(
+                JointType::Revolute,
+                joint_value,
+                std::f64::consts::PI,
+                -std::f64::consts::PI,
+            );
+            let dh = DHParams::new(theta_offset, d, a, alpha);
+            Segment::new(joint, dh)
+        })
+        .collect();
+
+    // Ejecutar cinemática directa
+    let robot = Robot::new(segments);
+    let (frames, _) = forward_kinematics(Iso3::identity(), &robot);
+
+    // Construir puntos: base + frames
+    let mut points = vec![Point3D::origin()];
+    for frame in &frames {
+        let t = frame.translation.vector;
+        points.push(Point3D::new(t.x as f32, t.y as f32, t.z as f32));
+    }
+    points
+}
+
+// ===========================================================================
+// Funciones existentes (sin cambios en la lógica)
+// ===========================================================================
+//
+// Las siguientes funciones son idénticas a la versión anterior del archivo.
+// Se mantienen intactas para no romper la funcionalidad de simulación.
+// ===========================================================================
 
 // ── Main view ──
 
@@ -383,22 +789,10 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          └                    ┘",
-        m[(0, 0)],
-        m[(0, 1)],
-        m[(0, 2)],
-        m[(0, 3)],
-        m[(1, 0)],
-        m[(1, 1)],
-        m[(1, 2)],
-        m[(1, 3)],
-        m[(2, 0)],
-        m[(2, 1)],
-        m[(2, 2)],
-        m[(2, 3)],
-        m[(3, 0)],
-        m[(3, 1)],
-        m[(3, 2)],
-        m[(3, 3)]
+        m[(0, 0)], m[(0, 1)], m[(0, 2)], m[(0, 3)],
+        m[(1, 0)], m[(1, 1)], m[(1, 2)], m[(1, 3)],
+        m[(2, 0)], m[(2, 1)], m[(2, 2)], m[(2, 3)],
+        m[(3, 0)], m[(3, 1)], m[(3, 2)], m[(3, 3)]
     ));
 }
 

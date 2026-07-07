@@ -9,8 +9,11 @@ Bombolab models robots as serial chains of revolute/prismatic joints using Denav
 - **DH Parameter Editor** -- Define robot segments with theta, d, a, alpha parameters
 - **Joint Types** -- Support for both revolute and prismatic joints
 - **Forward Kinematics** -- Real-time computation of transformation matrices and end-effector pose
+- **3D Wireframe Viewport** -- Isometric skeleton rendering with ground grid
+- **Physical Robot Tab** -- Serial port connection, telemetry, joint angle control
+- **Hardware Abstraction** -- Trait-based controller with mock for offline development
 - **Interactive GUI** -- Desktop application with egui for editing robot configurations
-- **3D Viewport** -- Visual representation of the robot (planned)
+- **CLI Tools** -- `dh-solve` (numeric/symbolic) and `quaternion-solve`
 
 ## Getting Started
 
@@ -41,38 +44,45 @@ cargo build
 
 ```
 bombolab/
-├── Cargo.toml                # Package manifest
-├── LICENSE                   # MIT License
-├── docs/
-│   └── forward_kinematics.md # DH parameters and FK documentation
-└── src/
-    ├── main.rs               # Application entry point (egui/eframe)
-    ├── domain/               # Core data model
-    │   ├── mod.rs            # Module declarations and re-exports
-    │   ├── joint.rs          # JointType, Joint structs
-    │   ├── link.rs           # DHParams struct
-    │   ├── chain.rs          # Segment, Robot structs
-    │   └── errors.rs         # Custom error types
-    ├── kinematics/           # Math/computation layer
-    │   ├── mod.rs            # Module declarations and re-exports
-    │   ├── dh_parameters.rs  # Forward kinematics, matrix_from_segment
-    │   ├── hmatrix.rs        # Movement, rotation helpers
-    │   └── init.rs           # CLI-based interactive tester
-    └── ui/                   # GUI layer
-        ├── mod.rs            # Module declarations
-        ├── state.rs          # AppState, RobotDef, SegmentUi
-        └── main_page.rs      # egui rendering logic
+├── Cargo.toml                   # Root app manifest (eframe entrypoint)
+├── crates/
+│   ├── bombolab-core/           # Domain model, kinematics, math (lib + 2 bins)
+│   │   └── src/
+│   │       ├── lib.rs           # Re-exports: robot, math, kinematics
+│   │       ├── robot/           # Joint, DHParams, Segment, Robot, errors
+│   │       ├── kinematics/      # Forward kinematics, DH solve
+│   │       ├── math/            # Isometries, quaternions, constants
+│   │       └── bin/             # CLI binaries: dh-solve, quaternion-solve
+│   └── bombolab-gui/            # egui/eframe GUI layer
+│       └── src/
+│           ├── lib.rs           # Re-exports: render, AppState, hardware
+│           ├── ui/
+│           │   ├── main_page.rs # Tabbed UI (Simulation / Physical Robot)
+│           │   ├── state.rs     # AppState, RobotDef, modes
+│           │   └── viewport.rs  # Isometric 3D wireframe renderer
+│           └── hardware.rs      # RobotController trait + MockRobotController
+├── arduino/Arduino Nano/        # PlatformIO firmware (Arduino Nano, Servo lib)
+├── esp32/esp32/                 # PlatformIO firmware (ESP32, ESP32Servo lib)
+├── docs/                        # mdBook documentation (docs/src/ → docs/book/)
+└── AGENTS.md                    # OpenCode / AI assistant instructions
 ```
 
 ## Architecture
 
-The project is organized into three layers:
+The project is organized as a Cargo workspace with 3 Rust crates:
 
-| Layer | Module | Responsibility |
-|-------|--------|----------------|
-| **Domain** | `domain/` | Core data model: joints, links, segments, robot chain |
-| **Kinematics** | `kinematics/` | Forward kinematics computation, transformation matrices |
-| **UI** | `ui/` | Desktop GUI with egui, parameter editing, visualization |
+| Crate | Type | Responsibility |
+|-------|------|----------------|
+| **bombolab** (root) | binary | eframe entrypoint, wires GUI crate |
+| **bombolab-core** | lib + 2 bins | Domain model, kinematics, math, CLI tools |
+| **bombolab-gui** | lib | egui rendering, UI state, hardware abstraction |
+
+Additional non-Rust components:
+
+| Directory | Platform | Firmware |
+|-----------|----------|----------|
+| `arduino/` | PlatformIO (C++) | Arduino Nano servo control via `Servo` library |
+| `esp32/` | PlatformIO (C++) | ESP32 servo control via `ESP32Servo` library |
 
 ### Dependencies
 
@@ -117,17 +127,21 @@ For more details, see [docs/forward_kinematics.md](docs/forward_kinematics.md).
 
 - Domain model (joints, links, segments, robot)
 - Forward kinematics computation
-- GUI with egui/eframe
+- GUI with egui/eframe — tabbed interface (Simulation / Physical Robot)
 - DH parameter editor
 - Transformation matrix display
+- 3D wireframe viewport — isometric skeleton with ground grid
+- Physical robot tab — connect/disconnect, telemetry sliders, send/read angles
+- Hardware abstraction — `RobotController` trait + mock implementation for offline dev
 - CLI tools: `dh-solve` (numeric/symbolic) and `quaternion-solve`
+- Arduino Nano and ESP32 firmware (PlatformIO C++)
 
 ### Planned
 
-- 3D viewport rendering
 - Robot model catalog
 - Jacobian computation
 - Inverse kinematics
+- Hardware serial implementation (`serialport` crate)
 
 ## Contributing
 
