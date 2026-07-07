@@ -23,15 +23,21 @@ bombolab/
 │   │       │   ├── mod.rs
 │   │       │   ├── joint.rs      # JointType, Joint
 │   │       │   ├── link.rs       # DHParams
-│   │       │   ├── segment.rs    # Segment, Robot
-│   │       │   └── errors.rs     # Error, Result types
+│   │       │   ├── segment.rs    # Segment, Robot (with servo offsets)
+│   │       │   ├── errors.rs     # Error, Result types
+│   │       │   └── fabri_creator.rs  # FABRI Creator robot config
 │   │       ├── kinematics/
 │   │       │   ├── mod.rs
 │   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
 │   │       │   └── init.rs       # Interactive CLI tester
+│   │       ├── communication/    # Serial communication with hardware
+│   │       │   ├── mod.rs        # ConnectionError, protocol constants
+│   │       │   ├── arduino_nano.rs   # ArduinoNano serial wrapper
+│   │       │   └── interpolation.rs  # Smooth servo movement
 │   │       └── bin/
 │   │           ├── dh-solve.rs           # DH table solver CLI
-│   │           └── quaternion-solve.rs   # Quaternion operations CLI
+│   │           ├── quaternion-solve.rs   # Quaternion operations CLI
+│   │           └── serial-test.rs        # Interactive serial tester
 │   └── bombolab-gui/             # Desktop GUI
 │       ├── Cargo.toml
 │       └── src/
@@ -60,10 +66,14 @@ The core library contains all math, data models, and kinematics computation. It 
 | `math::constants` | `PI`, `DEG_TO_RAD`, `RAD_TO_DEG`, `FRAC_PI_2`, `FRAC_PI_4`, `EPS`, `TAU` |
 | `robot::joint` | `JointType` (Revolute/Prismatic), `Joint` |
 | `robot::link` | `DHParams` |
-| `robot::segment` | `Segment`, `Robot` |
+| `robot::segment` | `Segment`, `Robot` (with `home_pose`, `servo_offsets`, q/servo conversion) |
 | `robot::errors` | `Error` enum, `Result<T>` type alias |
+| `robot::fabri_creator` | FABRI Creator 5-DOF robot configuration, base/tool transforms |
 | `kinematics::forward` | `forward_kinematics()`, `matrix_from_segment()` |
 | `kinematics::init` | Interactive CLI for building robots and testing FK |
+| `communication` | Serial protocol constants, `ConnectionError` enum |
+| `communication::arduino_nano` | `ArduinoNano` serial connection wrapper |
+| `communication::interpolation` | `InterpolationConfig`, `interpolate_joint()`, `interpolate_all()` |
 
 ### bombolab-gui
 
@@ -105,11 +115,11 @@ User Input (GUI or CLI)
 
 ```
 bombolab (workspace root)
-├── bombolab-core    (nalgebra only)
+├── bombolab-core    (nalgebra, serialport, ctrlc)
 └── bombolab-gui     (bombolab-core + egui + eframe)
 ```
 
-The core crate has a single external dependency: `nalgebra` for linear algebra. The GUI crate adds `egui` and `eframe` for the desktop interface.
+The core crate depends on `nalgebra` for linear algebra, `serialport` for hardware communication, and `ctrlc` for clean shutdown handling. The GUI crate adds `egui` and `eframe` for the desktop interface.
 
 ## References
 
