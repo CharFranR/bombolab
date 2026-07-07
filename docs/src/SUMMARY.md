@@ -14,6 +14,7 @@
 - [Robot Model](./core-concepts/robot-model.md)
 - [FABRI Creator](./core-concepts/fabri-creator.md)
 - [Serial Communication](./core-concepts/communication.md)
+- [Jacobian](./core-concepts/jacobian.md)
 
 # Architecture
 
