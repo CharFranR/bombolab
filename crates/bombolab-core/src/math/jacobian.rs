@@ -18,8 +18,14 @@ impl fmt::Display for JacobianError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             JacobianError::EmptyChain => write!(f, "chain cannot be empty"),
-            JacobianError::JointKindMismatch { intermediates, kinds } => {
-                write!(f, "expected {kinds} joint kinds, got {intermediates} transforms")
+            JacobianError::JointKindMismatch {
+                intermediates,
+                kinds,
+            } => {
+                write!(
+                    f,
+                    "expected {kinds} joint kinds, got {intermediates} transforms"
+                )
             }
         }
     }
@@ -52,8 +58,18 @@ pub fn geometric_jacobian(
     let mut jacobian = MatDyn::zeros(6, n);
 
     for (i, kind) in joint_kinds.iter().enumerate() {
-        let z_i = intermediates[i].fixed_view::<3, 1>(0, 2).into_owned();
-        let p_i = intermediates[i].fixed_view::<3, 1>(0, 3).into_owned();
+        // Use frame BEFORE the joint (frame i-1) for the geometric Jacobian:
+        //   - Joint i rotates about Z_{i-1}
+        //   - For i=0, the base frame (identity) is used.
+        let (z_i, p_i) = if i == 0 {
+            (Vec3::z(), Vec3::zeros())
+        } else {
+            let prev = &intermediates[i - 1];
+            (
+                prev.fixed_view::<3, 1>(0, 2).into_owned(),
+                prev.fixed_view::<3, 1>(0, 3).into_owned(),
+            )
+        };
 
         let linear = match kind {
             JointKind::Revolute => z_i.cross(&(p_ee - p_i)),
@@ -107,7 +123,7 @@ mod tests {
         .unwrap();
         assert_jacobian_eq(
             &j,
-            &[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            &[0.0, 2.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
             2,
         );
     }
@@ -127,7 +143,7 @@ mod tests {
         .unwrap();
         assert_jacobian_eq(
             &j,
-            &[-1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            &[-2.0, 0.0, 0.0, 0.0, 0.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
             2,
         );
     }
@@ -136,9 +152,12 @@ mod tests {
     fn single_joint_at_origin() {
         let table = vec![DHParameter::new(0.0, 0.0, 0.0, 0.0)];
         let sol = solve(&table);
-        let j =
-            geometric_jacobian(&sol.intermediates, &[JointKind::Revolute], &sol.final_transform)
-                .unwrap();
+        let j = geometric_jacobian(
+            &sol.intermediates,
+            &[JointKind::Revolute],
+            &sol.final_transform,
+        )
+        .unwrap();
         assert_jacobian_eq(&j, &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0], 1);
     }
 
@@ -146,9 +165,12 @@ mod tests {
     fn single_prismatic_at_origin() {
         let table = vec![DHParameter::new(0.0, 0.0, 0.0, 0.0)];
         let sol = solve(&table);
-        let j =
-            geometric_jacobian(&sol.intermediates, &[JointKind::Prismatic], &sol.final_transform)
-                .unwrap();
+        let j = geometric_jacobian(
+            &sol.intermediates,
+            &[JointKind::Prismatic],
+            &sol.final_transform,
+        )
+        .unwrap();
         assert_jacobian_eq(&j, &[0.0, 0.0, 1.0, 0.0, 0.0, 0.0], 1);
     }
 
@@ -167,7 +189,7 @@ mod tests {
         .unwrap();
         assert_jacobian_eq(
             &j,
-            &[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            &[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
             2,
         );
     }
@@ -177,7 +199,12 @@ mod tests {
         let table = vec![
             DHParameter::new(std::f64::consts::FRAC_PI_2, 15.0, 68.5, 0.0),
             DHParameter::new(0.0, 0.0, 162.0, std::f64::consts::FRAC_PI_2),
-            DHParameter::new(std::f64::consts::FRAC_PI_2, 0.0, 0.0, std::f64::consts::FRAC_PI_2),
+            DHParameter::new(
+                std::f64::consts::FRAC_PI_2,
+                0.0,
+                0.0,
+                std::f64::consts::FRAC_PI_2,
+            ),
             DHParameter::new(-std::f64::consts::FRAC_PI_2, 0.0, 155.0, 0.0),
             DHParameter::new(std::f64::consts::FRAC_PI_2, 35.0, 0.0, 0.0),
         ];
