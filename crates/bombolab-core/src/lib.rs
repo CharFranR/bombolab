@@ -1,4 +1,4 @@
-pub mod comunication;
+pub mod communication;
 pub mod kinematics;
 pub mod math;
 pub mod robot;

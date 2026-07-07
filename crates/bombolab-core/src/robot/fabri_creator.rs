@@ -5,10 +5,9 @@ use crate::robot::{DHParams, Joint, JointType, Robot, Segment};
 const JOINT_MIN: f64 = std::f64::consts::PI / 18.0; // 10°
 const JOINT_MAX: f64 = std::f64::consts::PI * 17.0 / 18.0; // 170°
 
-/// Home pose: Arduino default servo positions (degrees → radians).
-/// At kinematic zero (q=[0,0,0,0,0]), servos are physically at these angles.
-/// Original Arduino defaults: [90°, 115°, 110°, 175°, 90°].
-/// J4 clamped from 175° → 170° to stay within JOINT_MAX.
+/// Home pose: servo positions at kinematic zero (q=[0,0,0,0,0]).
+/// Arduino firmware default for J4 was 175°, but JOINT_MAX is 170° —
+/// corrected to 170° to stay within mechanical safety limits.
 const HOME_POSE_DEG: [f64; 5] = [90.0, 115.0, 110.0, 170.0, 90.0];
 
 /// Servo offsets: servo_angle = q_robot + offset (radians).
@@ -16,6 +15,7 @@ const HOME_POSE_DEG: [f64; 5] = [90.0, 115.0, 110.0, 170.0, 90.0];
 const SERVO_OFFSETS_DEG: [f64; 5] = [90.0, 115.0, 110.0, 170.0, 90.0];
 
 /// Creates a configured FABRI Creator 5-DOF robot.
+///
 /// DH convention: Craig, units: mm.
 ///
 /// Base frame: X → right, Y → toward viewer, Z ↑ up (planar in ZX).
@@ -28,8 +28,16 @@ const SERVO_OFFSETS_DEG: [f64; 5] = [90.0, 115.0, 110.0, 170.0, 90.0];
 /// | 4 | 90°    | 35   | 0   | θ₄ |
 /// | 5 | 0°     | 0    | 0   | θ₅ |
 ///
-/// Joint values are kinematic coordinates (q). The `home_pose` and
-/// `servo_offsets` fields encode the mapping between q and physical servo angles.
+/// # Kinematic coordinates vs servo angles
+///
+/// FK/IK/Jacobians operate on kinematic coordinates (`q`), where `q=0`
+/// is the home pose. Physical servo angles are `servo = q + offset`.
+/// The `home_pose` and `servo_offsets` fields on `Robot` encode this mapping.
+///
+/// # Safety limits
+///
+/// Joint limits are 10°–170° in physical servo space. In kinematic space
+/// this becomes `[10°−offset, 170°−offset]` per joint.
 pub fn fabri_creator() -> Robot {
     let dh_table: Vec<(f64, f64, f64, f64)> = vec![
         (-std::f64::consts::FRAC_PI_2, 15.0, 95.0, 0.0), // α, a, d, θ(initial)

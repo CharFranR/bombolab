@@ -1,4 +1,10 @@
-/// Step size in degrees and delay between steps in ms.
+//! Linear interpolation for smooth servo movement.
+//!
+//! Moves each joint independently in steps of `step_size` degrees,
+//! padding shorter movements with their final value so all joints
+//! arrive at the target simultaneously.
+
+/// Configuration for interpolation step size and timing.
 pub struct InterpolationConfig {
     /// Angle increment per step in degrees.
     pub step_size: i32,

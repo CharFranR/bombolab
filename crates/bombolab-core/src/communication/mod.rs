@@ -1,3 +1,26 @@
+//! Serial communication with Arduino Nano firmware.
+//!
+//! The protocol sends 6 comma-separated integer angles (degrees) over serial
+//! at 115200 baud, terminated by `\n`. The Arduino responds with `OK` or `ERR`.
+//!
+//! # Serial Protocol
+//!
+//! ```text
+//! TX: "90,115,110,170,90,90\n"   (5 joints + gripper)
+//! RX: "OK\n"                      or "ERR\n"
+//! ```
+//!
+//! # Joint mapping
+//!
+//! | Index | Servo | Joint | Notes |
+//! |-------|-------|-------|-------|
+//! | 0     | S1    | J1    | Base yaw |
+//! | 1     | S2    | J2    | Shoulder pitch |
+//! | 2     | S3    | J3    | Elbow pitch |
+//! | 3     | S4    | J4    | Wrist roll |
+//! | 4     | S5    | J5    | Wrist pitch |
+//! | 5     | S6    | —     | Gripper |
+
 pub mod arduino_nano;
 pub mod interpolation;
 
@@ -6,21 +29,48 @@ use std::fmt;
 pub use arduino_nano::ArduinoNano;
 pub use interpolation::{InterpolationConfig, interpolate_all, interpolate_joint};
 
+/// Serial baud rate for Arduino Nano communication.
 pub const BAUD_RATE: u32 = 115_200;
+
+/// Number of serial values expected by the Arduino firmware.
+/// The FABRI Creator has 5 kinematic joints (DOF) but the serial protocol
+/// sends 6 values: 5 joint angles + 1 gripper angle.
 pub const JOINT_COUNT: usize = 6;
+
+/// Minimum servo angle in degrees (mechanical safety limit).
 pub const ANGLE_MIN: i32 = 10;
+
+/// Maximum servo angle in degrees (mechanical safety limit).
 pub const ANGLE_MAX: i32 = 170;
+
+/// Read timeout in milliseconds for serial responses.
 pub const READ_TIMEOUT_MS: u64 = 1000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionError {
-    PortNotFound { port: String },
-    OpenFailed { port: String, source: String },
-    WriteFailed { port: String, source: String },
-    ReadFailed { port: String, source: String },
-    Timeout { port: String, ms: u64 },
-    InvalidResponse { port: String, response: String },
-    AnglesOutOfRange { values: Vec<i32>, min: i32, max: i32 },
+    PortNotFound {
+        port: String,
+    },
+    OpenFailed {
+        port: String,
+        source: String,
+    },
+    WriteFailed {
+        port: String,
+        source: String,
+    },
+    ReadFailed {
+        port: String,
+        source: String,
+    },
+    Timeout {
+        port: String,
+        ms: u64,
+    },
+    InvalidResponse {
+        port: String,
+        response: String,
+    },
 }
 
 impl fmt::Display for ConnectionError {
@@ -43,13 +93,6 @@ impl fmt::Display for ConnectionError {
             }
             ConnectionError::InvalidResponse { port, response } => {
                 write!(f, "invalid response from {}: {:?}", port, response)
-            }
-            ConnectionError::AnglesOutOfRange { values, min, max } => {
-                write!(
-                    f,
-                    "angles {:?} out of range [{}, {}]",
-                    values, min, max
-                )
             }
         }
     }
@@ -84,10 +127,7 @@ mod tests {
             port: "/dev/ttyACM0".into(),
             source: "broken pipe".into(),
         };
-        assert_eq!(
-            err.to_string(),
-            "write to /dev/ttyACM0 failed: broken pipe"
-        );
+        assert_eq!(err.to_string(), "write to /dev/ttyACM0 failed: broken pipe");
     }
 
     #[test]
@@ -120,19 +160,6 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "invalid response from COM3: \"GARBAGE\\n\""
-        );
-    }
-
-    #[test]
-    fn display_angles_out_of_range() {
-        let err = ConnectionError::AnglesOutOfRange {
-            values: vec![5, 180, 90],
-            min: 10,
-            max: 170,
-        };
-        assert_eq!(
-            err.to_string(),
-            "angles [5, 180, 90] out of range [10, 170]"
         );
     }
 

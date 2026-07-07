@@ -3,8 +3,13 @@ use std::time::Duration;
 
 use serialport::SerialPort;
 
-use super::{ConnectionError, BAUD_RATE, JOINT_COUNT, READ_TIMEOUT_MS};
+use super::{BAUD_RATE, ConnectionError, JOINT_COUNT, READ_TIMEOUT_MS};
 
+/// Arduino Nano serial connection.
+///
+/// Wraps a serial port handle and provides angle transmission with
+/// OK/ERR response verification. Uses the crate-level constants
+/// `BAUD_RATE`, `JOINT_COUNT`, and `READ_TIMEOUT_MS`.
 pub struct ArduinoNano {
     port: Box<dyn SerialPort>,
     port_name: String,
