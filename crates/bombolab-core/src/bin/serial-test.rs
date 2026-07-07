@@ -2,8 +2,8 @@ use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use bombolab_core::comunication::{
-    ArduinoNano, InterpolationConfig, interpolate_all, ANGLE_MAX, ANGLE_MIN, JOINT_COUNT,
+use bombolab_core::communication::{
+    ANGLE_MAX, ANGLE_MIN, ArduinoNano, InterpolationConfig, JOINT_COUNT, interpolate_all,
 };
 
 fn read_input(prompt: &str) -> String {
@@ -31,10 +31,10 @@ fn main() {
         return;
     }
 
-    // Filter USB ports only
+    // Filter USB/ACM ports (ttyUSB for FTDI, ttyACM for native USB like Arduino Nano)
     let usb_ports: Vec<String> = ports
         .iter()
-        .filter(|p| p.starts_with("/dev/ttyUSB"))
+        .filter(|p| p.starts_with("/dev/ttyUSB") || p.starts_with("/dev/ttyACM"))
         .cloned()
         .collect();
 
@@ -53,7 +53,10 @@ fn main() {
             let input = read_input("\nPort #: ");
             match input.parse::<usize>() {
                 Ok(n) if n >= 1 && n <= usb_ports.len() => break usb_ports[n - 1].clone(),
-                _ => println!("Invalid selection. Enter a number between 1 and {}.", usb_ports.len()),
+                _ => println!(
+                    "Invalid selection. Enter a number between 1 and {}.",
+                    usb_ports.len()
+                ),
             }
         }
     };

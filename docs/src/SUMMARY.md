@@ -12,6 +12,8 @@
 - [DH Parameters](./core-concepts/dh-parameters.md)
 - [Forward Kinematics](./core-concepts/forward-kinematics.md)
 - [Robot Model](./core-concepts/robot-model.md)
+- [FABRI Creator](./core-concepts/fabri-creator.md)
+- [Serial Communication](./core-concepts/communication.md)
 
 # Architecture
 
@@ -22,6 +24,7 @@
 
 - [dh-solve](./cli/dh-solve.md)
 - [quaternion-solve](./cli/quaternion-solve.md)
+- [serial-test](./cli/serial-test.md)
 
 # API Reference
 
