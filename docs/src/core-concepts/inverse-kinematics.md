@@ -65,7 +65,7 @@ println!("End effector at: ({:.3}, {:.3}, {:.3})", end_pos.x, end_pos.y, end_pos
 | Option | Default | Description |
 |--------|---------|-------------|
 | `tolerance_pos` | 1.0 | Position convergence threshold (mm) |
-| `tolerance_angle` | 0.05 | Orientation convergence threshold (rad, ~3°) |
+| `tolerance_angle` | 0.1 | Orientation convergence threshold (rad, ~6°) |
 | `max_iterations` | 200 | Maximum iterations before giving up |
 | `damping` | 0.1 | Initial damping factor `λ` for pseudoinverse regularization |
 | `min_damping` | 1e-6 | Floor for damping — prevents rank-1 updates from going to zero |

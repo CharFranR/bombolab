@@ -24,7 +24,7 @@ impl Default for IkOptions {
     fn default() -> Self {
         Self {
             tolerance_pos: 1.0,
-            tolerance_angle: 0.05,
+            tolerance_angle: 0.1,
             max_iterations: 200,
             lambda_initial: 10.0,
             lambda_decay: 0.95,
@@ -351,7 +351,7 @@ mod tests {
     fn test_ik_options_default() {
         let opts = IkOptions::default();
         assert!((opts.tolerance_pos - 1.0).abs() < 1e-10);
-        assert!((opts.tolerance_angle - 0.05).abs() < 1e-10);
+        assert!((opts.tolerance_angle - 0.1).abs() < 1e-10);
         assert_eq!(opts.max_iterations, 200);
         assert!((opts.lambda_initial - 10.0).abs() < 1e-10);
         assert!((opts.lambda_decay - 0.95).abs() < 1e-10);
