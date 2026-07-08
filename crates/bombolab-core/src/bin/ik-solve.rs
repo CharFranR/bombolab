@@ -146,10 +146,16 @@ fn main() {
                 println!("    S{}: {:.6} rad  ({:.2}°)", i + 1, s, s * RAD_TO_DEG);
             }
 
-            // Round-trip: FK(IK) → where did we end up?
+            // Round-trip: FK(IK) → where did we end up? (world coordinates)
             let dh_table = build_dh_table(&robot, &result.q);
             let fk_solution = solve(&dh_table);
-            let fk_pos = fk_solution.translation();
+            let fk_pos_j5 = fk_solution.translation();
+            // Apply base transform (57mm Z offset, identity rotation)
+            let fk_world = base * Iso3::from_parts(
+                Translation3::new(fk_pos_j5.x, fk_pos_j5.y, fk_pos_j5.z),
+                UnitQuaternion::identity(),
+            );
+            let fk_pos = fk_world.translation.vector;
             println!();
             println!("── Round-trip FK(IK) ──────────────────────────");
             println!(
