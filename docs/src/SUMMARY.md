@@ -27,6 +27,7 @@
 - [dh-solve](./cli/dh-solve.md)
 - [quaternion-solve](./cli/quaternion-solve.md)
 - [serial-test](./cli/serial-test.md)
+- [ik-solve](./cli/ik-solve.md)
 
 # API Reference
 
