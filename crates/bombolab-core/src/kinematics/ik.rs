@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::kinematics::dh::{self, DHParameter};
-use crate::math::jacobian::{geometric_jacobian, JointKind};
+use crate::math::jacobian::{JointKind, geometric_jacobian};
 use crate::math::{Iso3, Mat4, MatDyn, Quat, Rot3, Vec3};
 use crate::robot::{JointType, Robot};
 
@@ -95,7 +95,11 @@ impl fmt::Display for IkError {
 impl std::error::Error for IkError {}
 
 /// Compute a DH table from the current `q` vector, using the fixed robot geometry.
-fn build_dh_table(robot: &Robot, q: &[f64]) -> Vec<DHParameter> {
+///
+/// Handles both revolute and prismatic joints:
+/// - Revolute: `theta = q[i]`, `d`/`a`/`alpha` from link geometry.
+/// - Prismatic: `d = q[i]`, `theta`/`a`/`alpha` from link geometry.
+pub fn build_dh_table(robot: &Robot, q: &[f64]) -> Vec<DHParameter> {
     robot
         .segments
         .iter()
@@ -117,7 +121,7 @@ fn build_dh_table(robot: &Robot, q: &[f64]) -> Vec<DHParameter> {
 fn extract_target(target_mat4: &Mat4) -> (Vec3, Rot3) {
     let pos = target_mat4.fixed_view::<3, 1>(0, 3).into_owned();
     let rot_mat = target_mat4.fixed_view::<3, 3>(0, 0).into_owned();
-    let rot = Rot3::from_matrix_unchecked(rot_mat);
+    let rot = Rot3::from_matrix(&rot_mat);
     (pos, rot)
 }
 
@@ -207,7 +211,7 @@ pub fn inverse_kinematics(
 
         let cur_pos = sol.translation();
         let cur_rot_mat = sol.final_transform.fixed_view::<3, 3>(0, 0).into_owned();
-        let cur_rot = Rot3::from_matrix_unchecked(cur_rot_mat);
+        let cur_rot = Rot3::from_matrix(&cur_rot_mat);
 
         // --- 2.4: Compute errors ---
         let (δp, δω, pos_err, ang_err) =
@@ -260,6 +264,13 @@ pub fn inverse_kinematics(
 
         // --- 2.6: Gain-ratio check and step ---
         // Try the step: q_trial = q + Δq
+        //
+        // NOTE: Clamping is applied per-joint AFTER computing Δq. If any joint
+        // hits its limit, dq_applied stays false and the solver breaks out of
+        // the loop — even though other joints could still move. This is a known
+        // limitation of post-hoc clamping. A future improvement could project
+        // Δq onto the feasible space, but for the FABRI Creator's 5-DOF chain
+        // this simple approach works well in practice.
         let mut dq_applied = false;
         let mut q_trial = q.clone();
         for i in 0..n {
@@ -282,7 +293,7 @@ pub fn inverse_kinematics(
                 .final_transform
                 .fixed_view::<3, 3>(0, 0)
                 .into_owned();
-            let trial_rot = Rot3::from_matrix_unchecked(trial_rot_mat);
+            let trial_rot = Rot3::from_matrix(&trial_rot_mat);
             let (trial_δp, trial_δω, _trial_pos_err, _trial_ang_err) =
                 compute_errors(&trial_pos, &trial_rot, &target_pos, &target_rot);
 
@@ -323,7 +334,7 @@ pub fn inverse_kinematics(
     let sol = dh::solve(&dh_table);
     let cur_pos = sol.translation();
     let cur_rot_mat = sol.final_transform.fixed_view::<3, 3>(0, 0).into_owned();
-    let cur_rot = Rot3::from_matrix_unchecked(cur_rot_mat);
+    let cur_rot = Rot3::from_matrix(&cur_rot_mat);
     let (_δp, _δω, pos_err, ang_err) = compute_errors(&cur_pos, &cur_rot, &target_pos, &target_rot);
 
     Err(IkError::DidNotConverge {
@@ -338,8 +349,8 @@ pub fn inverse_kinematics(
 mod tests {
     use super::*;
     use crate::kinematics::forward::forward_kinematics;
-    use crate::robot::fabri_creator::{base_transform, fabri_creator};
     use crate::robot::Robot;
+    use crate::robot::fabri_creator::{base_transform, fabri_creator};
 
     fn default_opts() -> IkOptions {
         IkOptions::default()

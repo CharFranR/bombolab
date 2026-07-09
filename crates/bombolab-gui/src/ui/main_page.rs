@@ -10,10 +10,10 @@
 // viewport 3D decide de dónde tomar los datos según el modo.
 // ---------------------------------------------------------------------------
 
-use bombolab_core::{forward_kinematics, Iso3, JointType};
+use bombolab_core::{Iso3, JointType, forward_kinematics};
 
 use crate::ui::state::{AppMode, PanelView, RobotDef, SegmentUi};
-use crate::ui::viewport::{draw_robot_skeleton, Point3D};
+use crate::ui::viewport::{Point3D, draw_robot_skeleton};
 // ---------------------------------------------------------------------------
 // Render principal (llamado desde lib.rs → main.rs)
 // ---------------------------------------------------------------------------
@@ -82,9 +82,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         // Calcular los puntos 3D según el modo activo
         let points: Vec<Point3D> = match state.mode {
             AppMode::Simulation => compute_simulation_points(state),
-            AppMode::PhysicalRobot => {
-                compute_physical_robot_points(&state.physical_robot.angles)
-            }
+            AppMode::PhysicalRobot => compute_physical_robot_points(&state.physical_robot.angles),
         };
 
         // Decidir si hay datos suficientes para dibujar
@@ -101,10 +99,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
                 &painter,
                 rect,
                 &points,
-                egui::Color32::from_rgb(255, 200, 50),   // Color articulaciones (amarillo)
-                egui::Color32::from_rgb(220, 180, 60),   // Color eslabones (oro)
-                3.0,                                      // Grosor de líneas (px)
-                6.0,                                      // Radio de círculos (px)
+                egui::Color32::from_rgb(255, 200, 50), // Color articulaciones (amarillo)
+                egui::Color32::from_rgb(220, 180, 60), // Color eslabones (oro)
+                3.0,                                   // Grosor de líneas (px)
+                6.0,                                   // Radio de círculos (px)
             );
         } else {
             // ── Placeholder ──
@@ -415,9 +413,9 @@ fn compute_physical_robot_points(angles: &[f32; 4]) -> Vec<Point3D> {
     // -----------------------------------------------------------------------
     let dh_configs: [(f64, f64, f64, f64); 4] = [
         (0.0, 0.0, 0.0, -std::f64::consts::FRAC_PI_2), // Base: rotación Z
-        (0.0, 0.0, 1.0, 0.0),                            // Hombro: elevación
-        (0.0, 0.0, 1.0, 0.0),                            // Codo: elevación
-        (0.0, 0.0, 0.5, 0.0),                            // Muñeca: elevación
+        (0.0, 0.0, 1.0, 0.0),                          // Hombro: elevación
+        (0.0, 0.0, 1.0, 0.0),                          // Codo: elevación
+        (0.0, 0.0, 0.5, 0.0),                          // Muñeca: elevación
     ];
 
     // Convertir ángulos de grados a radianes y construir segmentos
@@ -789,10 +787,22 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          └                    ┘",
-        m[(0, 0)], m[(0, 1)], m[(0, 2)], m[(0, 3)],
-        m[(1, 0)], m[(1, 1)], m[(1, 2)], m[(1, 3)],
-        m[(2, 0)], m[(2, 1)], m[(2, 2)], m[(2, 3)],
-        m[(3, 0)], m[(3, 1)], m[(3, 2)], m[(3, 3)]
+        m[(0, 0)],
+        m[(0, 1)],
+        m[(0, 2)],
+        m[(0, 3)],
+        m[(1, 0)],
+        m[(1, 1)],
+        m[(1, 2)],
+        m[(1, 3)],
+        m[(2, 0)],
+        m[(2, 1)],
+        m[(2, 2)],
+        m[(2, 3)],
+        m[(3, 0)],
+        m[(3, 1)],
+        m[(3, 2)],
+        m[(3, 3)]
     ));
 }
 

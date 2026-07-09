@@ -169,7 +169,7 @@ mod tests {
         let mut ctrl = MockRobotController::new(4);
         assert!(ctrl.read_angles().is_err()); // desconectado
         assert!(ctrl.connect().is_ok());
-        assert!(ctrl.read_angles().is_ok());  // conectado
+        assert!(ctrl.read_angles().is_ok()); // conectado
         assert!(ctrl.disconnect().is_ok());
         assert!(ctrl.read_angles().is_err()); // desconectado de nuevo
     }
@@ -194,9 +194,11 @@ mod tests {
         // Enviar 3 ángulos en un robot de 4 articulaciones → error
         let result = ctrl.send_angles(&[1.0, 2.0, 3.0]);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Número de articulaciones incorrecto"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Número de articulaciones incorrecto")
+        );
     }
 
     #[test]

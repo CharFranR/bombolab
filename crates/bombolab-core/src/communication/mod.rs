@@ -48,29 +48,12 @@ pub const READ_TIMEOUT_MS: u64 = 1000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionError {
-    PortNotFound {
-        port: String,
-    },
-    OpenFailed {
-        port: String,
-        source: String,
-    },
-    WriteFailed {
-        port: String,
-        source: String,
-    },
-    ReadFailed {
-        port: String,
-        source: String,
-    },
-    Timeout {
-        port: String,
-        ms: u64,
-    },
-    InvalidResponse {
-        port: String,
-        response: String,
-    },
+    PortNotFound { port: String },
+    OpenFailed { port: String, source: String },
+    WriteFailed { port: String, source: String },
+    ReadFailed { port: String, source: String },
+    Timeout { port: String, ms: u64 },
+    InvalidResponse { port: String, response: String },
 }
 
 impl fmt::Display for ConnectionError {

@@ -1,9 +1,10 @@
+use bombolab_core::IkOptions;
 use bombolab_core::inverse_kinematics;
-use bombolab_core::kinematics::dh::{solve, DHParameter};
+use bombolab_core::kinematics::dh::solve;
 use bombolab_core::kinematics::forward::forward_kinematics;
+use bombolab_core::kinematics::ik::build_dh_table;
 use bombolab_core::math::{Iso3, RAD_TO_DEG};
 use bombolab_core::robot::fabri_creator::{base_transform, fabri_creator};
-use bombolab_core::IkOptions;
 use nalgebra::{Translation3, UnitQuaternion};
 
 fn rpy_to_rotation(roll: f64, pitch: f64, yaw: f64) -> UnitQuaternion<f64> {
@@ -13,20 +14,6 @@ fn rpy_to_rotation(roll: f64, pitch: f64, yaw: f64) -> UnitQuaternion<f64> {
     UnitQuaternion::from_rotation_matrix(&(rz * ry * rx))
 }
 
-/// Build a DHParameter table from robot segments, setting theta = q[i].
-fn build_dh_table(robot: &bombolab_core::robot::Robot, q: &[f64]) -> Vec<DHParameter> {
-    robot
-        .segments
-        .iter()
-        .zip(q.iter())
-        .map(|(seg, &qi)| {
-            let (_theta, d, a, alpha) = seg.dh_params();
-            // Override theta with the current joint angle
-            DHParameter::new(alpha, a, d, qi)
-        })
-        .collect()
-}
-
 fn print_fk(robot: &bombolab_core::robot::Robot, base: &Iso3, label: &str) {
     let (frames, effector) = forward_kinematics(*base, robot);
     let pos = effector.translation.vector;
@@ -34,7 +21,13 @@ fn print_fk(robot: &bombolab_core::robot::Robot, base: &Iso3, label: &str) {
     if frames.len() <= 6 {
         for (i, f) in frames.iter().enumerate() {
             let fp = f.translation.vector;
-            println!("    Frame {}: ({:.1}, {:.1}, {:.1})", i + 1, fp.x, fp.y, fp.z);
+            println!(
+                "    Frame {}: ({:.1}, {:.1}, {:.1})",
+                i + 1,
+                fp.x,
+                fp.y,
+                fp.z
+            );
         }
     }
 }
@@ -45,7 +38,9 @@ fn main() {
     let is_interactive = args.len() < 2;
 
     if is_interactive || args[1] == "--help" || args[1] == "-h" {
-        eprintln!("Uso: cargo run --bin ik-solve <x_mm> <y_mm> <z_mm> [roll_deg] [pitch_deg] [yaw_deg]");
+        eprintln!(
+            "Uso: cargo run --bin ik-solve <x_mm> <y_mm> <z_mm> [roll_deg] [pitch_deg] [yaw_deg]"
+        );
         eprintln!();
         eprintln!("Resuelve cinemática inversa para el FABRI Creator 5-DOF.");
         eprintln!("Los ángulos de orientación (roll, pitch, yaw) son respecto a la base.");
@@ -54,6 +49,14 @@ fn main() {
         eprintln!("Ejemplos:");
         eprintln!("  cargo run --bin ik-solve 200 0 150");
         eprintln!("  cargo run --bin ik-solve 180 50 120 0 -45 0");
+        std::process::exit(1);
+    }
+
+    if args.len() < 4 {
+        eprintln!("Error: se requieren las coordenadas <x_mm> <y_mm> <z_mm>");
+        eprintln!(
+            "Uso: cargo run --bin ik-solve <x_mm> <y_mm> <z_mm> [roll_deg] [pitch_deg] [yaw_deg]"
+        );
         std::process::exit(1);
     }
 
@@ -77,9 +80,9 @@ fn main() {
     let base = base_transform();
 
     // ── Show FK at home pose for reference ────────────────────────
-    println!("=== IK Solver — FABRI Creator 5-DOF ===\n");
-    println!("FK at home pose (q=[0,0,0,0,0]):");
-    print_fk(&robot, &base, "End effector");
+    println!("=== Solver IK — FABRI Creator 5-DOF ===\n");
+    println!("FK en home pose (q=[0,0,0,0,0]):");
+    print_fk(&robot, &base, "Efector final");
     println!();
 
     // ── Determine target orientation ─────────────────────────────
@@ -101,8 +104,7 @@ fn main() {
         Iso3::from_parts(Translation3::new(x, y, z), rotation)
     } else {
         // Use FK at seed orientation + target position
-        let rot_mat: nalgebra::Matrix3<f64> =
-            seed_fk.fixed_view::<3, 3>(0, 0).into_owned();
+        let rot_mat: nalgebra::Matrix3<f64> = seed_fk.fixed_view::<3, 3>(0, 0).into_owned();
         let seed_rot = UnitQuaternion::from_matrix(&rot_mat);
         Iso3::from_parts(Translation3::new(x, y, z), seed_rot)
     };
@@ -110,70 +112,78 @@ fn main() {
     // ── Run IK ──────────────────────────────────────────────────
     let opts = IkOptions::default();
 
-    println!("Target position: ({:.1}, {:.1}, {:.1}) mm", x, y, z);
+    println!("Posición objetivo: ({:.1}, {:.1}, {:.1}) mm", x, y, z);
     if has_orientation {
         println!(
-            "Target orientation: roll={:.1}°, pitch={:.1}°, yaw={:.1}°",
+            "Orientación objetivo: roll={:.1}°, pitch={:.1}°, yaw={:.1}°",
             roll_deg.unwrap(),
             pitch_deg.unwrap(),
             yaw_deg.unwrap()
         );
     } else {
-        println!("Target orientation: (usa orientación de seed — solo resuelve posición)");
+        println!("Orientación objetivo: (usa orientación del seed — solo resuelve posición)");
     }
     println!(
-        "Seed: q = [{:.2}, {:.2}, {:.2}, {:.2}, {:.2}] (home pose)\n",
+        "Semilla: q = [{:.2}, {:.2}, {:.2}, {:.2}, {:.2}] (home pose)\n",
         q_seed[0], q_seed[1], q_seed[2], q_seed[3], q_seed[4]
     );
 
     match inverse_kinematics(&robot, &base, &target, &q_seed, &opts) {
         Ok(result) => {
-            println!("── Result ──────────────────────────────────────");
-            println!("  Converged:     {}", if result.converged { "YES ✓" } else { "NO ✗" });
-            println!("  Iterations:    {}", result.iterations);
-            println!("  Error pos:     {:.4} mm", result.error_pos);
-            println!("  Error angle:   {:.4} rad", result.error_angle);
+            println!("── Resultado ────────────────────────────────────");
+            println!(
+                "  Convergió:    {}",
+                if result.converged {
+                    "SÍ ✓"
+                } else {
+                    "NO ✗"
+                }
+            );
+            println!("  Iteraciones:  {}", result.iterations);
+            println!("  Error pos:    {:.4} mm", result.error_pos);
+            println!("  Error ángulo: {:.4} rad", result.error_angle);
             println!();
 
-            println!("  Joint angles (kinematic q — rad / deg):");
+            println!("  Ángulos articulares (q cinemático — rad / °):");
             for (i, &q) in result.q.iter().enumerate() {
                 println!("    J{}: {:.6} rad  ({:.2}°)", i + 1, q, q * RAD_TO_DEG);
             }
             println!();
             let servo = robot.q_to_servo(&result.q);
-            println!("  Joint angles (servo — rad / deg):");
+            println!("  Ángulos articulares (servo — rad / °):");
             for (i, &s) in servo.iter().enumerate() {
                 println!("    S{}: {:.6} rad  ({:.2}°)", i + 1, s, s * RAD_TO_DEG);
             }
 
-            // Round-trip: FK(IK) → where did we end up? (world coordinates)
+            // Viaje redondo: FK(IK) → dónde terminamos? (coordenadas del mundo)
             let dh_table = build_dh_table(&robot, &result.q);
             let fk_solution = solve(&dh_table);
             let fk_pos_j5 = fk_solution.translation();
             // Apply base transform (57mm Z offset, identity rotation)
-            let fk_world = base * Iso3::from_parts(
-                Translation3::new(fk_pos_j5.x, fk_pos_j5.y, fk_pos_j5.z),
-                UnitQuaternion::identity(),
-            );
+            let fk_world = base
+                * Iso3::from_parts(
+                    Translation3::new(fk_pos_j5.x, fk_pos_j5.y, fk_pos_j5.z),
+                    UnitQuaternion::identity(),
+                );
             let fk_pos = fk_world.translation.vector;
             println!();
-            println!("── Round-trip FK(IK) ──────────────────────────");
+            println!("── Viaje redondo FK(IK) ────────────────────────");
             println!(
-                "  End effector: ({:.2}, {:.2}, {:.2}) mm",
+                "  Efector final: ({:.2}, {:.2}, {:.2}) mm",
                 fk_pos.x, fk_pos.y, fk_pos.z
             );
             let dx = fk_pos.x - x;
             let dy = fk_pos.y - y;
             let dz = fk_pos.z - z;
+            println!("  Delta:        ({:.4}, {:.4}, {:.4}) mm", dx, dy, dz);
             println!(
-                "  Delta:        ({:.4}, {:.4}, {:.4}) mm",
-                dx, dy, dz
+                "  Error total:  {:.4} mm",
+                (dx * dx + dy * dy + dz * dz).sqrt()
             );
-            println!("  Total error:  {:.4} mm", (dx * dx + dy * dy + dz * dz).sqrt());
 
             // Check joint limits
             println!();
-            println!("── Joint limits ────────────────────────────────");
+            println!("── Límites articulares ──────────────────────────");
             for (i, seg) in robot.segments.iter().enumerate() {
                 let q = result.q[i];
                 let within = q >= seg.joint.value_min && q <= seg.joint.value_max;
@@ -183,7 +193,7 @@ fn main() {
                     q,
                     seg.joint.value_min * RAD_TO_DEG,
                     seg.joint.value_max * RAD_TO_DEG,
-                    if within { "✓" } else { "✗ OUT OF RANGE" }
+                    if within { "✓" } else { "✗ FUERA DE RANGO" }
                 );
             }
 
@@ -195,7 +205,7 @@ fn main() {
         }
         Err(e) => {
             println!("── Error ────────────────────────────────────────");
-            println!("  IK solver failed: {}", e);
+            println!("  Error del solver IK: {}", e);
         }
     }
 }
