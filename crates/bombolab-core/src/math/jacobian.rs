@@ -90,7 +90,7 @@ pub fn geometric_jacobian(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kinematics::dh::{solve, DHParameter};
+    use crate::kinematics::dh::{DHParameter, solve};
 
     const EPS: f64 = 1e-10;
 
