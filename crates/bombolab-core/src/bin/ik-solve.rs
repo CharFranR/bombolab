@@ -1,4 +1,5 @@
 use bombolab_core::IkOptions;
+use bombolab_core::ServoMapper;
 use bombolab_core::inverse_kinematics;
 use bombolab_core::kinematics::dh::solve;
 use bombolab_core::kinematics::forward::forward_kinematics;
@@ -149,11 +150,13 @@ fn main() {
                 println!("    J{}: {:.6} rad  ({:.2}°)", i + 1, q, q * RAD_TO_DEG);
             }
             println!();
-            let servo = robot.q_to_servo(&result.q);
-            println!("  Ángulos articulares (servo — rad / °):");
-            for (i, &s) in servo.iter().enumerate() {
-                println!("    S{}: {:.6} rad  ({:.2}°)", i + 1, s, s * RAD_TO_DEG);
+            let mapper = ServoMapper::new(&robot);
+            let servo_cmd = mapper.map_q(&result.q, 90);
+            println!("  Ángulos articulares (servo — °):");
+            for (i, &s) in servo_cmd.joints.iter().enumerate() {
+                println!("    S{}: {:.1}°", i + 1, s);
             }
+            println!("    Gripper: {}°", servo_cmd.gripper);
 
             // Viaje redondo: FK(IK) → dónde terminamos? (coordenadas del mundo)
             let dh_table = build_dh_table(&robot, &result.q);

@@ -3,7 +3,8 @@ use std::time::Duration;
 
 use serialport::SerialPort;
 
-use super::{BAUD_RATE, ConnectionError, JOINT_COUNT, READ_TIMEOUT_MS};
+use super::command::ServoCommand;
+use super::{BAUD_RATE, ConnectionError, READ_TIMEOUT_MS};
 
 /// Arduino Nano serial connection.
 ///
@@ -40,12 +41,12 @@ impl ArduinoNano {
         })
     }
 
-    /// Send 6 angles as comma-separated values: `a1,a2,a3,a4,a5,a6\n`
-    pub fn send_angles(&mut self, angles: &[i32; JOINT_COUNT]) -> Result<(), ConnectionError> {
-        let msg = format!(
-            "{},{},{},{},{},{}\n",
-            angles[0], angles[1], angles[2], angles[3], angles[4], angles[5]
-        );
+    /// Send a `ServoCommand` as comma-separated values: `a1,a2,a3,a4,a5,g\n`
+    ///
+    /// Delegates to `ServoCommand::to_wire()` which produces the same wire format
+    /// as the original `send_angles()` — no protocol breakage.
+    pub fn send(&mut self, cmd: &ServoCommand) -> Result<(), ConnectionError> {
+        let msg = cmd.to_wire();
         self.port
             .write_all(msg.as_bytes())
             .map_err(|e| ConnectionError::WriteFailed {
@@ -74,9 +75,9 @@ impl ArduinoNano {
         Ok(line.trim().to_string())
     }
 
-    /// Send angles and wait for "OK" response.
-    pub fn send_and_verify(&mut self, angles: &[i32; JOINT_COUNT]) -> Result<(), ConnectionError> {
-        self.send_angles(angles)?;
+    /// Send a `ServoCommand` and wait for "OK" response.
+    pub fn send_and_verify(&mut self, cmd: &ServoCommand) -> Result<(), ConnectionError> {
+        self.send(cmd)?;
         let response = self.read_response()?;
         match response.as_str() {
             "OK" => Ok(()),

@@ -4,11 +4,18 @@
 
 const int NUM_SERVOS = 6;
 
+// Pin mapping: Arduino analog pins → servo indices
+// A5 → S1 (J1, Base yaw)
+// A3 → S2 (J2, Shoulder)
+// A4 → S3 (J3, Elbow)
+// A2 → S4 (J4, Wrist roll)
+// A0 → S5 (J5, Wrist pitch)
+// A1 → S6 (Gripper)
 const int SERVO_PINS[NUM_SERVOS] = {A5, A3, A4, A2, A0, A1};
 
 Servo servos[NUM_SERVOS];
 
-int actual_positions[NUM_SERVOS]= {90, 115, 110, 175, 90, 90};
+int actual_positions[NUM_SERVOS]= {90, 115, 110, 170, 90, 90};
 
 
 void apply_movement(int positions[]) {
