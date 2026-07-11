@@ -63,6 +63,45 @@ impl RobotDef {
         }
     }
 
+    /// Crea un RobotDef con los parámetros DH del robot FABRI Creator (5 DOF).
+    ///
+    /// Los valores angulares se almacenan en grados (formato de la UI).
+    /// Los valores lineales están en mm (unidades del fabricante).
+    ///
+    /// Tabla DH (Craig):
+    /// | i | α     | a    | d    | θ |
+    /// |---|-------|------|------|---|
+    /// | 1 | -90°  | 15   | 95   | 0 |
+    /// | 2 |   0°  |  0   | 162  | 0 |
+    /// | 3 | -90°  | 111  |  0   | 0 |
+    /// | 4 |  90°  | 35   |  0   | 0 |
+    /// | 5 |   0°  |  0   |  0   | 0 |
+    pub fn fabri_creator() -> Self {
+        let dh_params: [(f64, f64, f64, f64); 5] = [
+            (0.0, 95.0, 15.0, -90.0),   // α=-90°, a=15, d=95, θ=0°
+            (0.0, 162.0, 0.0, 0.0),     // α=0°, a=0, d=162, θ=0°
+            (0.0, 0.0, 111.0, -90.0),   // α=-90°, a=111, d=0, θ=0°
+            (0.0, 0.0, 35.0, 90.0),     // α=90°, a=35, d=0, θ=0°
+            (0.0, 0.0, 0.0, 0.0),       // α=0°, a=0, d=0, θ=0°
+        ];
+
+        let segments: Vec<SegmentUi> = dh_params
+            .iter()
+            .map(|&(theta, d, a, alpha)| SegmentUi {
+                joint_type: JointType::Revolute,
+                theta,
+                d,
+                a,
+                alpha,
+            })
+            .collect();
+
+        Self {
+            name: "FABRI Creator".to_string(),
+            segments,
+        }
+    }
+
     /// Número de grados de libertad (cantidad de segmentos).
     pub fn dof(&self) -> usize {
         self.segments.len()

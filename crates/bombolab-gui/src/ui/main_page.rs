@@ -251,8 +251,14 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
     if state.robots.is_empty() {
         ui.colored_label(
             egui::Color32::DARK_GRAY,
-            "No hay robots definidos.\nCree uno en la pestaña 'Simulación'.",
+            "No hay robots definidos.",
         );
+        if ui.button("+ Cargar FABRI Creator").clicked() {
+            let idx = state.robots.len();
+            state.robots.push(RobotDef::fabri_creator());
+            state.physical_robot.model_index = Some(idx);
+            state.physical_robot.angles.resize(5, 0.0);
+        }
     } else {
         for (i, robot) in state.robots.iter().enumerate() {
             let is_selected = state.physical_robot.model_index == Some(i);
