@@ -113,20 +113,18 @@ pub enum AppMode {
 // ---------------------------------------------------------------------------
 
 /// Estado del brazo robótico físico y su telemetría.
+///
+/// El número de articulaciones se determina en tiempo de ejecución según
+/// el hardware conectado. Inicialmente se configura con 4 DOF por defecto.
 pub struct PhysicalRobotState {
     /// Indica si hay una conexión activa con el hardware.
     pub connected: bool,
     /// Ángulos actuales de las articulaciones en grados (telemetría).
     ///
-    /// Se usa un array fijo de 4 elementos para el brazo antropomórfico de
-    /// 4 DOF. Cada elemento corresponde a una articulación:
-    ///   [0] = base (rotación horizontal)
-    ///   [1] = hombro (elevación)
-    ///   [2] = codo (elevación)
-    ///   [3] = muñeca (elevación)
-    ///
-    /// TODO: Cambiar a `Vec<f32>` si se soportan robots con DOF variable.
-    pub angles: [f32; 4],
+    /// Vector de longitud dinámica. Cada elemento es una articulación.
+    /// El tamaño se define al construir el estado y debe coincidir con
+    /// el número de articulaciones del robot físico.
+    pub angles: Vec<f32>,
     /// Mensaje de error de la última operación de conexión/lectura/envío.
     pub connection_error: Option<String>,
     /// Bandera para solicitar una lectura de telemetría en el próximo frame.
@@ -136,11 +134,11 @@ pub struct PhysicalRobotState {
 }
 
 impl PhysicalRobotState {
-    /// Crea un estado inicial con todas las articulaciones en 0° y desconectado.
-    pub fn new() -> Self {
+    /// Crea un estado inicial con `num_joints` articulaciones en 0° y desconectado.
+    pub fn new(num_joints: usize) -> Self {
         Self {
             connected: false,
-            angles: [0.0; 4],
+            angles: vec![0.0; num_joints],
             connection_error: None,
             pending_read: false,
             pending_send: false,
@@ -187,7 +185,7 @@ impl AppState {
             selected_robot: None,
             show_details: false,
             mode: AppMode::Simulation,
-            physical_robot: PhysicalRobotState::new(),
+            physical_robot: PhysicalRobotState::new(4),
             robot_controller: Box::new(MockRobotController::new(4)),
         }
     }

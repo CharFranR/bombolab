@@ -250,12 +250,21 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
     ui.heading("Telemetría");
     ui.separator();
 
-    // Sliders para cada articulación
-    let joint_labels = ["Base", "Hombro", "Codo", "Muñeca"];
-    for i in 0..4 {
+    // Sliders para cada articulación (número dinámico según el hardware)
+    let num_joints = state.physical_robot.angles.len();
+    for i in 0..num_joints {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label(format!("{}:", joint_labels[i]));
+            // Etiqueta de la articulación: nombres conocidos para los primeros 4,
+            // genéricos para el resto
+            let label = match i {
+                0 => "Base",
+                1 => "Hombro",
+                2 => "Codo",
+                3 => "Muñeca",
+                _ => "J",
+            };
+            ui.label(format!("{}:", label));
 
             // TODO: En lugar de slider, cuando el hardware real esté conectado
             //       estos valores deberían venir de `read_angles()`. El slider
@@ -268,7 +277,7 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             .on_hover_text(format!(
                 "Ángulo de la articulación {} ({})",
                 i + 1,
-                joint_labels[i]
+                label
             ));
         });
     }
@@ -316,10 +325,8 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             state.physical_robot.pending_read = false;
             match state.robot_controller.read_angles() {
                 Ok(angles) => {
-                    // Copiar los ángulos recibidos al estado (como f32)
-                    for (i, angle) in angles.iter().enumerate().take(4) {
-                        state.physical_robot.angles[i] = *angle;
-                    }
+                    // Reemplazar todo el vector de ángulos con lo leído del hardware
+                    state.physical_robot.angles = angles;
                     state.physical_robot.connection_error = None;
                 }
                 Err(e) => {
@@ -330,8 +337,7 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
 
         if state.physical_robot.pending_send {
             state.physical_robot.pending_send = false;
-            let angles_vec = state.physical_robot.angles.to_vec();
-            match state.robot_controller.send_angles(&angles_vec) {
+            match state.robot_controller.send_angles(&state.physical_robot.angles) {
                 Ok(()) => {
                     state.physical_robot.connection_error = None;
                 }
@@ -391,34 +397,37 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
 
 /// Calcula los puntos 3D del robot físico a partir de los ángulos de telemetría.
 ///
-/// Usa un modelo DH fijo de 4 DOF (brazo antropomórfico) y los ángulos
-/// actuales del estado `PhysicalRobotState` para computar la cadena
-/// cinemática y extraer las posiciones de cada articulación.
+/// Construye un modelo DH dinámico según la cantidad de articulaciones
+/// recibidas y computa la cadena cinemática para extraer las posiciones.
 ///
-/// TODO: Permitir que el modelo DH del robot físico sea configurable
-///       (idealmente cargado desde un archivo de configuración).
-fn compute_physical_robot_points(angles: &[f32; 4]) -> Vec<Point3D> {
+/// Convención DH:
+///   - Joint 0:      (0, 0, 0, -PI/2)  — base rotatoria
+///   - Joints 1..n-2: (0, 0, 1, 0)    — eslabones intermedios
+///   - Joint n-1:     (0, 0, 0.5, 0)  — muñeca/end
+///
+/// TODO: Cargar estos parámetros desde un archivo de configuración YAML/JSON.
+fn compute_physical_robot_points(angles: &[f32]) -> Vec<Point3D> {
     use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
 
-    // -----------------------------------------------------------------------
-    // Modelo DH para un brazo antropomórfico de 4 DOF (típico SCARA/ABB).
-    //
-    //   Joint  |  θ (rad)  |  d  |  a  |  α
-    //   --------|-----------|------|------|--------
-    //   Base    |  angle[0] |  0.0 | 0.0  | -π/2
-    //   Hombro  |  angle[1] |  0.0 | 1.0  |  0.0
-    //   Codo    |  angle[2] |  0.0 | 1.0  |  0.0
-    //   Muñeca  |  angle[3] |  0.0 | 0.5  |  0.0
-    //
-    // Los valores de a (longitud de eslabón) están en unidades arbitrarias.
-    // TODO: Cargar estos parámetros desde un archivo de configuración YAML/JSON.
-    // -----------------------------------------------------------------------
-    let dh_configs: [(f64, f64, f64, f64); 4] = [
-        (0.0, 0.0, 0.0, -std::f64::consts::FRAC_PI_2), // Base: rotación Z
-        (0.0, 0.0, 1.0, 0.0),                            // Hombro: elevación
-        (0.0, 0.0, 1.0, 0.0),                            // Codo: elevación
-        (0.0, 0.0, 0.5, 0.0),                            // Muñeca: elevación
-    ];
+    if angles.is_empty() {
+        return vec![Point3D::origin()];
+    }
+
+    // Construir configuraciones DH dinámicamente según la cantidad de joints
+    let mut dh_configs: Vec<(f64, f64, f64, f64)> = Vec::with_capacity(angles.len());
+
+    for i in 0..angles.len() {
+        if i == 0 {
+            // Joint 0 — Base: rotación en Z, sin offset de traslación
+            dh_configs.push((0.0, 0.0, 0.0, -std::f64::consts::FRAC_PI_2));
+        } else if i == angles.len() - 1 {
+            // Último joint — Muñeca: eslabón corto
+            dh_configs.push((0.0, 0.0, 0.5, 0.0));
+        } else {
+            // Joints intermedios — eslabones de longitud unitaria
+            dh_configs.push((0.0, 0.0, 1.0, 0.0));
+        }
+    }
 
     // Convertir ángulos de grados a radianes y construir segmentos
     let segments: Vec<Segment> = angles
