@@ -3,10 +3,10 @@ title = "Bombolab"
 authors = ["charfranr"]
 description = "Forward Kinematics Visualizer for Robotic Arms"
 language = "en"
-src = "docs/src"
+src = "book/src"
 
 [build]
-build-dir = "docs/book"
+build-dir = "docs"
 
 [output.html]
 git-repository-url = "https://github.com/charfranr/bombolab"

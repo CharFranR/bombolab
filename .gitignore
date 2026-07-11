@@ -28,8 +28,8 @@ target
 
 .atl
 
-# mdBook build output
-docs/book/
+# mdBook build output — tracked because Pages serves from develop/docs
+# docs/
 
 # IDE workspace files
 *.code-workspace
