@@ -3,6 +3,7 @@ pub mod kinematics;
 pub mod math;
 pub mod robot;
 
+pub use communication::{ServoCommand, ServoMapper};
 pub use kinematics::{
     DHParameter, DHSolution, IkError, IkOptions, IkResult, compute_a_matrix, forward_kinematics,
     inverse_kinematics, matrix_from_segment, solve,

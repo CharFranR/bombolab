@@ -8,21 +8,26 @@ The `communication` module provides a serial connection to the robot's microcont
 
 ```
 communication/
-├── mod.rs              # ConnectionError, protocol constants
+├── mod.rs              # ConnectionError, protocol constants, pin mapping
 ├── arduino_nano.rs     # ArduinoNano serial wrapper
+├── command.rs          # ServoCommand typed struct
+├── mapper.rs           # ServoMapper — centralized q→servo mapping
 └── interpolation.rs    # Smooth multi-joint movement
 ```
 
 ## Quick Start
 
 ```rust
-use bombolab_core::communication::{ArduinoNano, InterpolationConfig, interpolate_all};
+use bombolab_core::communication::{
+    ArduinoNano, ServoCommand, InterpolationConfig, interpolate_all,
+};
 
 // Connect to Arduino
 let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
 
-// Send angles directly (6 values: 5 joints + gripper)
-nano.send_and_verify(&[90, 115, 110, 170, 90, 90])?;
+// Send angles via ServoCommand (typed struct: 5 joints + gripper)
+let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
+nano.send(&cmd)?;
 
 // Or interpolate smoothly between positions
 let current = [90, 115, 110, 170, 90, 90];
@@ -31,7 +36,8 @@ let config = InterpolationConfig::default();
 
 let steps = interpolate_all(&current, &target, &config);
 for step in &steps {
-    nano.send_and_verify(step)?;
+    let cmd = ServoCommand::from_raw_array(step);
+    nano.send(&cmd)?;
     std::thread::sleep(std::time::Duration::from_millis(config.delay_ms));
 }
 
@@ -75,7 +81,7 @@ The 6 values map to:
 ### Connection
 
 ```rust
-use bombolab_core::communication::ArduinoNano;
+use bombolab_core::communication::{ArduinoNano, ServoCommand};
 
 // List available ports
 let ports = ArduinoNano::list_ports()?;
@@ -83,8 +89,12 @@ let ports = ArduinoNano::list_ports()?;
 // Connect
 let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
 
-// Send angles and verify response
-nano.send_and_verify(&[90, 115, 110, 170, 90, 90])?;
+// Build a typed command and send it
+let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
+nano.send(&cmd)?;
+
+// Or send and wait for OK/ERR response
+nano.send_and_verify(&cmd)?;
 
 // Clean disconnect (also handled by Drop)
 nano.disconnect()?;
@@ -96,9 +106,9 @@ nano.disconnect()?;
 |--------|-------------|
 | `list_ports()` | Returns available serial port names |
 | `connect(port_name)` | Opens connection at 115200 baud |
-| `send_angles(angles)` | Sends 6 angles as CSV |
+| `send(cmd)` | Sends a `ServoCommand` as CSV |
+| `send_and_verify(cmd)` | Send + read + check for "OK" |
 | `read_response()` | Reads one line (expects "OK" or "ERR") |
-| `send_and_verify(angles)` | Send + read + check for "OK" |
 | `disconnect()` | Flush and close port |
 
 ### Error Handling
@@ -108,7 +118,7 @@ All methods return `Result<T, ConnectionError>`:
 ```rust
 use bombolab_core::communication::ConnectionError;
 
-match nano.send_and_verify(&angles) {
+match nano.send_and_verify(&cmd) {
     Ok(()) => println!("Angles sent"),
     Err(ConnectionError::InvalidResponse { port, response }) => {
         eprintln!("Arduino returned: {}", response);
@@ -119,6 +129,48 @@ match nano.send_and_verify(&angles) {
     Err(e) => eprintln!("Error: {}", e),
 }
 ```
+
+## ServoCommand
+
+`ServoCommand` is a typed struct that replaces raw `[i32; 6]` arrays with semantic fields:
+
+```rust
+pub struct ServoCommand {
+    pub joints: [f64; 5],  // 5 joint angles in degrees
+    pub gripper: u8,        // gripper angle 0–255
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `new(joints, gripper)` | Creates a `ServoCommand`, validates joints [10°, 170°] and gripper 0–255 |
+| `to_wire()` | Serializes to `"a1,a2,a3,a4,a5,g\n"` for the serial protocol |
+| `to_raw_array()` | Converts to `[i32; 6]` for use with `interpolate_all()` |
+| `from_raw_array(arr)` | Builds from an `[i32; 6]` (e.g., from interpolation output) |
+
+The wire format is identical to the previous raw-array API — no protocol breakage.
+
+## ServoMapper
+
+`ServoMapper` centralizes the conversion from kinematic coordinates (q in radians) to servo angles (degrees), combining offsets, clamping, and gripper into a single step:
+
+```rust
+use bombolab_core::{fabri_creator, communication::ServoMapper};
+
+let robot = fabri_creator();
+let mapper = ServoMapper::new(&robot);
+
+// q = [0,0,0,0,0] → servo angles at home pose
+let cmd = mapper.map_q(&[0.0; 5], 90);
+assert_eq!(cmd.to_wire(), "90,115,110,170,90,90\n");
+```
+
+**What `ServoMapper` does internally:**
+
+1. Delegates to `Robot::q_to_servo()` to add per-joint offsets (radians)
+2. Converts radians to degrees
+3. Clamps each joint to [10°, 170°]
+4. Packages everything into a `ServoCommand`
 
 ## Interpolation
 
@@ -196,37 +248,33 @@ cargo run --bin serial-test
 
 ## Integration with Robot Model
 
-To send robot joint angles to hardware:
+The `ServoMapper` bridges kinematic q (radians) to servo angles (degrees), centralizing offset and clamping logic:
 
 ```rust
-use bombolab_core::{fabri_creator, communication::{ArduinoNano, interpolate_all}};
+use bombolab_core::{
+    fabri_creator,
+    communication::{ArduinoNano, ServoMapper, ServoCommand, interpolate_all_command},
+};
 
 let robot = fabri_creator();
+let mapper = ServoMapper::new(&robot);
 let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
 
-// Get kinematic angles from robot (in q-space)
+// Map kinematic q to ServoCommand
 let q = vec![0.1, -0.2, 0.3, -0.1, 0.15];
+let target_cmd = mapper.map_q(&q, 90); // 90 = gripper angle
 
-// Convert to servo angles
-let servo = robot.q_to_servo(&q);
-
-// Add gripper value (6th element)
-let mut angles: Vec<i32> = servo.iter()
-    .map(|s| (s.to_degrees() as i32).clamp(10, 170))
-    .collect();
-angles.push(90); // gripper default
-
-let target: [i32; 6] = angles.try_into().unwrap();
-
-// Interpolate and send
-let current = [90, 115, 110, 170, 90, 90]; // or track actual position
-let steps = interpolate_all(&current, &target, &Default::default());
+// Interpolate smoothly from home to target
+let home = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
+let steps = interpolate_all_command(&home, &target_cmd, &Default::default());
 
 for step in &steps {
-    nano.send_and_verify(step)?;
+    nano.send(&step)?;
     std::thread::sleep(std::time::Duration::from_millis(40));
 }
 ```
+
+No manual rad→deg conversion, clamping, or gripper appending needed — `ServoMapper` handles it all.
 
 ## Testing
 

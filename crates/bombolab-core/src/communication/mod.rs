@@ -20,14 +20,34 @@
 //! | 3     | S4    | J4    | Wrist roll |
 //! | 4     | S5    | J5    | Wrist pitch |
 //! | 5     | S6    | —     | Gripper |
+//!
+//! # Pin mapping (Arduino Nano → Servo)
+//!
+//! The Arduino Nano uses analog pins as digital outputs for servo control.
+//! The mapping between physical pins and kinematic joints is:
+//!
+//! | Pin | Servo | Joint   | Notes        |
+//! |-----|-------|---------|--------------|
+//! | A5  | S1    | J1      | Base yaw     |
+//! | A3  | S2    | J2      | Shoulder     |
+//! | A4  | S3    | J3      | Elbow        |
+//! | A2  | S4    | J4      | Wrist roll   |
+//! | A0  | S5    | J5      | Wrist pitch  |
+//! | A1  | S6    | Gripper | —            |
 
 pub mod arduino_nano;
+pub mod command;
 pub mod interpolation;
+pub mod mapper;
 
 use std::fmt;
 
 pub use arduino_nano::ArduinoNano;
-pub use interpolation::{InterpolationConfig, interpolate_all, interpolate_joint};
+pub use command::ServoCommand;
+pub use interpolation::{
+    InterpolationConfig, interpolate_all, interpolate_all_command, interpolate_joint,
+};
+pub use mapper::ServoMapper;
 
 /// Serial baud rate for Arduino Nano communication.
 pub const BAUD_RATE: u32 = 115_200;

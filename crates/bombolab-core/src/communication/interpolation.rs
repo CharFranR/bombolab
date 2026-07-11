@@ -4,6 +4,8 @@
 //! padding shorter movements with their final value so all joints
 //! arrive at the target simultaneously.
 
+use super::ServoCommand;
+
 /// Configuration for interpolation step size and timing.
 pub struct InterpolationConfig {
     /// Angle increment per step in degrees.
@@ -88,6 +90,21 @@ pub fn interpolate_all(
     }
 
     result
+}
+
+/// Interpolate between two `ServoCommand` values, returning intermediate steps.
+///
+/// Converts to raw arrays, delegates to `interpolate_all()`, and converts back.
+/// This is a zero-change wrapper — the interpolation logic is unchanged.
+pub fn interpolate_all_command(
+    current: &ServoCommand,
+    target: &ServoCommand,
+    config: &InterpolationConfig,
+) -> Vec<ServoCommand> {
+    let current_raw = current.to_raw_array();
+    let target_raw = target.to_raw_array();
+    let steps = interpolate_all(&current_raw, &target_raw, config);
+    steps.iter().map(ServoCommand::from_raw_array).collect()
 }
 
 #[cfg(test)]

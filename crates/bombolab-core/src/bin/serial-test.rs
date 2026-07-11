@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bombolab_core::communication::{
-    ANGLE_MAX, ANGLE_MIN, ArduinoNano, InterpolationConfig, JOINT_COUNT, interpolate_all,
+    ANGLE_MAX, ANGLE_MIN, ArduinoNano, InterpolationConfig, JOINT_COUNT, ServoCommand,
+    interpolate_all,
 };
 
 fn read_input(prompt: &str) -> String {
@@ -15,6 +16,22 @@ fn read_input(prompt: &str) -> String {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
+        eprintln!("Serial test utility for Arduino Nano servo control.");
+        eprintln!();
+        eprintln!("Usage: cargo run --bin serial-test");
+        eprintln!();
+        eprintln!("Connects to an Arduino Nano over USB serial and provides");
+        eprintln!("an interactive REPL for sending servo angles.");
+        eprintln!();
+        eprintln!("Commands:");
+        eprintln!("  <servo> <angle>       Move single servo (1-6, angle 10-170)");
+        eprintln!("  all <a1> <a2> ... <a6>  Move all servos");
+        eprintln!("  quit / exit           Disconnect and exit");
+        std::process::exit(1);
+    }
+
     println!("=== Serial Test — Arduino Nano ===\n");
 
     // List available ports
@@ -196,7 +213,8 @@ fn execute_movement(
 
     println!("Moving {} steps...", steps.len());
     for (i, step) in steps.iter().enumerate() {
-        if let Err(e) = nano.send_and_verify(step) {
+        let cmd = ServoCommand::from_raw_array(step);
+        if let Err(e) = nano.send_and_verify(&cmd) {
             eprintln!("Error at step {}: {}", i + 1, e);
             eprintln!("Stopping movement.");
             return;
