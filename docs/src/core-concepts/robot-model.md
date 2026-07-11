@@ -78,6 +78,8 @@ This is the key insight: **the same struct handles both joint types** by swappin
 ```rust
 pub struct Robot {
     pub segments: Vec<Segment>,
+    pub home_pose: Vec<f64>,     // servo angles at kinematic zero (radians)
+    pub servo_offsets: Vec<f64>, // servo_angle = q + offset (radians)
 }
 ```
 
@@ -85,7 +87,8 @@ Methods:
 
 | Method | Description |
 |--------|-------------|
-| `Robot::new(segments)` | Create a robot from a segment list |
+| `Robot::new(segments)` | Create a robot with zero offsets (backward compatible) |
+| `Robot::with_offsets(segments, home_pose, servo_offsets)` | Create with explicit servo mapping |
 | `robot.dof()` | Number of degrees of freedom (segment count) |
 | `robot.segment(i)` | Get segment by index (returns `Result`) |
 | `robot.segment_mut(i)` | Get mutable segment by index |
@@ -93,7 +96,48 @@ Methods:
 | `robot.reset_to_zero()` | Set all joint values to 0.0 |
 | `robot.add_segment(segment)` | Append a segment |
 | `robot.remove_segment(i)` | Remove and return a segment by index |
+| `robot.q_to_servo(q)` | Convert kinematic coordinates to servo angles |
+| `robot.servo_to_q(servo)` | Convert servo angles to kinematic coordinates |
+| `robot.kinematic_home()` | Home pose in kinematic space (should be all zeros) |
 | `robot.is_empty()` | True if no segments |
+
+## Kinematic Coordinates vs Servo Angles
+
+FK/IK/Jacobians operate on **kinematic coordinates** (`q`), where `q=0` is the home pose. Physical servo angles are different because servos have an offset at their neutral position.
+
+```
+servo_angle = q + offset
+```
+
+For example, if J1's servo is at 90° when the robot is at its home pose:
+
+```
+q = 0°        →  servo = 0° + 90° = 90°   (home position)
+q = 30°       →  servo = 30° + 90° = 120°
+q = -45°      →  servo = -45° + 90° = 45°
+```
+
+The `home_pose` field stores the servo angles at `q=[0,0,...,0]`. The `servo_offsets` field stores the constant offset per joint. For a well-configured robot, `home_pose == servo_offsets` (since at `q=0`, `servo = 0 + offset = offset`).
+
+```rust
+let robot = fabri_creator();
+
+// At kinematic zero, servo angles equal home pose
+let q_zero = vec![0.0; 5];
+let servo = robot.q_to_servo(&q_zero);
+assert_eq!(servo, robot.home_pose);
+
+// Round-trip conversion
+let q_test = vec![0.1, -0.2, 0.3, -0.1, 0.15];
+let servo_test = robot.q_to_servo(&q_test);
+let q_back = robot.servo_to_q(&servo_test);
+assert_eq!(q_test, q_back);
+```
+
+This separation matters because:
+- **Kinematics math** works in `q` space (centered at zero)
+- **Hardware communication** works in servo space (absolute angles)
+- **Joint limits** are defined in physical servo space (e.g., 10°–170°), then converted to kinematic space for validation
 
 ## Building a Robot
 

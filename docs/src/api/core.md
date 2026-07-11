@@ -146,6 +146,47 @@ pub fn format_symbolic_matrix(p: &DHParameterSymbolic, angle_unit: &str) -> Stri
 - `p` -- symbolic DH parameters
 - `angle_unit` -- `"grados"` or `"radianes"` (controls display format)
 
+### `JointKind`
+
+Joint type for Jacobian column computation.
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JointKind {
+    Revolute,
+    Prismatic,
+}
+```
+
+### `JacobianError`
+
+```rust
+#[derive(Debug, Clone, PartialEq)]
+pub enum JacobianError {
+    EmptyChain,
+    JointKindMismatch { intermediates: usize, kinds: usize },
+}
+```
+
+### `geometric_jacobian`
+
+Compute the 6×n geometric Jacobian for a serial chain.
+
+```rust
+pub fn geometric_jacobian(
+    intermediates: &[Matrix4<f64>],
+    joint_kinds: &[JointKind],
+    end_effector: &Matrix4<f64>,
+) -> Result<MatDyn, JacobianError>
+```
+
+**Parameters**:
+- `intermediates` — cumulative transforms from `DHSolution::intermediates`
+- `joint_kinds` — joint type per column (must match `intermediates.len()`)
+- `end_effector` — end-effector transform (usually `intermediates.last()`)
+
+**Returns**: `6 × n` matrix where column `i` = `[z_i × (p_ee − p_i); z_i]` for revolute, `[z_i; 0]` for prismatic.
+
 ### Constants
 
 ```rust

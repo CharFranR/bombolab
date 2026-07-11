@@ -12,6 +12,10 @@
 - [DH Parameters](./core-concepts/dh-parameters.md)
 - [Forward Kinematics](./core-concepts/forward-kinematics.md)
 - [Robot Model](./core-concepts/robot-model.md)
+- [FABRI Creator](./core-concepts/fabri-creator.md)
+- [Serial Communication](./core-concepts/communication.md)
+- [Jacobian](./core-concepts/jacobian.md)
+- [Inverse Kinematics](./core-concepts/inverse-kinematics.md)
 
 # Architecture
 
@@ -22,6 +26,8 @@
 
 - [dh-solve](./cli/dh-solve.md)
 - [quaternion-solve](./cli/quaternion-solve.md)
+- [serial-test](./cli/serial-test.md)
+- [ik-solve](./cli/ik-solve.md)
 
 # API Reference
 

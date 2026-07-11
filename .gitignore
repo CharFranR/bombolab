@@ -30,3 +30,6 @@ target
 
 # mdBook build output
 docs/book/
+
+# IDE workspace files
+*.code-workspace
