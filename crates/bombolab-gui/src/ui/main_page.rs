@@ -82,9 +82,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         // Calcular los puntos 3D según el modo activo
         let points: Vec<Point3D> = match state.mode {
             AppMode::Simulation => compute_simulation_points(state),
-            AppMode::PhysicalRobot => {
-                compute_physical_robot_points(&state.physical_robot.angles)
-            }
+            AppMode::PhysicalRobot => compute_physical_robot_points(state),
         };
 
         // Decidir si hay datos suficientes para dibujar
@@ -245,6 +243,29 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
         // ui.label("Baud rate: 115200");
     }
 
+    // ─── Modelo cinemático ────────────────────────────────────────────────
+    ui.add_space(16.0);
+    ui.heading("Modelo Cinemático");
+    ui.separator();
+
+    if state.robots.is_empty() {
+        ui.colored_label(
+            egui::Color32::DARK_GRAY,
+            "No hay robots definidos.\nCree uno en la pestaña 'Simulación'.",
+        );
+    } else {
+        for (i, robot) in state.robots.iter().enumerate() {
+            let is_selected = state.physical_robot.model_index == Some(i);
+            let label = format!("{} — {} DOF", robot.name, robot.dof());
+            if ui.selectable_label(is_selected, &label).clicked() {
+                // Al seleccionar un modelo, redimensionar los ángulos a su DOF
+                let dof = robot.segments.len();
+                state.physical_robot.model_index = Some(i);
+                state.physical_robot.angles.resize(dof, 0.0);
+            }
+        }
+    }
+
     // ─── Telemetría ────────────────────────────────────────────────────────
     ui.add_space(16.0);
     ui.heading("Telemetría");
@@ -395,64 +416,51 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
     points
 }
 
-/// Calcula los puntos 3D del robot físico a partir de los ángulos de telemetría.
+/// Calcula los puntos 3D del robot físico reutilizando el pipeline de FK de
+/// `bombolab-core`, exactamente como hace `compute_simulation_points`.
 ///
-/// Construye un modelo DH dinámico según la cantidad de articulaciones
-/// recibidas y computa la cadena cinemática para extraer las posiciones.
-///
-/// Convención DH:
-///   - Joint 0:      (0, 0, 0, -PI/2)  — base rotatoria
-///   - Joints 1..n-2: (0, 0, 1, 0)    — eslabones intermedios
-///   - Joint n-1:     (0, 0, 0.5, 0)  — muñeca/end
-///
-/// TODO: Cargar estos parámetros desde un archivo de configuración YAML/JSON.
-fn compute_physical_robot_points(angles: &[f32]) -> Vec<Point3D> {
-    use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
+/// Toma el modelo cinemático desde `state.physical_robot.model_index` (que
+/// apunta a un `RobotDef` de la lista general) y le aplica los ángulos de
+/// telemetría como valores articulares. Así se elimina la duplicación de
+/// lógica DH que existía antes.
+fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D> {
+    use bombolab_core::{Robot, Segment};
 
-    if angles.is_empty() {
+    // Resolver qué modelo cinemático usar
+    let model_idx = match state.physical_robot.model_index {
+        Some(i) => i,
+        None => return vec![Point3D::origin()],
+    };
+
+    let robot_def = &state.robots[model_idx];
+    if robot_def.segments.is_empty() || state.physical_robot.angles.is_empty() {
         return vec![Point3D::origin()];
     }
 
-    // Construir configuraciones DH dinámicamente según la cantidad de joints
-    let mut dh_configs: Vec<(f64, f64, f64, f64)> = Vec::with_capacity(angles.len());
-
-    for i in 0..angles.len() {
-        if i == 0 {
-            // Joint 0 — Base: rotación en Z, sin offset de traslación
-            dh_configs.push((0.0, 0.0, 0.0, -std::f64::consts::FRAC_PI_2));
-        } else if i == angles.len() - 1 {
-            // Último joint — Muñeca: eslabón corto
-            dh_configs.push((0.0, 0.0, 0.5, 0.0));
-        } else {
-            // Joints intermedios — eslabones de longitud unitaria
-            dh_configs.push((0.0, 0.0, 1.0, 0.0));
-        }
+    // Validar que el DOF coincida con la cantidad de ángulos de telemetría
+    if robot_def.segments.len() != state.physical_robot.angles.len() {
+        return vec![Point3D::origin()];
     }
 
-    // Convertir ángulos de grados a radianes y construir segmentos
-    let segments: Vec<Segment> = angles
+    // Construir segmentos de dominio aplicando los ángulos de telemetría
+    // sobre el modelo DH del RobotDef seleccionado
+    let segments: Vec<Segment> = robot_def
+        .segments
         .iter()
-        .zip(dh_configs.iter())
-        .map(|(angle, &(theta_offset, d, a, alpha))| {
-            // TODO: El joint value debería ser leído desde el hardware real.
-            //       Por ahora usamos el slider de la UI (ya en grados).
-            let joint_value: f64 = (*angle as f64).to_radians();
-            let joint = Joint::new(
-                JointType::Revolute,
-                joint_value,
-                std::f64::consts::PI,
-                -std::f64::consts::PI,
-            );
-            let dh = DHParams::new(theta_offset, d, a, alpha);
-            Segment::new(joint, dh)
+        .zip(state.physical_robot.angles.iter())
+        .map(|(seg_ui, angle_deg)| {
+            // Los ángulos vienen en grados (desde los sliders de la UI)
+            // y se convierten a radianes para el motor de FK
+            let joint_value_rad = (*angle_deg as f64).to_radians();
+            seg_ui.to_segment(joint_value_rad)
         })
         .collect();
 
-    // Ejecutar cinemática directa
+    // Ejecutar cinemática directa (misma función que usa simulación)
     let robot = Robot::new(segments);
     let (frames, _) = forward_kinematics(Iso3::identity(), &robot);
 
-    // Construir puntos: base + frames
+    // Extraer puntos: base + cada frame transformado
     let mut points = vec![Point3D::origin()];
     for frame in &frames {
         let t = frame.translation.vector;

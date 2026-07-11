@@ -122,9 +122,13 @@ pub struct PhysicalRobotState {
     /// Ángulos actuales de las articulaciones en grados (telemetría).
     ///
     /// Vector de longitud dinámica. Cada elemento es una articulación.
-    /// El tamaño se define al construir el estado y debe coincidir con
-    /// el número de articulaciones del robot físico.
+    /// El tamaño se ajusta automáticamente al seleccionar un modelo cinemático.
     pub angles: Vec<f32>,
+    /// Índice dentro de `AppState.robots[]` del modelo cinemático a usar.
+    ///
+    /// Si es `None`, el viewport muestra un placeholder.
+    /// Al seleccionar un modelo, `angles` se redimensiona a su DOF.
+    pub model_index: Option<usize>,
     /// Mensaje de error de la última operación de conexión/lectura/envío.
     pub connection_error: Option<String>,
     /// Bandera para solicitar una lectura de telemetría en el próximo frame.
@@ -139,6 +143,7 @@ impl PhysicalRobotState {
         Self {
             connected: false,
             angles: vec![0.0; num_joints],
+            model_index: None,
             connection_error: None,
             pending_read: false,
             pending_send: false,
