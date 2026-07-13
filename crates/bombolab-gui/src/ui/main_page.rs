@@ -432,10 +432,11 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
 fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D> {
     use bombolab_core::{Robot, Segment};
 
-    // Resolver qué modelo cinemático usar
+    // Resolver qué modelo cinemático usar, con validación de índice
+    // para evitar panic si el robot fue borrado desde la simulación.
     let model_idx = match state.physical_robot.model_index {
-        Some(i) => i,
-        None => return vec![Point3D::origin()],
+        Some(i) if i < state.robots.len() => i,
+        _ => return vec![Point3D::origin()],
     };
 
     let robot_def = &state.robots[model_idx];
