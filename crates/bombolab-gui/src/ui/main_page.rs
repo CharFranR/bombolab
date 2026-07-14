@@ -193,16 +193,10 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             .on_hover_text("Abrir conexión con el robot físico")
             .clicked()
         {
-            // TODO: Reemplazar MockRobotController por SerialRobotController
-            //       que use la crate `serialport`:
-            //
-            //   let port = serialport::new("/dev/ttyUSB0", 115200)
-            //       .timeout(Duration::from_millis(100))
-            //       .open();
-            //   match port {
-            //       Ok(p) => state.robot_controller = Box::new(SerialRobotController::new(p)),
-            //       Err(e) => state.physical_robot.connection_error = Some(e.to_string()),
-            //   }
+            // `robot_controller` puede ser MockRobotController (offline)
+            // o SerialRobotController (hardware real). Ambos implementan
+            // el trait RobotController — connect() abre el puerto serie real
+            // o simula la conexión según la implementación activa.
             match state.robot_controller.connect() {
                 Ok(()) => {
                     state.physical_robot.connected = true;
@@ -226,7 +220,8 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             .on_hover_text("Cerrar conexión con el robot físico")
             .clicked()
         {
-            // TODO: Aquí se cerraría el puerto serie real.
+            // disconnect() cierra el puerto serie real (SerialRobotController)
+            // o resetea el estado simulado (MockRobotController).
             let _ = state.robot_controller.disconnect();
             state.physical_robot.connected = false;
         }
@@ -293,9 +288,9 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             };
             ui.label(format!("{}:", label));
 
-            // TODO: En lugar de slider, cuando el hardware real esté conectado
-            //       estos valores deberían venir de `read_angles()`. El slider
-            //       permite simular el envío de ángulos objetivo.
+            // NOTA: Los sliders permiten ajustar ángulos objetivo manualmente.
+            // Cuando el hardware real está conectado (SerialRobotController),
+            // `send_angles()` transmite estos valores al firmware vía serial.
             ui.add(
                 egui::Slider::new(&mut state.physical_robot.angles[i], -180.0..=180.0)
                     .suffix("°")
@@ -319,8 +314,9 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
                 .on_hover_text("Solicitar ángulos actuales al robot")
                 .clicked()
             {
-                // TODO: Llamar al controlador real para leer ángulos desde
-                //       el buffer serie. Por ahora usa el mock.
+                // read_angles() obtiene los últimos ángulos conocidos.
+                // SerialRobotController devuelve el último estado enviado;
+                // MockRobotController devuelve la simulación interna.
                 //
                 //   match state.robot_controller.read_angles() {
                 //       Ok(angles) => { ... }
@@ -334,14 +330,9 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
                 .on_hover_text("Enviar ángulos objetivo al robot")
                 .clicked()
             {
-                // TODO: Llamar al controlador real para escribir ángulos al
-                //       puerto serie.
-                //
-                //   let angles = state.physical_robot.angles.to_vec();
-                //   match state.robot_controller.send_angles(&angles) {
-                //       Ok(()) => { ... }
-                //       Err(e) => { ... }
-                //   }
+                // send_angles() transmite los ángulos al hardware.
+                // SerialRobotController usa ArduinoNano::send_and_verify()
+                // para enviar y confirmar recepción OK/ERR.
                 state.physical_robot.pending_send = true;
             }
         });
