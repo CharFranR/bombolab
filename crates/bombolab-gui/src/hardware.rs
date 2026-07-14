@@ -1,14 +1,12 @@
 // ---------------------------------------------------------------------------
 // Módulo hardware — Abstracción de comunicación con el robot físico.
 //
-// Define un trait `RobotController` que cualquier implementación real (Serial,
-// TCP/IP, etc.) debe cumplir, y una implementación `MockRobotController` que
-// permite probar la UI sin tener el hardware conectado.
-//
-// TODO: Cuando se tenga el hardware real, crear una implementación que use la
-//       crate `serialport` (ej. `SerialRobotController`) y reemplazar el mock
-//       en `AppState::new()`.
+// Define un trait `RobotController` con dos implementaciones:
+// - `MockRobotController` para desarrollo offline.
+// - `SerialRobotController` para comunicación real vía `ArduinoNano`.
 // ---------------------------------------------------------------------------
+
+use bombolab_core::communication::{ArduinoNano, ServoCommand};
 
 /// Trait que abstrae la comunicación serie con el robot físico.
 ///
@@ -16,11 +14,6 @@
 /// timeout o protocolo sin bloquear la UI.
 pub trait RobotController {
     /// Abre la conexión con el puerto serie del robot físico.
-    ///
-    /// TODO: Aquí se configurará el puerto real:
-    ///       let port = serialport::new("/dev/ttyUSB0", 115200)
-    ///           .timeout(Duration::from_millis(100))
-    ///           .open()?;
     fn connect(&mut self) -> Result<(), String>;
 
     /// Cierra la conexión serie de forma limpia.
@@ -29,20 +22,11 @@ pub trait RobotController {
     /// Lee los ángulos actuales de cada articulación desde el hardware.
     ///
     /// El vector resultante tiene un elemento por articulación (grados).
-    ///
-    /// TODO: Reemplazar con lectura real:
-    ///       let mut buf = [0u8; 32];
-    ///       port.read(&mut buf)?;
-    ///       parse_angles(&buf)
     fn read_angles(&mut self) -> Result<Vec<f32>, String>;
 
     /// Envía ángulos objetivo al robot para que ejecute el movimiento.
     ///
     /// `angles` debe tener tantos elementos como articulaciones tenga el robot.
-    ///
-    /// TODO: Reemplazar con escritura real:
-    ///       let msg = format!("{} {} {} {}\n", a1, a2, a3, a4);
-    ///       port.write(msg.as_bytes())?;
     fn send_angles(&mut self, angles: &[f32]) -> Result<(), String>;
 }
 
@@ -156,6 +140,98 @@ impl RobotController for MockRobotController {
         //   let msg = format!("{}\n", msg);
         //   self.port.as_mut().unwrap().write(msg.as_bytes())?;
         self.angles = angles.to_vec();
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Implementación real — SerialRobotController
+// ---------------------------------------------------------------------------
+
+/// Controlador serie real que delega en `ArduinoNano` de `bombolab-core`.
+///
+/// Envía ángulos por el protocolo wire (`a1,a2,a3,a4,a5,g\n`) y verifica
+/// la respuesta `OK`/`ERR` del firmware.
+///
+/// `read_angles()` devuelve los últimos ángulos enviados ya que el firmware
+/// actual no implementa un comando de consulta de posición.
+pub struct SerialRobotController {
+    arduino: Option<ArduinoNano>,
+    port_name: String,
+    last_sent: Vec<f32>,
+}
+
+impl SerialRobotController {
+    /// Crea un nuevo controlador serie sin conexión activa.
+    ///
+    /// `port_name` — puerto serie (ej. `"/dev/ttyUSB0"` en Linux, `"COM3"` en Windows).
+    /// `num_joints` — cantidad de articulaciones (normalmente 6 para FABRI Creator).
+    pub fn new(port_name: String, num_joints: usize) -> Self {
+        Self {
+            arduino: None,
+            port_name,
+            last_sent: vec![0.0; num_joints],
+        }
+    }
+
+    /// Lista los puertos serie disponibles en el sistema.
+    pub fn list_ports() -> Vec<String> {
+        ArduinoNano::list_ports().unwrap_or_default()
+    }
+
+    /// Nombre del puerto configurado.
+    pub fn port_name(&self) -> &str {
+        &self.port_name
+    }
+}
+
+impl RobotController for SerialRobotController {
+    fn connect(&mut self) -> Result<(), String> {
+        let arduino = ArduinoNano::connect(&self.port_name).map_err(|e| e.to_string())?;
+        self.arduino = Some(arduino);
+        Ok(())
+    }
+
+    fn disconnect(&mut self) -> Result<(), String> {
+        if let Some(ref mut arduino) = self.arduino {
+            arduino.disconnect().map_err(|e| e.to_string())?;
+        }
+        self.arduino = None;
+        Ok(())
+    }
+
+    /// Devuelve los últimos ángulos enviados al hardware.
+    ///
+    /// El firmware actual (Arduino Nano / ESP32) no implementa un comando de
+    /// consulta de posición de servos. Hasta que se agregue ese comando,
+    /// este método retorna el último estado conocido.
+    fn read_angles(&mut self) -> Result<Vec<f32>, String> {
+        if self.arduino.is_none() {
+            return Err("Robot no conectado. Presione 'Conectar' primero.".to_string());
+        }
+        Ok(self.last_sent.clone())
+    }
+
+    fn send_angles(&mut self, angles: &[f32]) -> Result<(), String> {
+        let arduino = self
+            .arduino
+            .as_mut()
+            .ok_or_else(|| "Robot no conectado. Presione 'Conectar' primero.".to_string())?;
+
+        // Convertir [f32; N] → ServoCommand (5 joints + 1 gripper)
+        let cmd = ServoCommand {
+            joints: [
+                angles.first().copied().unwrap_or(0.0) as f64,
+                angles.get(1).copied().unwrap_or(0.0) as f64,
+                angles.get(2).copied().unwrap_or(0.0) as f64,
+                angles.get(3).copied().unwrap_or(0.0) as f64,
+                angles.get(4).copied().unwrap_or(0.0) as f64,
+            ],
+            gripper: angles.get(5).copied().unwrap_or(90.0) as u8,
+        };
+
+        arduino.send_and_verify(&cmd).map_err(|e| e.to_string())?;
+        self.last_sent = angles.to_vec();
         Ok(())
     }
 }

@@ -213,10 +213,8 @@ pub struct AppState {
     // ─── Robot Físico ───
     /// Estado del robot físico (conexión, telemetría, etc.).
     pub physical_robot: PhysicalRobotState,
-    /// Controlador de hardware (mock por ahora).
-    ///
-    /// TODO: Reemplazar `MockRobotController` por `SerialRobotController`
-    ///       cuando se implemente la comunicación serie real.
+    /// Controlador de hardware — `MockRobotController` (offline) o
+    /// `SerialRobotController` (hardware real vía `ArduinoNano`).
     pub robot_controller: Box<dyn RobotController>,
 }
 
