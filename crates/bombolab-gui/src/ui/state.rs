@@ -63,6 +63,45 @@ impl RobotDef {
         }
     }
 
+    /// Crea un RobotDef con los parámetros DH del robot FABRI Creator (5 DOF).
+    ///
+    /// Los valores angulares se almacenan en grados (formato de la UI).
+    /// Los valores lineales están en mm (unidades del fabricante).
+    ///
+    /// Tabla DH (Craig):
+    /// | i | α     | a    | d    | θ |
+    /// |---|-------|------|------|---|
+    /// | 1 | -90°  | 15   | 95   | 0 |
+    /// | 2 |   0°  |  0   | 162  | 0 |
+    /// | 3 | -90°  | 111  |  0   | 0 |
+    /// | 4 |  90°  | 35   |  0   | 0 |
+    /// | 5 |   0°  |  0   |  0   | 0 |
+    pub fn fabri_creator() -> Self {
+        let dh_params: [(f64, f64, f64, f64); 5] = [
+            (0.0, 95.0, 15.0, -90.0),   // α=-90°, a=15, d=95, θ=0°
+            (0.0, 162.0, 0.0, 0.0),     // α=0°, a=0, d=162, θ=0°
+            (0.0, 0.0, 111.0, -90.0),   // α=-90°, a=111, d=0, θ=0°
+            (0.0, 0.0, 35.0, 90.0),     // α=90°, a=35, d=0, θ=0°
+            (0.0, 0.0, 0.0, 0.0),       // α=0°, a=0, d=0, θ=0°
+        ];
+
+        let segments: Vec<SegmentUi> = dh_params
+            .iter()
+            .map(|&(theta, d, a, alpha)| SegmentUi {
+                joint_type: JointType::Revolute,
+                theta,
+                d,
+                a,
+                alpha,
+            })
+            .collect();
+
+        Self {
+            name: "FABRI Creator".to_string(),
+            segments,
+        }
+    }
+
     /// Número de grados de libertad (cantidad de segmentos).
     pub fn dof(&self) -> usize {
         self.segments.len()
@@ -113,20 +152,22 @@ pub enum AppMode {
 // ---------------------------------------------------------------------------
 
 /// Estado del brazo robótico físico y su telemetría.
+///
+/// El número de articulaciones se determina en tiempo de ejecución según
+/// el hardware conectado. Inicialmente se configura con 4 DOF por defecto.
 pub struct PhysicalRobotState {
     /// Indica si hay una conexión activa con el hardware.
     pub connected: bool,
     /// Ángulos actuales de las articulaciones en grados (telemetría).
     ///
-    /// Se usa un array fijo de 4 elementos para el brazo antropomórfico de
-    /// 4 DOF. Cada elemento corresponde a una articulación:
-    ///   [0] = base (rotación horizontal)
-    ///   [1] = hombro (elevación)
-    ///   [2] = codo (elevación)
-    ///   [3] = muñeca (elevación)
+    /// Vector de longitud dinámica. Cada elemento es una articulación.
+    /// El tamaño se ajusta automáticamente al seleccionar un modelo cinemático.
+    pub angles: Vec<f32>,
+    /// Índice dentro de `AppState.robots[]` del modelo cinemático a usar.
     ///
-    /// TODO: Cambiar a `Vec<f32>` si se soportan robots con DOF variable.
-    pub angles: [f32; 4],
+    /// Si es `None`, el viewport muestra un placeholder.
+    /// Al seleccionar un modelo, `angles` se redimensiona a su DOF.
+    pub model_index: Option<usize>,
     /// Mensaje de error de la última operación de conexión/lectura/envío.
     pub connection_error: Option<String>,
     /// Bandera para solicitar una lectura de telemetría en el próximo frame.
@@ -136,11 +177,12 @@ pub struct PhysicalRobotState {
 }
 
 impl PhysicalRobotState {
-    /// Crea un estado inicial con todas las articulaciones en 0° y desconectado.
-    pub fn new() -> Self {
+    /// Crea un estado inicial con `num_joints` articulaciones en 0° y desconectado.
+    pub fn new(num_joints: usize) -> Self {
         Self {
             connected: false,
-            angles: [0.0; 4],
+            angles: vec![0.0; num_joints],
+            model_index: None,
             connection_error: None,
             pending_read: false,
             pending_send: false,
@@ -187,7 +229,7 @@ impl AppState {
             selected_robot: None,
             show_details: false,
             mode: AppMode::Simulation,
-            physical_robot: PhysicalRobotState::new(),
+            physical_robot: PhysicalRobotState::new(4),
             robot_controller: Box::new(MockRobotController::new(4)),
         }
     }

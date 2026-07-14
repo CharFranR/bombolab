@@ -89,7 +89,10 @@ fn compute_scale(points: &[Point3D], viewport_size: f32) -> f32 {
     }
 
     // Encontrar la distancia máxima desde el origen
-    let max_dist = points.iter().map(|p| p.magnitude()).fold(0.0f32, f32::max);
+    let max_dist = points
+        .iter()
+        .map(|p| p.magnitude())
+        .fold(0.0f32, f32::max);
 
     if max_dist < 1e-6 {
         // No hay puntos significativos, usar escala por defecto
@@ -180,11 +183,7 @@ pub fn draw_robot_skeleton(
         // Relleno
         painter.circle_filled(*pos, joint_radius, color);
         // Borde sutil para mejorar legibilidad
-        painter.circle_stroke(
-            *pos,
-            joint_radius,
-            Stroke::new(1.0, Color32::WHITE.gamma_multiply(0.3)),
-        );
+        painter.circle_stroke(*pos, joint_radius, Stroke::new(1.0, Color32::WHITE.gamma_multiply(0.3)));
     }
 }
 

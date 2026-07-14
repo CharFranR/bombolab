@@ -10,10 +10,10 @@
 // viewport 3D decide de dónde tomar los datos según el modo.
 // ---------------------------------------------------------------------------
 
-use bombolab_core::{Iso3, JointType, forward_kinematics};
+use bombolab_core::{forward_kinematics, Iso3, JointType};
 
 use crate::ui::state::{AppMode, PanelView, RobotDef, SegmentUi};
-use crate::ui::viewport::{Point3D, draw_robot_skeleton};
+use crate::ui::viewport::{draw_robot_skeleton, Point3D};
 // ---------------------------------------------------------------------------
 // Render principal (llamado desde lib.rs → main.rs)
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         // Calcular los puntos 3D según el modo activo
         let points: Vec<Point3D> = match state.mode {
             AppMode::Simulation => compute_simulation_points(state),
-            AppMode::PhysicalRobot => compute_physical_robot_points(&state.physical_robot.angles),
+            AppMode::PhysicalRobot => compute_physical_robot_points(state),
         };
 
         // Decidir si hay datos suficientes para dibujar
@@ -99,10 +99,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
                 &painter,
                 rect,
                 &points,
-                egui::Color32::from_rgb(255, 200, 50), // Color articulaciones (amarillo)
-                egui::Color32::from_rgb(220, 180, 60), // Color eslabones (oro)
-                3.0,                                   // Grosor de líneas (px)
-                6.0,                                   // Radio de círculos (px)
+                egui::Color32::from_rgb(255, 200, 50),   // Color articulaciones (amarillo)
+                egui::Color32::from_rgb(220, 180, 60),   // Color eslabones (oro)
+                3.0,                                      // Grosor de líneas (px)
+                6.0,                                      // Radio de círculos (px)
             );
         } else {
             // ── Placeholder ──
@@ -243,17 +243,55 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
         // ui.label("Baud rate: 115200");
     }
 
+    // ─── Modelo cinemático ────────────────────────────────────────────────
+    ui.add_space(16.0);
+    ui.heading("Modelo Cinemático");
+    ui.separator();
+
+    if state.robots.is_empty() {
+        ui.colored_label(
+            egui::Color32::DARK_GRAY,
+            "No hay robots definidos.",
+        );
+        if ui.button("+ Cargar FABRI Creator").clicked() {
+            let idx = state.robots.len();
+            state.robots.push(RobotDef::fabri_creator());
+            state.physical_robot.model_index = Some(idx);
+            state.physical_robot.angles.resize(5, 0.0);
+        }
+    } else {
+        for (i, robot) in state.robots.iter().enumerate() {
+            let is_selected = state.physical_robot.model_index == Some(i);
+            let label = format!("{} — {} DOF", robot.name, robot.dof());
+            if ui.selectable_label(is_selected, &label).clicked() {
+                // Al seleccionar un modelo, redimensionar los ángulos a su DOF
+                let dof = robot.segments.len();
+                state.physical_robot.model_index = Some(i);
+                state.physical_robot.angles.resize(dof, 0.0);
+            }
+        }
+    }
+
     // ─── Telemetría ────────────────────────────────────────────────────────
     ui.add_space(16.0);
     ui.heading("Telemetría");
     ui.separator();
 
-    // Sliders para cada articulación
-    let joint_labels = ["Base", "Hombro", "Codo", "Muñeca"];
-    for i in 0..4 {
+    // Sliders para cada articulación (número dinámico según el hardware)
+    let num_joints = state.physical_robot.angles.len();
+    for i in 0..num_joints {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label(format!("{}:", joint_labels[i]));
+            // Etiqueta de la articulación: nombres conocidos para los primeros 4,
+            // genéricos para el resto
+            let label = match i {
+                0 => "Base",
+                1 => "Hombro",
+                2 => "Codo",
+                3 => "Muñeca",
+                _ => "J",
+            };
+            ui.label(format!("{}:", label));
 
             // TODO: En lugar de slider, cuando el hardware real esté conectado
             //       estos valores deberían venir de `read_angles()`. El slider
@@ -266,7 +304,7 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             .on_hover_text(format!(
                 "Ángulo de la articulación {} ({})",
                 i + 1,
-                joint_labels[i]
+                label
             ));
         });
     }
@@ -314,10 +352,8 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
             state.physical_robot.pending_read = false;
             match state.robot_controller.read_angles() {
                 Ok(angles) => {
-                    // Copiar los ángulos recibidos al estado (como f32)
-                    for (i, angle) in angles.iter().enumerate().take(4) {
-                        state.physical_robot.angles[i] = *angle;
-                    }
+                    // Reemplazar todo el vector de ángulos con lo leído del hardware
+                    state.physical_robot.angles = angles;
                     state.physical_robot.connection_error = None;
                 }
                 Err(e) => {
@@ -328,8 +364,7 @@ fn render_physical_panel(ui: &mut egui::Ui, state: &mut super::state::AppState) 
 
         if state.physical_robot.pending_send {
             state.physical_robot.pending_send = false;
-            let angles_vec = state.physical_robot.angles.to_vec();
-            match state.robot_controller.send_angles(&angles_vec) {
+            match state.robot_controller.send_angles(&state.physical_robot.angles) {
                 Ok(()) => {
                     state.physical_robot.connection_error = None;
                 }
@@ -387,61 +422,52 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
     points
 }
 
-/// Calcula los puntos 3D del robot físico a partir de los ángulos de telemetría.
+/// Calcula los puntos 3D del robot físico reutilizando el pipeline de FK de
+/// `bombolab-core`, exactamente como hace `compute_simulation_points`.
 ///
-/// Usa un modelo DH fijo de 4 DOF (brazo antropomórfico) y los ángulos
-/// actuales del estado `PhysicalRobotState` para computar la cadena
-/// cinemática y extraer las posiciones de cada articulación.
-///
-/// TODO: Permitir que el modelo DH del robot físico sea configurable
-///       (idealmente cargado desde un archivo de configuración).
-fn compute_physical_robot_points(angles: &[f32; 4]) -> Vec<Point3D> {
-    use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
+/// Toma el modelo cinemático desde `state.physical_robot.model_index` (que
+/// apunta a un `RobotDef` de la lista general) y le aplica los ángulos de
+/// telemetría como valores articulares. Así se elimina la duplicación de
+/// lógica DH que existía antes.
+fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D> {
+    use bombolab_core::{Robot, Segment};
 
-    // -----------------------------------------------------------------------
-    // Modelo DH para un brazo antropomórfico de 4 DOF (típico SCARA/ABB).
-    //
-    //   Joint  |  θ (rad)  |  d  |  a  |  α
-    //   --------|-----------|------|------|--------
-    //   Base    |  angle[0] |  0.0 | 0.0  | -π/2
-    //   Hombro  |  angle[1] |  0.0 | 1.0  |  0.0
-    //   Codo    |  angle[2] |  0.0 | 1.0  |  0.0
-    //   Muñeca  |  angle[3] |  0.0 | 0.5  |  0.0
-    //
-    // Los valores de a (longitud de eslabón) están en unidades arbitrarias.
-    // TODO: Cargar estos parámetros desde un archivo de configuración YAML/JSON.
-    // -----------------------------------------------------------------------
-    let dh_configs: [(f64, f64, f64, f64); 4] = [
-        (0.0, 0.0, 0.0, -std::f64::consts::FRAC_PI_2), // Base: rotación Z
-        (0.0, 0.0, 1.0, 0.0),                          // Hombro: elevación
-        (0.0, 0.0, 1.0, 0.0),                          // Codo: elevación
-        (0.0, 0.0, 0.5, 0.0),                          // Muñeca: elevación
-    ];
+    // Resolver qué modelo cinemático usar, con validación de índice
+    // para evitar panic si el robot fue borrado desde la simulación.
+    let model_idx = match state.physical_robot.model_index {
+        Some(i) if i < state.robots.len() => i,
+        _ => return vec![Point3D::origin()],
+    };
 
-    // Convertir ángulos de grados a radianes y construir segmentos
-    let segments: Vec<Segment> = angles
+    let robot_def = &state.robots[model_idx];
+    if robot_def.segments.is_empty() || state.physical_robot.angles.is_empty() {
+        return vec![Point3D::origin()];
+    }
+
+    // Validar que el DOF coincida con la cantidad de ángulos de telemetría
+    if robot_def.segments.len() != state.physical_robot.angles.len() {
+        return vec![Point3D::origin()];
+    }
+
+    // Construir segmentos de dominio aplicando los ángulos de telemetría
+    // sobre el modelo DH del RobotDef seleccionado
+    let segments: Vec<Segment> = robot_def
+        .segments
         .iter()
-        .zip(dh_configs.iter())
-        .map(|(angle, &(theta_offset, d, a, alpha))| {
-            // TODO: El joint value debería ser leído desde el hardware real.
-            //       Por ahora usamos el slider de la UI (ya en grados).
-            let joint_value: f64 = (*angle as f64).to_radians();
-            let joint = Joint::new(
-                JointType::Revolute,
-                joint_value,
-                std::f64::consts::PI,
-                -std::f64::consts::PI,
-            );
-            let dh = DHParams::new(theta_offset, d, a, alpha);
-            Segment::new(joint, dh)
+        .zip(state.physical_robot.angles.iter())
+        .map(|(seg_ui, angle_deg)| {
+            // Los ángulos vienen en grados (desde los sliders de la UI)
+            // y se convierten a radianes para el motor de FK
+            let joint_value_rad = (*angle_deg as f64).to_radians();
+            seg_ui.to_segment(joint_value_rad)
         })
         .collect();
 
-    // Ejecutar cinemática directa
+    // Ejecutar cinemática directa (misma función que usa simulación)
     let robot = Robot::new(segments);
     let (frames, _) = forward_kinematics(Iso3::identity(), &robot);
 
-    // Construir puntos: base + frames
+    // Extraer puntos: base + cada frame transformado
     let mut points = vec![Point3D::origin()];
     for frame in &frames {
         let t = frame.translation.vector;
@@ -787,22 +813,10 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          │ {:7.3} {:7.3} {:7.3} {:7.3} │\n\
          └                    ┘",
-        m[(0, 0)],
-        m[(0, 1)],
-        m[(0, 2)],
-        m[(0, 3)],
-        m[(1, 0)],
-        m[(1, 1)],
-        m[(1, 2)],
-        m[(1, 3)],
-        m[(2, 0)],
-        m[(2, 1)],
-        m[(2, 2)],
-        m[(2, 3)],
-        m[(3, 0)],
-        m[(3, 1)],
-        m[(3, 2)],
-        m[(3, 3)]
+        m[(0, 0)], m[(0, 1)], m[(0, 2)], m[(0, 3)],
+        m[(1, 0)], m[(1, 1)], m[(1, 2)], m[(1, 3)],
+        m[(2, 0)], m[(2, 1)], m[(2, 2)], m[(2, 3)],
+        m[(3, 0)], m[(3, 1)], m[(3, 2)], m[(3, 3)]
     ));
 }
 
