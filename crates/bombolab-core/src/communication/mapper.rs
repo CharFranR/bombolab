@@ -59,13 +59,12 @@ mod tests {
     fn test_home_pose_maps_correctly() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        // q = [0,0,0,0,0] → servo = offsets
+        // q = [0,0,0,0,0] → servo = offsets = [90, 90, 90, 90, 90]
         let cmd = mapper.map_q(&[0.0; 5], 90);
-        // Offsets in degrees: [90, 115, 110, 170, 90]
         assert!((cmd.joints[0] - 90.0).abs() < 1e-6);
-        assert!((cmd.joints[1] - 115.0).abs() < 1e-6);
-        assert!((cmd.joints[2] - 110.0).abs() < 1e-6);
-        assert!((cmd.joints[3] - 170.0).abs() < 1e-6);
+        assert!((cmd.joints[1] - 90.0).abs() < 1e-6);
+        assert!((cmd.joints[2] - 90.0).abs() < 1e-6);
+        assert!((cmd.joints[3] - 90.0).abs() < 1e-6);
         assert!((cmd.joints[4] - 90.0).abs() < 1e-6);
         assert_eq!(cmd.gripper, 90);
     }
@@ -103,18 +102,18 @@ mod tests {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
         // q = [0.1, -0.2, 0.0, 0.15, -0.1] rad
+        // All offsets = 90° (π/2 ≈ 1.571 rad)
         // servo_deg = (q + offset) * 180/π → clamped to [10, 170]
         let cmd = mapper.map_q(&[0.1, -0.2, 0.0, 0.15, -0.1], 45);
-        // All offsets are in [10, 170], and q perturbations stay within range
-        // J0: (0.1 + 90°=1.571) rad * 180/π ≈ 95.73°
-        // J1: (-0.2 + 115°=2.007) rad * 180/π ≈ 103.5°
-        // J2: (0.0 + 110°=1.919) rad * 180/π ≈ 110.0°
-        // J3: (0.15 + 170°=2.967) rad * 180/π ≈ 178.0° → clamped to 170°
-        // J4: (-0.1 + 90°=1.571) rad * 180/π ≈ 84.27°
+        // J0: (0.1 + 1.571) rad * 180/π ≈ 95.73°
+        // J1: (-0.2 + 1.571) rad * 180/π ≈ 78.56°
+        // J2: (0.0 + 1.571) rad * 180/π ≈ 90.00°
+        // J3: (0.15 + 1.571) rad * 180/π ≈ 98.60° — within limits, not clamped
+        // J4: (-0.1 + 1.571) rad * 180/π ≈ 84.27°
         assert!((cmd.joints[0] - 95.73).abs() < 0.1);
-        assert!((cmd.joints[1] - 103.53).abs() < 0.1);
-        assert!((cmd.joints[2] - 110.0).abs() < 0.1);
-        assert!((cmd.joints[3] - 170.0).abs() < 0.1); // clamped
+        assert!((cmd.joints[1] - 78.56).abs() < 0.1);
+        assert!((cmd.joints[2] - 90.00).abs() < 0.1);
+        assert!((cmd.joints[3] - 98.60).abs() < 0.1);
         assert!((cmd.joints[4] - 84.27).abs() < 0.1);
     }
 

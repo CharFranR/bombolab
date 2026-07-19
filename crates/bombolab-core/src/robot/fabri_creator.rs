@@ -6,13 +6,12 @@ const JOINT_MIN: f64 = std::f64::consts::PI / 18.0; // 10°
 const JOINT_MAX: f64 = std::f64::consts::PI * 17.0 / 18.0; // 170°
 
 /// Home pose: servo positions at kinematic zero (q=[0,0,0,0,0]).
-/// Arduino firmware default for J4 was 175°, but JOINT_MAX is 170° —
-/// corrected to 170° to stay within mechanical safety limits.
-const HOME_POSE_DEG: [f64; 5] = [90.0, 115.0, 110.0, 170.0, 90.0];
+/// All servos calibrated to 90° at the mechanical home position.
+const HOME_POSE_DEG: [f64; 5] = [90.0, 90.0, 90.0, 90.0, 90.0];
 
 /// Servo offsets: servo_angle = q_robot + offset (radians).
 /// At kinematic zero (q=[0,0,0,0,0]), servos are at HOME_POSE_DEG.
-const SERVO_OFFSETS_DEG: [f64; 5] = [90.0, 115.0, 110.0, 170.0, 90.0];
+const SERVO_OFFSETS_DEG: [f64; 5] = [90.0, 90.0, 90.0, 90.0, 90.0];
 
 /// Creates a configured FABRI Creator 5-DOF robot.
 ///

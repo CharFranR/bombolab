@@ -41,9 +41,17 @@ impl SegmentUi {
     ///
     /// `joint_value` es el valor actual de la articulación en radianes (para
     /// revolutes) o metros (para prismatics).
+    ///
+    /// Los valores angulares (`theta`, `alpha`) se almacenan en grados en la UI
+    /// y se convierten a radianes al construir `DHParams`.
     pub fn to_segment(&self, joint_value: f64) -> Segment {
         let joint = Joint::new(self.joint_type, joint_value, 0.0, 0.0);
-        let dh = DHParams::new(self.theta, self.d, self.a, self.alpha);
+        let dh = DHParams::new(
+            self.theta.to_radians(),
+            self.d,
+            self.a,
+            self.alpha.to_radians(),
+        );
         Segment::new(joint, dh)
     }
 }

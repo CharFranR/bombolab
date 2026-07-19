@@ -15,7 +15,7 @@ const int SERVO_PINS[NUM_SERVOS] = {A5, A3, A4, A2, A0, A1};
 
 Servo servos[NUM_SERVOS];
 
-int actual_positions[NUM_SERVOS] = {90, 115, 110, 170, 90, 90};
+int actual_positions[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
 
 // ---------------------------------------------------------------------------
 // Serial protocol parser — character-by-character, no sscanf
