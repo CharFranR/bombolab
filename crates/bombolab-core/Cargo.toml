@@ -21,6 +21,10 @@ path = "src/bin/serial-test.rs"
 name = "ik-solve"
 path = "src/bin/ik-solve.rs"
 
+[[bin]]
+name = "draw-path"
+path = "src/bin/draw-path.rs"
+
 [dependencies]
 nalgebra = "0.35.0"
 serialport = "4"
