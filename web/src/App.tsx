@@ -1,49 +1,48 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
 import { fabriCreator, fabriCreatorSegments } from './robot/fabri_creator';
+import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 
-const WS_URL = 'ws://127.0.0.1:8080';
-
 export default function App() {
   const [robot, setRobot] = useState<RobotDef>(() => fabriCreator());
   const [gripper, setGripper] = useState(0);
-  const [wsConnected, setWsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [serialError, setSerialError] = useState<string | null>(null);
+  const portRef = useRef<SerialPort | null>(null);
 
-  // WebSocket: enviar q al bridge
+  // Enviar q al Arduino via serial
   const sendQ = useCallback((segments: Segment[], g: number) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const port = portRef.current;
+    if (!port) return;
     const q = segments.map(s => s.q);
-    ws.send(JSON.stringify({ type: 'q', joints: q, gripper: Math.round(g * 1.8) }));
+    const servoDeg = qToServoDeg(q);
+    const wire = buildWire(servoDeg, g);
+    sendSerial(port, wire);
   }, []);
 
-  const handleConnect = useCallback(() => {
-    if (wsRef.current) return;
-    const ws = new WebSocket(WS_URL);
-    ws.onopen = () => {
-      setWsConnected(true);
+  const handleConnect = useCallback(async () => {
+    try {
+      setSerialError(null);
+      const port = await requestSerialPort();
+      await openPort(port);
+      portRef.current = port;
+      setConnected(true);
       // Enviar estado actual al conectar
       sendQ(robot.segments, gripper);
-    };
-    ws.onclose = () => {
-      setWsConnected(false);
-      wsRef.current = null;
-    };
-    ws.onerror = () => {
-      setWsConnected(false);
-      wsRef.current = null;
-    };
-    wsRef.current = ws;
+    } catch (e: any) {
+      setSerialError(e.message ?? 'Error al conectar');
+    }
   }, [robot.segments, gripper, sendQ]);
 
-  const handleDisconnect = useCallback(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
-    setWsConnected(false);
+  const handleDisconnect = useCallback(async () => {
+    try {
+      await portRef.current?.close();
+    } catch {}
+    portRef.current = null;
+    setConnected(false);
   }, []);
 
   const handleJointChange = useCallback((index: number, qRad: number) => {
@@ -62,9 +61,12 @@ export default function App() {
   }, [robot.segments, gripper, sendQ]);
 
   const handleReset = useCallback(() => {
-    setRobot(fabriCreator());
+    const home = fabriCreator();
+    setRobot(home);
     setGripper(0);
-  }, []);
+    // Forzar envío a home aunque ya estuviera en q=0
+    sendQ(home.segments, 0);
+  }, [sendQ]);
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc' }}>
@@ -101,18 +103,21 @@ export default function App() {
         {/* Info panel */}
         <InfoPanel robot={robot} />
 
-        {/* Conexión robot físico */}
+        {/* Conexión robot físico (WebSerial) */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{
               width: 8, height: 8, borderRadius: '50%',
-              background: wsConnected ? '#4cd964' : '#666',
+              background: connected ? '#4cd964' : '#666',
             }} />
             <span style={{ fontSize: 12, color: '#888' }}>
-              {wsConnected ? 'Conectado' : 'Desconectado'}
+              {connected ? 'Conectado' : 'Desconectado'}
             </span>
           </div>
-          {wsConnected ? (
+          {serialError && (
+            <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
+          )}
+          {connected ? (
             <button onClick={handleDisconnect} style={{
               width: '100%', padding: 8, background: '#633',
               border: 'none', borderRadius: 4, color: '#ccc', fontSize: 13, cursor: 'pointer',

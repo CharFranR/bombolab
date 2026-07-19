@@ -55,8 +55,8 @@ pub fn fabri_creator() -> Robot {
 
     // Direcciones de giro por tabla:
     // J1: Anti Horario (-1), J2: Anti Horario (-1), J3: Horario (+1),
-    // J4: Horario (+1), J5: Anti Horario (-1)
-    let servo_directions = vec![-1.0, -1.0, 1.0, 1.0, -1.0];
+    // J4: Anti Horario (-1), J5: Anti Horario (-1)
+    let servo_directions = vec![-1.0, -1.0, 1.0, -1.0, -1.0];
 
     Robot::with_directions(segments, home_pose, servo_offsets, servo_directions)
 }
