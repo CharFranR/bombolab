@@ -3,12 +3,27 @@
 //
 // Proyecta puntos 3D a 2D usando rotación de cámara (yaw/pitch) + proyección
 // ortográfica. Soporta zoom con scroll, rotación con drag, ejes de coordenadas
-// y labels en cada articulación.
+// y renderizado de links como cuerpos 3D con volumen.
 // ---------------------------------------------------------------------------
 
-use egui::{Color32, Painter, Pos2, Rect, Stroke};
+use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke};
 
 use crate::ui::state::Camera;
+
+// ---------------------------------------------------------------------------
+// Constantes de cuerpo del robot (mm)
+// ---------------------------------------------------------------------------
+
+/// Ancho físico de los eslabones del brazo (simula el cuerpo del robot).
+const LINK_WIDTH_MM: f32 = 18.0;
+/// Ancho de la base del robot.
+const BASE_WIDTH_MM: f32 = 50.0;
+/// Alto de la base del robot.
+const BASE_HEIGHT_MM: f32 = 15.0;
+/// Tamaño del grid de piso
+const GRID_SIZE: f32 = 12.0;
+/// Separación entre líneas del grid
+const GRID_STEP: f32 = 2.0;
 
 // ---------------------------------------------------------------------------
 // Punto 3D
@@ -46,35 +61,53 @@ impl Point3D {
 
 /// Proyecta un punto 3D a 2D aplicando rotación de cámara (yaw, pitch) seguida
 /// de proyección ortográfica.
-///
-/// La cámara orbita alrededor del origen. Yaw rota alrededor del eje Y,
-/// pitch alrededor del eje X (world-space). El resultado es una vista libre
-/// del robot desde cualquier ángulo.
 fn project_orbital(point: Point3D, cam: &Camera, center: Pos2, scale: f32) -> Pos2 {
     let (sy, cy) = cam.yaw.sin_cos();
     let (sp, cp) = cam.pitch.sin_cos();
 
-    // Ry(yaw): rota alrededor de Y
+    // Ry(yaw)
     let x1 = point.x * cy + point.z * sy;
     let z1 = -point.x * sy + point.z * cy;
-    let y1 = point.y;
 
-    // Rx(pitch): rota alrededor de X
+    // Rx(pitch)
     let x2 = x1;
-    let z2 = y1 * sp + z1 * cp;
+    let z2 = point.y * sp + z1 * cp;
 
-    // Proyección ortográfica: descartamos Y (profundidad), mostramos X y Z
     let screen_x = center.x + x2 * scale * cam.zoom;
     let screen_y = center.y - z2 * scale * cam.zoom;
 
     Pos2::new(screen_x, screen_y)
 }
 
+/// Versión con 3 componentes (x, y, z) devuelve las 2D proyectadas + la
+/// profundidad Y (para ordenar dibujo back-to-front).
+fn project_orbital_depth(
+    point: Point3D,
+    cam: &Camera,
+    center: Pos2,
+    scale: f32,
+) -> (Pos2, f32) {
+    let (sy, cy) = cam.yaw.sin_cos();
+    let (sp, cp) = cam.pitch.sin_cos();
+
+    let x1 = point.x * cy + point.z * sy;
+    let y1 = point.y;
+    let z1 = -point.x * sy + point.z * cy;
+
+    let x2 = x1;
+    let y2 = y1 * cp - z1 * sp;
+    let z2 = y1 * sp + z1 * cp;
+
+    let screen_x = center.x + x2 * scale * cam.zoom;
+    let screen_y = center.y - z2 * scale * cam.zoom;
+
+    (Pos2::new(screen_x, screen_y), y2) // y2 = profundidad (back-to-front)
+}
+
 // ---------------------------------------------------------------------------
-// Escala automática con zoom
+// Escala
 // ---------------------------------------------------------------------------
 
-/// Calcula la escala base para que el robot ocupe ~40% del viewport.
 fn compute_base_scale(points: &[Point3D], viewport_size: f32) -> f32 {
     if viewport_size <= 0.0 {
         return 1.0;
@@ -90,21 +123,56 @@ fn compute_base_scale(points: &[Point3D], viewport_size: f32) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
+// Primitivas de dibujo 3D → 2D
+// ---------------------------------------------------------------------------
+
+/// Dibuja un eslabón como un cuerpo rectangular con volumen.
+///
+/// En lugar de una línea fina, pinta un rectángulo relleno entre `from` y `to`
+/// con el ancho dado. El color se aclara/oscurece según la profundidad para
+/// dar sensación 3D.
+fn draw_link_body(
+    painter: &Painter,
+    from: Pos2,
+    to: Pos2,
+    width_screen: f32,
+    color: Color32,
+) {
+    let dir = (to - from).normalized();
+    let perp = egui::vec2(-dir.y, dir.x);
+    let half = width_screen * 0.5;
+
+    let p1 = from + perp * half;
+    let p2 = from - perp * half;
+    let p3 = to - perp * half;
+    let p4 = to + perp * half;
+
+    painter.add(Shape::convex_polygon(
+        vec![p1, p2, p3, p4],
+        color,
+        Stroke::new(1.0, color.gamma_multiply(0.6)),
+    ));
+}
+
+/// Dibuja una articulación como un círculo con brillo y borde.
+fn draw_joint(painter: &Painter, pos: Pos2, radius: f32, color: Color32) {
+    // Sombra / halo exterior
+    painter.circle_filled(pos, radius + 2.0, color.gamma_multiply(0.2));
+    // Relleno
+    painter.circle_filled(pos, radius, color);
+    // Brillo superior-izquierdo (simula luz)
+    painter.circle_filled(
+        Pos2::new(pos.x - radius * 0.25, pos.y - radius * 0.25),
+        radius * 0.35,
+        Color32::WHITE.gamma_multiply(0.2),
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Renderizado principal
 // ---------------------------------------------------------------------------
 
-/// Renderiza el robot en 3D con cámara orbital.
-///
-/// Argumentos:
-/// - `painter`: painter de egui
-/// - `rect`: área del viewport
-/// - `points`: puntos 3D del robot (base → joint1 → ... → efector)
-/// - `cam`: estado de la cámara (yaw, pitch, zoom)
-/// - `joint_color`: color de articulaciones intermedias
-/// - `link_color`: color de eslabones
-/// - `link_width`: grosor de líneas (px)
-/// - `joint_radius`: radio de círculos (px)
-/// - `show_labels`: si mostrar etiquetas "J1", "J2", etc.
+/// Renderiza el robot con cuerpos 3D (no palitos).
 pub fn draw_robot_skeleton(
     painter: &Painter,
     rect: Rect,
@@ -112,7 +180,7 @@ pub fn draw_robot_skeleton(
     cam: &Camera,
     joint_color: Color32,
     link_color: Color32,
-    link_width: f32,
+    _link_width: f32,
     joint_radius: f32,
     show_labels: bool,
 ) {
@@ -122,68 +190,128 @@ pub fn draw_robot_skeleton(
 
     let viewport_size = rect.width().min(rect.height());
     let base_scale = compute_base_scale(points, viewport_size);
+    let eff_scale = base_scale * cam.zoom;
     let center = rect.center();
 
-    // 1. Plano de suelo
-    draw_ground_grid(painter, center, base_scale * cam.zoom, rect, cam);
+    // 1. Plano de suelo (más grande y vistoso)
+    draw_ground_plane(painter, center, eff_scale, rect, cam);
 
-    // 2. Proyectar puntos
-    let projected: Vec<Pos2> = points
+    // 2. Proyectar puntos con profundidad para z-sorting
+    let projected: Vec<(Pos2, f32)> = points
         .iter()
-        .map(|p| project_orbital(*p, cam, center, base_scale))
+        .map(|p| project_orbital_depth(*p, cam, center, base_scale))
         .collect();
 
-    // 3. Eslabones
-    for window in projected.windows(2) {
-        painter.line_segment([window[0], window[1]], Stroke::new(link_width, link_color));
+    // 3. Z-sort: dibujar links de atrás hacia adelante
+    //    Calculamos profundidad media de cada link
+    struct Link {
+        depth: f32,
+        from: Pos2,
+        to: Pos2,
     }
 
-    // 4. Articulaciones + labels
-    let num_points = projected.len();
-    let font_id = egui::FontId::proportional(12.0);
+    let mut links: Vec<Link> = projected
+        .windows(2)
+        .map(|w| Link {
+            depth: (w[0].1 + w[1].1) * 0.5,
+            from: w[0].0,
+            to: w[1].0,
+        })
+        .collect();
 
-    for (i, pos) in projected.iter().enumerate() {
-        let color = if i == 0 {
-            Color32::from_rgb(160, 160, 160) // base gris
-        } else if i == num_points - 1 {
-            Color32::from_rgb(80, 220, 80) // efector verde
+    links.sort_by(|a, b| a.depth.partial_cmp(&b.depth).unwrap());
+
+    // 4. Dibujar links como cuerpos (de atrás → adelante)
+    let link_radius_mm = LINK_WIDTH_MM;
+    let link_width_px = link_radius_mm * eff_scale;
+
+    for link in &links {
+        // Color con variación de profundidad para efecto 3D
+        let depth_factor = (link.depth / 500.0).clamp(-0.3, 0.3);
+        let r = (link_color.r() as f32 * (1.0 + depth_factor)).clamp(0.0, 255.0) as u8;
+        let g = (link_color.g() as f32 * (1.0 + depth_factor)).clamp(0.0, 255.0) as u8;
+        let b = (link_color.b() as f32 * (1.0 + depth_factor)).clamp(0.0, 255.0) as u8;
+        let body_color = Color32::from_rgb(r, g, b);
+
+        draw_link_body(painter, link.from, link.to, link_width_px, body_color);
+    }
+
+    // 5. Base sólida (un cubo achatado en el ground)
+    let ground_pos = projected[0].0;
+    let base_w = BASE_WIDTH_MM * eff_scale;
+    let base_h = BASE_HEIGHT_MM * eff_scale;
+    let base_color = Color32::from_rgb(100, 100, 110);
+
+    // Dibujar base como rectángulo centrado en el ground
+    let base_rect = egui::Rect::from_center_size(ground_pos, egui::vec2(base_w, base_h * 0.6));
+    painter.add(Shape::rect_filled(base_rect, 2.0, base_color));
+    painter.add(Shape::rect_stroke(
+        base_rect,
+        2.0,
+        Stroke::new(1.0, Color32::from_rgb(140, 140, 150)),
+        egui::StrokeKind::Inside,
+    ));
+
+    // 6. Articulaciones (círculos con brillo) — dibujar de atrás hacia adelante
+    let mut joint_infos: Vec<(f32, usize, Pos2)> = projected
+        .iter()
+        .enumerate()
+        .map(|(i, (pos, depth))| (*depth, i, *pos))
+        .collect();
+    joint_infos.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+    let num_points = points.len();
+    for (_depth, i, pos) in &joint_infos {
+        let color = if *i == 0 {
+            Color32::from_rgb(130, 130, 140) // base
+        } else if *i == num_points - 1 {
+            Color32::from_rgb(70, 210, 70) // efector
         } else {
             joint_color
         };
 
-        // Círculo relleno
-        painter.circle_filled(*pos, joint_radius, color);
-        // Borde blanco sutil
-        painter.circle_stroke(
-            *pos,
-            joint_radius,
-            Stroke::new(1.0, Color32::WHITE.gamma_multiply(0.25)),
-        );
+        let radius = if *i == 0 || *i == num_points - 1 {
+            joint_radius * 1.3
+        } else {
+            joint_radius
+        };
 
-        // Label
-        if show_labels {
-            let label = if i == 0 {
-                "Base"
-            } else if i == num_points - 1 {
-                "EE"
-            } else {
-                // Usar points.len() como proxy: si hay exactamente 6 puntos
-                // (base + 5 joints), usar nombres conocidos
-                let names = ["J1", "J2", "J3", "J4", "J5"];
-                if i - 1 < names.len() {
-                    names[i - 1]
-                } else {
-                    "J"
-                }
-            };
-            let label_pos = Pos2::new(pos.x + joint_radius + 3.0, pos.y - joint_radius - 2.0);
-            painter.text(
-                label_pos,
-                egui::Align2::LEFT_TOP,
-                label,
-                font_id.clone(),
-                Color32::WHITE.gamma_multiply(0.7),
-            );
+        draw_joint(painter, *pos, radius, color);
+    }
+
+    // 7. Labels
+    if show_labels {
+        let font_id = egui::FontId::proportional(12.0);
+        let label_names: Vec<&str> = {
+            let mut names = vec!["Base"];
+            for i in 1..num_points.saturating_sub(1) {
+                let n = match i {
+                    1 => "J1",
+                    2 => "J2",
+                    3 => "J3",
+                    4 => "J4",
+                    5 => "J5",
+                    _ => "",
+                };
+                names.push(n);
+            }
+            if num_points > 1 {
+                names.push("EE");
+            }
+            names
+        };
+
+        for (i, (pos, _depth)) in projected.iter().enumerate() {
+            if let Some(label) = label_names.get(i) {
+                let label_pos = Pos2::new(pos.x + joint_radius + 4.0, pos.y - joint_radius - 3.0);
+                painter.text(
+                    label_pos,
+                    egui::Align2::LEFT_TOP,
+                    *label,
+                    font_id.clone(),
+                    Color32::WHITE.gamma_multiply(0.8),
+                );
+            }
         }
     }
 }
@@ -192,60 +320,55 @@ pub fn draw_robot_skeleton(
 // Plano de suelo
 // ---------------------------------------------------------------------------
 
-/// Dibuja un grid en z=0 proyectado con la misma cámara.
-fn draw_ground_grid(
-    painter: &Painter,
-    center: Pos2,
-    scale: f32,
-    rect: Rect,
-    cam: &Camera,
-) {
-    let grid_size = 3.0;
-    let grid_color = Color32::from_rgb(50, 50, 50);
-    let step = 1.0;
-
-    // Culling básico: ver si las esquinas proyectadas caen dentro del viewport
-    let corners = [
-        Point3D::new(-grid_size, -grid_size, 0.0),
-        Point3D::new(grid_size, -grid_size, 0.0),
-        Point3D::new(grid_size, grid_size, 0.0),
-        Point3D::new(-grid_size, grid_size, 0.0),
+/// Dibuja un plano de suelo grande con relleno semitransparente y líneas de grid.
+fn draw_ground_plane(painter: &Painter, center: Pos2, scale: f32, rect: Rect, cam: &Camera) {
+    // Relleno semitransparente del piso (solo si hay suficientes puntos proyectados)
+    let s = GRID_SIZE;
+    let corners_3d = [
+        Point3D::new(-s, -s, 0.0),
+        Point3D::new(s, -s, 0.0),
+        Point3D::new(s, s, 0.0),
+        Point3D::new(-s, s, 0.0),
     ];
-    let projected_corners: Vec<Pos2> = corners
+    let projected_corners: Vec<Pos2> = corners_3d
         .iter()
         .map(|p| project_orbital(*p, cam, center, scale))
         .collect();
     let grid_bounds = egui::Rect::from_points(&projected_corners);
+
     if !rect.intersects(grid_bounds) {
         return;
     }
 
-    // Líneas paralelas a X (en z=0)
-    let mut y = -grid_size;
-    while y <= grid_size {
-        let p1 = project_orbital(Point3D::new(-grid_size, y, 0.0), cam, center, scale);
-        let p2 = project_orbital(Point3D::new(grid_size, y, 0.0), cam, center, scale);
-        painter.line_segment([p1, p2], Stroke::new(0.5, grid_color));
-        y += step;
-    }
+    // Relleno del piso
+    painter.add(Shape::convex_polygon(
+        projected_corners,
+        Color32::from_rgba_premultiplied(35, 35, 40, 180),
+        Stroke::new(0.5, Color32::from_rgb(50, 50, 55)),
+    ));
 
-    // Líneas paralelas a Y (en z=0)
-    let mut x = -grid_size;
-    while x <= grid_size {
-        let p1 = project_orbital(Point3D::new(x, -grid_size, 0.0), cam, center, scale);
-        let p2 = project_orbital(Point3D::new(x, grid_size, 0.0), cam, center, scale);
+    // Líneas del grid
+    let grid_color = Color32::from_rgb(55, 55, 60);
+    let mut y = -s;
+    while y <= s {
+        let p1 = project_orbital(Point3D::new(-s, y, 0.0), cam, center, scale);
+        let p2 = project_orbital(Point3D::new(s, y, 0.0), cam, center, scale);
         painter.line_segment([p1, p2], Stroke::new(0.5, grid_color));
-        x += step;
+        y += GRID_STEP;
+    }
+    let mut x = -s;
+    while x <= s {
+        let p1 = project_orbital(Point3D::new(x, -s, 0.0), cam, center, scale);
+        let p2 = project_orbital(Point3D::new(x, s, 0.0), cam, center, scale);
+        painter.line_segment([p1, p2], Stroke::new(0.5, grid_color));
+        x += GRID_STEP;
     }
 }
 
 // ---------------------------------------------------------------------------
-// Ejes de coordenadas (esquina inferior izquierda del viewport)
+// Ejes de coordenadas
 // ---------------------------------------------------------------------------
 
-/// Dibuja los ejes X (rojo), Y (verde), Z (azul) en una esquina.
-///
-/// La longitud de cada eje es `size` mm en el espacio del robot.
 pub fn draw_axes(painter: &Painter, rect: Rect, cam: &Camera, scale: f32, size: f32) {
     let origin_screen = Pos2::new(rect.left() + 40.0, rect.bottom() - 40.0);
 
@@ -261,7 +384,13 @@ pub fn draw_axes(painter: &Painter, rect: Rect, cam: &Camera, scale: f32, size: 
         let tip_screen = project_orbital(tip, cam, origin_screen, scale);
         let origin_here = project_orbital(Point3D::origin(), cam, origin_screen, scale);
         painter.line_segment([origin_here, tip_screen], Stroke::new(2.0, color));
-        painter.text(tip_screen, egui::Align2::CENTER_CENTER, label, font_id.clone(), color);
+        painter.text(
+            tip_screen,
+            egui::Align2::CENTER_CENTER,
+            label,
+            font_id.clone(),
+            color,
+        );
     }
 }
 
@@ -313,8 +442,8 @@ mod tests {
     fn test_project_orbital_origin() {
         let cam = Camera::new();
         let center = Pos2::new(100.0, 100.0);
-        let projected = project_orbital(Point3D::origin(), &cam, center, 1.0);
-        assert!((projected.x - 100.0).abs() < 1e-6);
-        assert!((projected.y - 100.0).abs() < 1e-6);
+        let (pos, _) = project_orbital_depth(Point3D::origin(), &cam, center, 1.0);
+        assert!((pos.x - 100.0).abs() < 1e-6);
+        assert!((pos.y - 100.0).abs() < 1e-6);
     }
 }
