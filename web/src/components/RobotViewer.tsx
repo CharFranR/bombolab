@@ -161,7 +161,7 @@ function framePose(f: Mat4): { pos: [number, number, number]; quat: [number, num
 
 // ─── Escena del robot ──────────────────────────────────────────────────────
 
-function RobotScene({ robot, gripper = 0 }: { robot: RobotDef; gripper?: number }) {
+function RobotScene({ robot, gripper = 0, workspacePoints = [] }: { robot: RobotDef; gripper?: number; workspacePoints?: [number, number, number][] }) {
   const { frames } = useMemo(
     () => forwardKinematics(robot.segments, robot.baseTransform),
     [robot.segments, robot.baseTransform],
@@ -218,7 +218,7 @@ function RobotScene({ robot, gripper = 0 }: { robot: RobotDef; gripper?: number 
         const m = mulMat4(last, tool);
         const tp = framePose(m);
         const tq = new THREE.Quaternion(...tp.quat);
-        const jawOpen = (gripper / 100) * 10; // 0-10mm
+        const jawOpen = (1 - gripper / 100) * 10; // 0%=abierto(10mm), 100%=cerrado(0mm)
         return (
           <>
             {/* Link J5 → punta = cuerpo del gripper */}
@@ -253,6 +253,21 @@ function RobotScene({ robot, gripper = 0 }: { robot: RobotDef; gripper?: number 
           </>
         );
       })()}
+
+      {/* Workspace point cloud */}
+      {workspacePoints.length > 0 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={workspacePoints.length}
+              array={new Float32Array(workspacePoints.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
+        </points>
+      )}
     </group>
   );
 }
@@ -273,7 +288,7 @@ function mulMat4(a: Mat4, b: Mat4): Mat4 {
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, gripper = 0 }: { robot: RobotDef; gripper?: number }) {
+export default function RobotViewer({ robot, gripper = 0, workspacePoints = [] }: { robot: RobotDef; gripper?: number; workspacePoints?: [number, number, number][] }) {
   return (
     <div style={{ flex: 1, height: '100%' }}>
       <Canvas
@@ -289,7 +304,7 @@ export default function RobotViewer({ robot, gripper = 0 }: { robot: RobotDef; g
         <directionalLight position={[-200, 100, -200]} intensity={0.3} />
         <hemisphereLight args={['#8888ff', '#444422', 0.3]} />
 
-        <RobotScene robot={robot} gripper={gripper} />
+        <RobotScene robot={robot} gripper={gripper} workspacePoints={workspacePoints} />
 
         <OrbitControls
           enableDamping

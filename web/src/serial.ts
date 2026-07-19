@@ -19,8 +19,8 @@ export function qToServoDeg(q: number[]): number[] {
 // Formato: "a1,a2,a3,a4,a5,g\n" — igual que ArduinoNano
 
 export function buildWire(jointsDeg: number[], gripperPct: number): Uint8Array {
-  // invertido: 0% web → 180° físico (cerrado)
-  const g = Math.round(180 - (gripperPct / 100) * 180);
+  // Gripper servo: 170° (abierto) – 50° (cerrado)
+  const g = Math.round(170 - (gripperPct / 100) * 120);
   const str = `${jointsDeg[0]},${jointsDeg[1]},${jointsDeg[2]},${jointsDeg[3]},${jointsDeg[4]},${g}\n`;
   return new TextEncoder().encode(str);
 }
