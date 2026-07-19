@@ -77,7 +77,7 @@ export function forwardKinematics(
 /** Pose from Mat4 (extrae traslación + rotación 3×3). */
 export function mat4ToPose(m: Mat4): Pose {
   return {
-    x: m[12], y: m[13], z: m[14],
+    x: m[3], y: m[7], z: m[11],
     rot: [
       m[0], m[1], m[2],
       m[4], m[5], m[6],

@@ -39,10 +39,10 @@ export default function InfoPanel({ robot }: { robot: RobotDef }) {
   );
 }
 
-function poseFromMat4(m: number[]): Pose {
+function poseFromMat4(m: Mat4): Pose {
   return {
-    x: m[12], y: m[13], z: m[14],
-    rot: [m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]] as any,
+    x: m[3], y: m[7], z: m[11],
+    rot: [m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]],
   };
 }
 
