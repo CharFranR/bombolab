@@ -161,7 +161,7 @@ function framePose(f: Mat4): { pos: [number, number, number]; quat: [number, num
 
 // ─── Escena del robot ──────────────────────────────────────────────────────
 
-function RobotScene({ robot }: { robot: RobotDef }) {
+function RobotScene({ robot, gripper = 0 }: { robot: RobotDef; gripper?: number }) {
   const { frames } = useMemo(
     () => forwardKinematics(robot.segments, robot.baseTransform),
     [robot.segments, robot.baseTransform],
@@ -199,12 +199,8 @@ function RobotScene({ robot }: { robot: RobotDef }) {
         <Link key={`link-${i}`} from={p.pos} to={poses[i + 1].pos} />
       ))}
 
-      {/* Servos — cada servo i está en frame i (origen de joint i+1).
-           J1 (base yaw): en poses[0] (base transform)
-           J2 (shoulder): en poses[1] (frame 1)
-           J3 (elbow):    en poses[2] (frame 2)
-           J4 (wrist roll): en poses[3] (frame 3)
-           J5 (wrist pitch): en poses[4] (frame 4) */}
+      {/* Servos — cada uno en su frame i con la orientación pura del frame,
+           sin rotaciones extra. La FK ya computa la cinemática completa. */}
       {poses.slice(0, -1).map((p, i) => (
         <group key={`joint-${i}`} position={new THREE.Vector3(...p.pos)} quaternion={new THREE.Quaternion(...p.quat)}>
           <Servo
@@ -215,19 +211,45 @@ function RobotScene({ robot }: { robot: RobotDef }) {
         </group>
       ))}
 
-      {/* Tool (punta del marcador) — aplicar tool transform al último frame */}
+      {/* Gripper paralelo 75mm — acostado en XY, mordazas abren en Y (laterales) */}
       {frames.length > 0 && (() => {
         const last = frames[frames.length - 1];
         const tool = dhMatrix({ theta: 0, d: 0, a: robot.toolTransform[0], alpha: 0 }, 0);
         const m = mulMat4(last, tool);
         const tp = framePose(m);
+        const tq = new THREE.Quaternion(...tp.quat);
+        const jawOpen = (gripper / 100) * 10; // 0-10mm
         return (
           <>
-            <Link from={poses[poses.length - 1].pos} to={tp.pos} width={6} />
-            <mesh position={new THREE.Vector3(...tp.pos)}>
-              <coneGeometry args={[4, 16, 8]} />
-              <meshStandardMaterial color={COLORS.effector} roughness={0.3} />
-            </mesh>
+            {/* Link J5 → punta = cuerpo del gripper */}
+            <Link from={poses[poses.length - 1].pos} to={tp.pos} width={8} />
+            <group position={new THREE.Vector3(...tp.pos)} quaternion={tq}>
+              {/* Cuerpo (riel) */}
+              <mesh position={[-30, 0, 0]}>
+                <boxGeometry args={[60, 6, 12]} />
+                <meshStandardMaterial color="#7777aa" roughness={0.4} metalness={0.4} />
+              </mesh>
+              {/* Mordaza izquierda (abre en -Y) */}
+              <mesh position={[8, -7 - jawOpen, 0]}>
+                <boxGeometry args={[24, 4, 10]} />
+                <meshStandardMaterial color="#ccccdd" roughness={0.3} metalness={0.5} />
+              </mesh>
+              {/* Mordaza derecha (abre en +Y) */}
+              <mesh position={[8, 7 + jawOpen, 0]}>
+                <boxGeometry args={[24, 4, 10]} />
+                <meshStandardMaterial color="#ccccdd" roughness={0.3} metalness={0.5} />
+              </mesh>
+              {/* Diente de sujeción izq */}
+              <mesh position={[20, -7 - jawOpen, 0]}>
+                <boxGeometry args={[4, 4, 14]} />
+                <meshStandardMaterial color="#9999bb" roughness={0.6} metalness={0.2} />
+              </mesh>
+              {/* Diente de sujeción der */}
+              <mesh position={[20, 7 + jawOpen, 0]}>
+                <boxGeometry args={[4, 4, 14]} />
+                <meshStandardMaterial color="#9999bb" roughness={0.6} metalness={0.2} />
+              </mesh>
+            </group>
           </>
         );
       })()}
@@ -251,7 +273,7 @@ function mulMat4(a: Mat4, b: Mat4): Mat4 {
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot }: { robot: RobotDef }) {
+export default function RobotViewer({ robot, gripper = 0 }: { robot: RobotDef; gripper?: number }) {
   return (
     <div style={{ flex: 1, height: '100%' }}>
       <Canvas
@@ -267,7 +289,7 @@ export default function RobotViewer({ robot }: { robot: RobotDef }) {
         <directionalLight position={[-200, 100, -200]} intensity={0.3} />
         <hemisphereLight args={['#8888ff', '#444422', 0.3]} />
 
-        <RobotScene robot={robot} />
+        <RobotScene robot={robot} gripper={gripper} />
 
         <OrbitControls
           enableDamping

@@ -6,9 +6,13 @@ const JOINT_NAMES = ['Base (Yaw)', 'Shoulder', 'Elbow', 'Wrist Roll', 'Wrist Pit
 
 export default function JointControls({
   segments,
+  gripper,
+  onGripperChange,
   onChange,
 }: {
   segments: Segment[];
+  gripper: number;
+  onGripperChange: (v: number) => void;
   onChange: (index: number, qRad: number) => void;
 }) {
   return (
@@ -45,6 +49,32 @@ export default function JointControls({
           />
         </div>
       ))}
+
+      {/* Gripper */}
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #333' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <label style={{ fontSize: 13, color: '#aaa' }}>Gripper</label>
+          <span style={{ fontSize: 12, color: '#888', fontFamily: 'monospace' }}>
+            {gripper}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={gripper}
+          onChange={e => onGripperChange(Number(e.target.value))}
+          style={{
+            width: '100%',
+            height: 4,
+            appearance: 'none',
+            background: '#444',
+            borderRadius: 2,
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+        />
+      </div>
     </div>
   );
 }

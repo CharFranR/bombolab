@@ -51,6 +51,25 @@ export function segment(dh: DHParams): Segment {
 
 // ─── FK ────────────────────────────────────────────────────────────────────
 
+/**
+ * Matriz DH con roll sobre X (para wrist roll).
+ *
+ * A_i = Rot_x(α + q) · Trans_x(a)
+ *
+ * El joint rota sobre el eje X (antebrazo) en vez de Z. Usado para J4
+ * (wrist roll) donde el twist debe ser sobre el eje del brazo.
+ */
+export function dhMatrixRoll(dh: DHParams, q: number): Mat4 {
+  const ca = Math.cos(dh.alpha + q);
+  const sa = Math.sin(dh.alpha + q);
+  return [
+    1,   0,    0,   dh.a,
+    0,   ca,  -sa,   0,
+    0,   sa,   ca,   0,
+    0,   0,    0,    1,
+  ];
+}
+
 /** Retorna la pose de cada frame [base, J1, J2, ..., Jn]. */
 export function forwardKinematics(
   segments: Segment[],
@@ -66,8 +85,11 @@ export function forwardKinematics(
   ]);
   const frames: Mat4[] = [current];
 
-  for (const seg of segments) {
-    current = mul(current, dhMatrix(seg, seg.q));
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    // J4 (index 3) usa roll sobre X en vez de Z
+    const mat = i === 3 ? dhMatrixRoll(seg, seg.q) : dhMatrix(seg, seg.q);
+    current = mul(current, mat);
     frames.push(current);
   }
 
