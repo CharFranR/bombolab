@@ -17,13 +17,7 @@ path = "src/bin/quaternion-solve.rs"
 name = "serial-test"
 path = "src/bin/serial-test.rs"
 
-[[bin]]
-name = "ik-solve"
-path = "src/bin/ik-solve.rs"
 
-[[bin]]
-name = "draw-path"
-path = "src/bin/draw-path.rs"
 
 [dependencies]
 nalgebra = "0.35.0"

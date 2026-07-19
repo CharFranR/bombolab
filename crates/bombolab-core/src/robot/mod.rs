@@ -1,5 +1,4 @@
 pub mod errors;
-pub mod fabri_creator;
 pub mod joint;
 pub mod link;
 pub mod segment;

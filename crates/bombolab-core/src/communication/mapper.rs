@@ -49,10 +49,23 @@ impl<'a> ServoMapper<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::robot::fabri_creator::fabri_creator;
+    use crate::robot::joint::{Joint, JointType};
+    use crate::robot::link::DHParams;
+    use crate::robot::segment::{Robot, Segment};
 
     fn make_robot() -> Robot {
-        fabri_creator()
+        let seg = || -> Segment {
+            Segment::new(
+                Joint::new(JointType::Revolute, 0.0, std::f64::consts::PI, -std::f64::consts::PI),
+                DHParams::new(0.0, 0.0, 0.0, 0.0),
+            )
+        };
+        let offset = std::f64::consts::FRAC_PI_2; // 90°
+        Robot::with_offsets(
+            (0..5).map(|_| seg()).collect(),
+            vec![offset; 5],
+            vec![offset; 5],
+        )
     }
 
     #[test]
