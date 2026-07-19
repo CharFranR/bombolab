@@ -199,13 +199,18 @@ function RobotScene({ robot }: { robot: RobotDef }) {
         <Link key={`link-${i}`} from={p.pos} to={poses[i + 1].pos} />
       ))}
 
-      {/* Servos (articulaciones) — con posición + rotación del frame */}
-      {poses.slice(1).map((p, i) => (
+      {/* Servos — cada servo i está en frame i (origen de joint i+1).
+           J1 (base yaw): en poses[0] (base transform)
+           J2 (shoulder): en poses[1] (frame 1)
+           J3 (elbow):    en poses[2] (frame 2)
+           J4 (wrist roll): en poses[3] (frame 3)
+           J5 (wrist pitch): en poses[4] (frame 4) */}
+      {poses.slice(0, -1).map((p, i) => (
         <group key={`joint-${i}`} position={new THREE.Vector3(...p.pos)} quaternion={new THREE.Quaternion(...p.quat)}>
           <Servo
             position={[0, 0, 0]}
             rotation={[0, 0, 0]}
-            color={i === poses.length - 2 ? COLORS.effector : COLORS.joint}
+            color={i === 0 ? COLORS.base : i >= poses.length - 2 ? COLORS.effector : COLORS.joint}
           />
         </group>
       ))}
