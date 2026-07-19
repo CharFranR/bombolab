@@ -1,27 +1,71 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
 import { fabriCreator, fabriCreatorSegments } from './robot/fabri_creator';
+import { forwardKinematics } from './kinematics/forward';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 
+function generateWorkspace(samples: number): [number, number, number][] {
+  const points: [number, number, number][] = [];
+  const robot = fabriCreator();
+  const DEG = Math.PI / 180;
+  for (let i = 0; i < samples; i++) {
+    const q = robot.segments.map(() => (Math.random() * 160 - 80) * DEG);
+    const segs = robot.segments.map((s, j) => ({ ...s, q: q[j] }));
+    const fk = forwardKinematics(segs, robot.baseTransform);
+    // tool transform
+    const tool = [1, 0, 0, robot.toolTransform[0],
+                  0, 1, 0, robot.toolTransform[1],
+                  0, 0, 1, robot.toolTransform[2],
+                  0, 0, 0, 1] as const;
+    const m = mulMat4(fk.ee, tool as any);
+    points.push([m[3], m[11], m[7]]); // Three.js Y-up swap
+  }
+  return points;
+}
+
+function mulMat4(a: any, b: any): number[] {
+  const m = (r: number, c: number) =>
+    a[r * 4 + 0] * b[0 * 4 + c] +
+    a[r * 4 + 1] * b[1 * 4 + c] +
+    a[r * 4 + 2] * b[2 * 4 + c] +
+    a[r * 4 + 3] * b[3 * 4 + c];
+  return [
+    m(0,0), m(0,1), m(0,2), m(0,3),
+    m(1,0), m(1,1), m(1,2), m(1,3),
+    m(2,0), m(2,1), m(2,2), m(2,3),
+    m(3,0), m(3,1), m(3,2), m(3,3),
+  ];
+}
+
 export default function App() {
   const [robot, setRobot] = useState<RobotDef>(() => fabriCreator());
-  const [gripper, setGripper] = useState(0);
+  const [gripper, setGripper] = useState(50);
   const [connected, setConnected] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
+  const [showWorkspace, setShowWorkspace] = useState(false);
   const portRef = useRef<SerialPort | null>(null);
 
-  // Enviar q al Arduino via serial
+  const workspacePoints = useMemo(
+    () => showWorkspace ? generateWorkspace(2000) : [],
+    [showWorkspace],
+  );
+
+  // Enviar q al Arduino via serial — guardado en ref para acceso desde handlers
   const sendQ = useCallback((segments: Segment[], g: number) => {
     const port = portRef.current;
     if (!port) return;
     const q = segments.map(s => s.q);
     const servoDeg = qToServoDeg(q);
     const wire = buildWire(servoDeg, g);
+    console.log('[serial] enviando:', new TextDecoder().decode(wire).trim());
     sendSerial(port, wire);
   }, []);
+
+  const sendQRef = useRef(sendQ);
+  sendQRef.current = sendQ;
 
   const handleConnect = useCallback(async () => {
     try {
@@ -63,10 +107,10 @@ export default function App() {
   const handleReset = useCallback(() => {
     const home = fabriCreator();
     setRobot(home);
-    setGripper(0);
-    // Forzar envío a home aunque ya estuviera en q=0
-    sendQ(home.segments, 0);
-  }, [sendQ]);
+    setGripper(50);
+    // Forzar envío a home usando la ref (evita stale closure)
+    sendQRef.current(home.segments, 50);
+  }, []);
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc' }}>
@@ -134,6 +178,25 @@ export default function App() {
           )}
         </div>
 
+        {/* Workspace toggle */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <button
+            onClick={() => setShowWorkspace(!showWorkspace)}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: showWorkspace ? '#553' : '#444',
+              border: 'none',
+              borderRadius: 4,
+              color: '#ccc',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {showWorkspace ? 'Ocultar workspace' : 'Mostrar workspace'}
+          </button>
+        </div>
+
         {/* Reset */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
           <button
@@ -155,7 +218,7 @@ export default function App() {
       </div>
 
       {/* 3D Viewport */}
-      <RobotViewer robot={robot} gripper={gripper} />
+      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} />
     </div>
   );
 }
