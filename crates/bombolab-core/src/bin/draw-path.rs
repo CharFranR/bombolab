@@ -15,7 +15,7 @@ use nalgebra::{Isometry3, Vector3};
 fn main() {
     let (port, waypoints_per_side) = parse_args();
 
-    // Connect
+    // Connect — Arduino Nano auto-resets on serial open (DTR), needs ~2s to boot.
     let mut nano = match ArduinoNano::connect(&port) {
         Ok(n) => n,
         Err(e) => {
@@ -23,13 +23,15 @@ fn main() {
             process::exit(1);
         }
     };
+    eprintln!("Connected to {}. Waiting for Arduino to boot...", port);
+    thread::sleep(Duration::from_secs(2));
 
     let robot = fabri_creator();
     let base = base_transform();
     let mapper = ServoMapper::new(&robot);
     let opts = IkOptions::default();
     let config = InterpolationConfig::default();
-    let square_center = Vector3::new(150.0, 0.0, 0.0);
+    let square_center = Vector3::new(120.0, 50.0, 0.0);
     let square_size = 50.0;
 
     // Home all servos to 90°
@@ -48,11 +50,26 @@ fn main() {
     // Generate waypoints
     let waypoints = generate_square_waypoints(square_center, square_size, waypoints_per_side);
 
-    // Initial seed for IK (kinematic home)
-    let mut seed = home_q;
+    // Initial seed: forward-reaching configuration toward +X,+Y.
+    // Per user: decreasing J1→X+, decreasing J2→Y+, decreasing J3→Y+.
+    // Try both forward and backward seeds — pick the one with J2 < 0 (forward).
+    let mut seed = vec![-0.5, -0.6, -0.8, 0.0, 0.0];
+    let alt_seed = vec![-0.5, 0.6, 0.8, 0.0, 0.0]; // mirrored shoulder/elbow
 
     for (i, wp) in waypoints.iter().enumerate() {
-        let (q, error, _iterations) = compensate_waypoint(&robot, &base, wp, &seed, &opts);
+        // Try forward-biased seed first
+        let (mut q, mut error, _iterations) =
+            compensate_waypoint(&robot, &base, wp, &seed, &opts);
+
+        // If J2 > 0 (backward config), retry with mirrored seed
+        if q.len() >= 3 && q[1] > 0.0 {
+            let (q2, e2, _) =
+                compensate_waypoint(&robot, &base, wp, &alt_seed, &opts);
+            if q2.len() >= 3 && q2[1] < q[1] {
+                q = q2;
+                error = e2;
+            }
+        }
 
         // Map to servo command
         let target_cmd = mapper.map_q(&q, 90);
@@ -221,31 +238,32 @@ fn compensate_waypoint(
     // Warm-start: track current seed, updated with each converged q
     let mut current_seed = seed.to_vec();
 
-    // Estimate J5 target offset from marker using seed FK:
+    // Compute target orientation ONCE from initial seed FK.
+    // Do NOT recompute inside the loop — changing orientation each iteration
+    // causes the tool-offset projection to oscillate.
+    let seed_fk_init = fk_world(robot, base, seed);
+    let init_rot_mat: nalgebra::Matrix3<f64> =
+        seed_fk_init.rotation.to_rotation_matrix().into_inner();
+    let init_rot = UnitQuaternion::from_matrix(&init_rot_mat);
+
+    // Estimate tool offset from initial seed FK:
     //   marker_world = J5_world * tool_transform
-    // → J5_world ≈ marker_world * tool_transform⁻¹
-    // Initial guess: j5_target_pos = waypoint_pos - tool_offset_at_seed
-    let seed_fk_init = fk_world(robot, base, &current_seed);
+    // → tool_offset_world = marker_world - J5_world
     let seed_marker_init = seed_fk_init * tool_transform();
     let tool_offset_at_seed = seed_marker_init.translation.vector
         - seed_fk_init.translation.vector;
 
-    // The J5 target position: start at waypoint minus estimated tool offset,
-    // then adjust each iteration by the error vector.
+    // Start J5 target at waypoint minus estimated tool offset
     let mut j5_target_pos = waypoint_pos - tool_offset_at_seed;
+
+    let mut current_seed = seed.to_vec();
 
     for iter in 0..5 {
         iterations = iter + 1;
 
-        // Use FK rotation at current seed for the J5 target orientation
-        let seed_fk = fk_world(robot, base, &current_seed);
-        let seed_rot_mat: nalgebra::Matrix3<f64> =
-            seed_fk.rotation.to_rotation_matrix().into_inner();
-        let seed_rot = UnitQuaternion::from_matrix(&seed_rot_mat);
-
         let j5_target = Isometry3::from_parts(
             Translation3::from(j5_target_pos),
-            seed_rot,
+            init_rot, // FIXED orientation — prevents oscillation
         );
 
         match inverse_kinematics(robot, base, &j5_target, &current_seed, opts) {
@@ -349,10 +367,10 @@ fn generate_square_waypoints(
     // Four corners in order: bottom-left (start), bottom-right, top-right, top-left
     // Path: right (increase X) → forward (increase Y) → left (decrease X) → backward (decrease Y)
     let corners = [
-        nalgebra::Vector3::new(center.x - half, center.y - half, 0.0), // (125, -25, 0)
-        nalgebra::Vector3::new(center.x + half, center.y - half, 0.0), // (175, -25, 0)
-        nalgebra::Vector3::new(center.x + half, center.y + half, 0.0), // (175,  25, 0)
-        nalgebra::Vector3::new(center.x - half, center.y + half, 0.0), // (125,  25, 0)
+        nalgebra::Vector3::new(center.x - half, center.y - half, 0.0), // (125,   0, 0)
+        nalgebra::Vector3::new(center.x + half, center.y - half, 0.0), // (175,   0, 0)
+        nalgebra::Vector3::new(center.x + half, center.y + half, 0.0), // (175,  50, 0)
+        nalgebra::Vector3::new(center.x - half, center.y + half, 0.0), // (125,  50, 0)
     ];
 
     // Total waypoints: N per side with shared corners, closed loop
@@ -395,11 +413,11 @@ mod tests {
     use bombolab_core::robot::fabri_creator::{base_transform, fabri_creator, tool_transform};
     use nalgebra::{Translation3, UnitQuaternion, Vector3};
 
-    /// Spec R2/S1: Square geometry — corners at (±25,±25,0) around center (150,0,0),
+    /// Spec R2/S1: Square geometry — 50×50mm at center (120,50,0),
     /// all Z=0, path traces right→forward→left→backward, closed loop.
     #[test]
     fn test_square_waypoints_corners_and_closed_loop() {
-        let center = Vector3::new(150.0, 0.0, 0.0);
+        let center = Vector3::new(120.0, 50.0, 0.0);
         let size = 50.0;
         let n = 5;
         let waypoints = generate_square_waypoints(center, size, n);
@@ -416,10 +434,10 @@ mod tests {
         // Four corners at (±25, ±25, 0) relative to center
         let half = size / 2.0;
         let expected_corners = [
-            Vector3::new(center.x - half, center.y - half, 0.0), // (125, -25, 0) — start
-            Vector3::new(center.x + half, center.y - half, 0.0), // (175, -25, 0)
-            Vector3::new(center.x + half, center.y + half, 0.0), // (175,  25, 0)
-            Vector3::new(center.x - half, center.y + half, 0.0), // (125,  25, 0)
+            Vector3::new(center.x - half, center.y - half, 0.0), // (95,  25, 0) — start
+            Vector3::new(center.x + half, center.y - half, 0.0), // (145, 25, 0)
+            Vector3::new(center.x + half, center.y + half, 0.0), // (145, 75, 0)
+            Vector3::new(center.x - half, center.y + half, 0.0), // (95,  75, 0)
         ];
 
         // Closed loop: first and last waypoints must be the same
@@ -459,10 +477,10 @@ mod tests {
                 .unwrap()
         };
 
-        let idx_start = find_corner(125.0, -25.0); // corner0
-        let idx_right = find_corner(175.0, -25.0); // corner1 — after rightward
-        let idx_fwd = find_corner(175.0, 25.0); // corner2 — after forward
-        let idx_left = find_corner(125.0, 25.0); // corner3 — after leftward
+        let idx_start = find_corner(95.0, 25.0); // corner0 — (95, 25)
+        let idx_right = find_corner(145.0, 25.0); // corner1 — (145, 25) after rightward
+        let idx_fwd   = find_corner(145.0, 75.0); // corner2 — (145, 75) after forward
+        let idx_left  = find_corner(95.0, 75.0); // corner3 — (95, 75) after leftward
 
         assert!(
             idx_start < idx_right,
@@ -484,7 +502,7 @@ mod tests {
     /// Corners are shared between adjacent sides.
     #[test]
     fn test_waypoints_per_side_with_shared_corners() {
-        let center = Vector3::new(150.0, 0.0, 0.0);
+        let center = Vector3::new(120.0, 50.0, 0.0);
         let size = 50.0;
 
         // Test with n=5: total = 4*5 - 3 = 17 (closed loop)
@@ -518,7 +536,7 @@ mod tests {
         // Expected step size per side
         let step = size / (n as f64 - 1.0); // 50 / 4 = 12.5mm
 
-        // Side 0 (right): from (125,-25) to (175,-25), all X increase, Y constant
+        // Side 0 (right): from (95,25) to (145,25), all X increase, Y constant
         // The first 5 waypoints (indices 0-4) are side 0
         for i in 1..n {
             let prev = waypoints[i - 1].translation.vector;
@@ -539,13 +557,13 @@ mod tests {
         }
 
         // Verify the start corner is at index 0 and index n-1 of side 3
-        // Side 3 (backward): Y decreases from +25 to -25
+        // Side 3 (backward): Y decreases from 75 to 25
         // The last waypoint (len-1) should be the starting corner
         let last_wp = waypoints.last().unwrap().translation.vector;
         assert!(
             (last_wp.x - (center.x - half)).abs() < 1e-10
                 && (last_wp.y - (center.y - half)).abs() < 1e-10,
-            "Last waypoint should be starting corner (125,-25,0), got ({:.1},{:.1},{:.1})",
+            "Last waypoint should be starting corner (95,25,0), got ({:.1},{:.1},{:.1})",
             last_wp.x,
             last_wp.y,
             last_wp.z
@@ -577,17 +595,14 @@ mod tests {
         let base = base_transform();
         let opts = IkOptions::default();
 
-        // Use a q close to home — small angles so FK rotation stays near identity
         let known_q = vec![0.0, 0.15, -0.1, 0.0, 0.05];
         let target_pos = marker_tip_world(&robot, &base, &known_q);
 
-        // Construct waypoint at the marker tip position
         let waypoint = Isometry3::from_parts(
             Translation3::from(target_pos),
             UnitQuaternion::identity(),
         );
 
-        // Use a seed near known_q (but not identical — warm-start)
         let seed = vec![0.0, 0.1, -0.05, 0.0, 0.0];
 
         let (q, error, iterations) = compensate_waypoint(&robot, &base, &waypoint, &seed, &opts);
@@ -685,7 +700,7 @@ mod tests {
         let robot = fabri_creator();
         let base = base_transform();
         let opts = IkOptions::default();
-        let center = Vector3::new(150.0, 0.0, 0.0);
+        let center = Vector3::new(120.0, 50.0, 0.0);
 
         let waypoints = generate_square_waypoints(center, 50.0, 5);
 
