@@ -62,7 +62,6 @@ bombolab/
 │           │   └── viewport.rs  # Isometric 3D wireframe renderer
 │           └── hardware.rs      # RobotController trait + MockRobotController
 ├── arduino/Arduino Nano/        # PlatformIO firmware (Arduino Nano, Servo lib)
-├── esp32/esp32/                 # PlatformIO firmware (ESP32, ESP32Servo lib)
 ├── docs/                        # mdBook documentation (docs/src/ → docs/book/)
 └── AGENTS.md                    # OpenCode / AI assistant instructions
 ```
@@ -82,7 +81,6 @@ Additional non-Rust components:
 | Directory | Platform | Firmware |
 |-----------|----------|----------|
 | `arduino/` | PlatformIO (C++) | Arduino Nano servo control via `Servo` library |
-| `esp32/` | PlatformIO (C++) | ESP32 servo control via `ESP32Servo` library |
 
 ### Dependencies
 
@@ -134,7 +132,7 @@ For more details, see [docs/forward_kinematics.md](docs/forward_kinematics.md).
 - Physical robot tab — connect/disconnect, telemetry sliders, send/read angles
 - Hardware abstraction — `RobotController` trait + mock implementation for offline dev
 - CLI tools: `dh-solve` (numeric/symbolic) and `quaternion-solve`
-- Arduino Nano and ESP32 firmware (PlatformIO C++)
+- Arduino Nano firmware (PlatformIO C++)
 
 ### Planned
 

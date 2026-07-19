@@ -22,7 +22,7 @@ CI runs: `cargo check --workspace` → `cargo test --workspace` → `cargo clipp
 | `crates/bombolab-core/` | lib + 2 bins | Domain model, kinematics, math. **CLI binaries**: `dh-solve`, `quaternion-solve` |
 | `crates/bombolab-gui/` | lib | egui/eframe rendering layer |
 | `arduino/` | PlatformIO (C++) | Arduino Nano firmware (servo control via `Servo` lib) |
-| `esp32/` | PlatformIO (C++) | ESP32 firmware (servo control via `ESP32Servo` lib) |
+| — | — | — |
 | `docs/` | mdBook | Documentation source (`docs/src/`) |
 
 The workspace has **3 Rust crates**: root (app), `bombolab-core`, `bombolab-gui`. All use edition 2024.
@@ -31,7 +31,7 @@ The workspace has **3 Rust crates**: root (app), `bombolab-core`, `bombolab-gui`
 
 - **Run a single binary**: `cargo run --bin dh-solve -p bombolab-core`
 - **Run a single test**: `cargo test -p bombolab-core forward::tests::test_forward_kinematics_two_segments` (inline tests, no test harness quirks)
-- **Build firmware**: open `arduino/` or `esp32/` dirs, use `pio run` (requires PlatformIO, not Rust)
+- **Build firmware**: open `arduino/` dir, use `pio run` (requires PlatformIO, not Rust)
 - **Docs**: `mdbook build` (requires `mdbook` CLI), output in `docs/book/`
 
 ## Architecture notes

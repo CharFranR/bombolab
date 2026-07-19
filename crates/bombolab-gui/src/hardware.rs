@@ -202,7 +202,7 @@ impl RobotController for SerialRobotController {
 
     /// Devuelve los últimos ángulos enviados al hardware.
     ///
-    /// El firmware actual (Arduino Nano / ESP32) no implementa un comando de
+    /// El firmware actual (Arduino Nano) no implementa un comando de
     /// consulta de posición de servos. Hasta que se agregue ese comando,
     /// este método retorna el último estado conocido.
     fn read_angles(&mut self) -> Result<Vec<f32>, String> {
