@@ -4,14 +4,15 @@
 
 const int NUM_SERVOS = 6;
 
-// Pin mapping: Arduino analog pins → servo indices
-// A5 → S1 (J1, Base yaw)
-// 13 → S2 (J2, Shoulder)
-// A4 → S3 (J3, Elbow)
-// A2 → S4 (J4, Wrist roll)
-// A0 → S5 (J5, Wrist pitch)
-// A1 → S6 (Gripper)
-const int SERVO_PINS[NUM_SERVOS] = {A5, 13, A4, A2, A0, A1};
+// Pin mapping — ordered to match ServoCommand wire format:
+//   J1(yaw), J2(shoulder), J3(elbow), J4(roll), J5(pitch), Gripper
+// Wire pos 0 = J1 yaw    → pin A1
+// Wire pos 1 = J2 shoulder → pin A0
+// Wire pos 2 = J3 elbow   → pin A2
+// Wire pos 3 = J4 roll    → pin A4
+// Wire pos 4 = J5 pitch   → pin 13
+// Wire pos 5 = Gripper    → pin A5
+const int SERVO_PINS[NUM_SERVOS] = {A1, A0, A2, A4, 13, A5};
 
 Servo servos[NUM_SERVOS];
 
