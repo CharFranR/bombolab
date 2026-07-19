@@ -133,6 +133,32 @@ function Axes() {
   );
 }
 
+// ─── Convierte frame Mat4 (DH, Z-up, row-major) a pose de Three.js ────────
+
+function framePose(f: Mat4): { pos: [number, number, number]; quat: [number, number, number, number] } {
+  // DH → Three.js: X→X, Z→Y(up), Y→Z
+  // Construir Matrix4 column-major con el swap
+  const m = new THREE.Matrix4();
+  const te = m.elements;
+  // Col 0: X (DH column 0 → Three column 0)
+  te[0] = f[0];  te[1] = f[8];  te[2] = f[4];  te[3] = 0;
+  // Col 1: Z → Y
+  te[4] = f[2];  te[5] = f[10]; te[6] = f[6];  te[7] = 0;
+  // Col 2: Y → Z
+  te[8] = f[1];  te[9] = f[9];  te[10] = f[5]; te[11] = 0;
+  // Col 3: traslación con swap
+  te[12] = f[3]; te[13] = f[11]; te[14] = f[7]; te[15] = 1;
+
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  m.decompose(pos, quat, scale);
+  return {
+    pos: [pos.x, pos.y, pos.z],
+    quat: [quat.x, quat.y, quat.z, quat.w],
+  };
+}
+
 // ─── Escena del robot ──────────────────────────────────────────────────────
 
 function RobotScene({ robot }: { robot: RobotDef }) {
@@ -141,10 +167,8 @@ function RobotScene({ robot }: { robot: RobotDef }) {
     [robot.segments, robot.baseTransform],
   );
 
-  // Posiciones: robot X→Three X, robot Z→Three Y (up!), robot Y→Three Z
-  // DH tiene Z=up, Three.js tiene Y=up — swap Y↔Z
-  const positions = useMemo(
-    () => frames.map(f => [f[3], f[11], f[7]] as [number, number, number]),
+  const poses = useMemo(
+    () => frames.map(framePose),
     [frames],
   );
 
@@ -167,35 +191,35 @@ function RobotScene({ robot }: { robot: RobotDef }) {
       {/* Ejes */}
       <Axes />
 
-      {/* Base */}
-      <Base position={positions[0]} />
+      {/* Base — fija en el ground (sin rotación de servo) */}
+      <Base position={poses[0]?.pos ?? [0, 0, 0]} />
 
       {/* Links (eslabones entre frames consecutivos) */}
-      {positions.slice(0, -1).map((from, i) => (
-        <Link key={`link-${i}`} from={from} to={positions[i + 1]} />
+      {poses.slice(0, -1).map((p, i) => (
+        <Link key={`link-${i}`} from={p.pos} to={poses[i + 1].pos} />
       ))}
 
-      {/* Servos (articulaciones) */}
-      {positions.slice(1).map((pos, i) => (
-        <Servo
-          key={`joint-${i}`}
-          position={pos}
-          rotation={[0, 0, 0]}
-          color={i === positions.length - 2 ? COLORS.effector : COLORS.joint}
-        />
+      {/* Servos (articulaciones) — con posición + rotación del frame */}
+      {poses.slice(1).map((p, i) => (
+        <group key={`joint-${i}`} position={new THREE.Vector3(...p.pos)} quaternion={new THREE.Quaternion(...p.quat)}>
+          <Servo
+            position={[0, 0, 0]}
+            rotation={[0, 0, 0]}
+            color={i === poses.length - 2 ? COLORS.effector : COLORS.joint}
+          />
+        </group>
       ))}
 
       {/* Tool (punta del marcador) — aplicar tool transform al último frame */}
       {frames.length > 0 && (() => {
         const last = frames[frames.length - 1];
         const tool = dhMatrix({ theta: 0, d: 0, a: robot.toolTransform[0], alpha: 0 }, 0);
-        // Aplicar tool: last · tool
         const m = mulMat4(last, tool);
-        const tip: [number, number, number] = [m[3], m[11], m[7]];
+        const tp = framePose(m);
         return (
           <>
-            <Link from={positions[positions.length - 1]} to={tip} width={6} />
-            <mesh position={tip}>
+            <Link from={poses[poses.length - 1].pos} to={tp.pos} width={6} />
+            <mesh position={new THREE.Vector3(...tp.pos)}>
               <coneGeometry args={[4, 16, 8]} />
               <meshStandardMaterial color={COLORS.effector} roughness={0.3} />
             </mesh>
