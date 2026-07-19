@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::math::{Mat3, Mat4, Vec3};
 
-/// Parámetros DH para un eslabón (convención Craig).
+/// Parámetros DH para un eslabón (convención estándar).
 ///
 /// A_i = Rot_z(theta) · Trans_z(d) · Trans_x(a) · Rot_x(alpha)
 #[derive(Debug, Clone, Copy, PartialEq)]

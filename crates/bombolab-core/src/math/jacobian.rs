@@ -91,6 +91,7 @@ pub fn geometric_jacobian(
 mod tests {
     use super::*;
     use crate::kinematics::dh::{DHParameter, solve};
+    use crate::math::FRAC_PI_2;
 
     const EPS: f64 = 1e-10;
 
@@ -196,17 +197,14 @@ mod tests {
 
     #[test]
     fn fabri_creator_home_pose() {
+        // FABRI Creator DH table (corregida: a₄=35) — misma configuración
+        // que `fabri_creator_jacobian_finite_differences` en home.
         let table = vec![
-            DHParameter::new(std::f64::consts::FRAC_PI_2, 15.0, 68.5, 0.0),
-            DHParameter::new(0.0, 0.0, 162.0, std::f64::consts::FRAC_PI_2),
-            DHParameter::new(
-                std::f64::consts::FRAC_PI_2,
-                0.0,
-                0.0,
-                std::f64::consts::FRAC_PI_2,
-            ),
-            DHParameter::new(-std::f64::consts::FRAC_PI_2, 0.0, 155.0, 0.0),
-            DHParameter::new(std::f64::consts::FRAC_PI_2, 35.0, 0.0, 0.0),
+            DHParameter::new(-FRAC_PI_2, 15.0, 95.0, 0.0),
+            DHParameter::new(0.0, 0.0, 162.0, 0.0),
+            DHParameter::new(-FRAC_PI_2, 111.0, 0.0, 0.0),
+            DHParameter::new(FRAC_PI_2, 35.0, 0.0, 0.0),
+            DHParameter::new(0.0, 0.0, 0.0, 0.0),
         ];
         let sol = solve(&table);
         let j = geometric_jacobian(
@@ -218,6 +216,106 @@ mod tests {
         assert_eq!(j.nrows(), 6);
         assert_eq!(j.ncols(), 5);
         assert!(j.iter().all(|v| v.is_finite()));
+
+        // Verify home-pose FK position (sin base transform: empieza en origen).
+        // Arm extends along +X (15+111+35=161), offset Y from d₂=162, Z from d₁=95.
+        let p = sol.translation();
+        assert!((p.x - 161.0).abs() < 1e-10, "home x: {}", p.x);
+        assert!((p.y - 162.0).abs() < 1e-10, "home y: {}", p.y);
+        assert!((p.z - 95.0).abs() < 1e-10, "home z: {}", p.z);
+    }
+
+    /// Finite-difference validation of the geometric Jacobian.
+    ///
+    /// For each column i, perturbs θ_i by ε and computes the numerical Jacobian
+    /// as (FK(q + ε·e_i) - FK(q)) / ε. Compares each element against the
+    /// analytical `geometric_jacobian`. Runs at home pose and several arbitrary
+    /// configurations.
+    ///
+    /// Uses the corrected FABRI Creator DH table (a₄=35).
+    #[test]
+    fn fabri_creator_jacobian_finite_differences() {
+
+        // FABRI Creator: Standard DH (corrected: a₄=35)
+        // DHParameter::new(alpha, a, d, theta)
+        let make_table = |q: &[f64; 5]| -> Vec<DHParameter> {
+            vec![
+                DHParameter::new(-FRAC_PI_2, 15.0, 95.0, q[0]),
+                DHParameter::new(0.0, 0.0, 162.0, q[1]),
+                DHParameter::new(-FRAC_PI_2, 111.0, 0.0, q[2]),
+                DHParameter::new(FRAC_PI_2, 35.0, 0.0, q[3]),
+                DHParameter::new(0.0, 0.0, 0.0, q[4]),
+            ]
+        };
+
+        let eps = 1e-8;
+        // Forward-difference tolerance: O(ε) truncation + O(δ/ε) rounding.
+        // Link lengths up to 162mm → linear J entries O(100),
+        // so truncation ~ O(100·ε) ≈ 1e-6, tol = 1e-5 is safe.
+        let tol = 1e-5;
+
+        // Test configurations: home + 4 arbitrary poses
+        let configs: [[f64; 5]; 5] = [
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.3, -0.5, 0.7, 0.2, -0.4],
+            [-0.2, 0.4, -0.3, 0.5, 0.1],
+            [0.0, 0.8, -0.6, 0.0, 0.0],
+            [0.5, 0.0, 0.0, 0.3, -0.2],
+        ];
+
+        for (ci, q) in configs.iter().enumerate() {
+            let table = make_table(q);
+            let sol = solve(&table);
+            let p_ee = sol.translation();
+            let r_ee = sol.rotation();
+
+            let j_ana = geometric_jacobian(
+                &sol.intermediates,
+                &[JointKind::Revolute; 5],
+                &sol.final_transform,
+            )
+            .unwrap();
+
+            for col in 0..5 {
+                let mut q_pert = *q;
+                q_pert[col] += eps;
+                let tab_pert = make_table(&q_pert);
+                let sol_pert = solve(&tab_pert);
+
+                // --- Linear velocity: (p_pert - p_ee) / ε ---
+                let dp = (sol_pert.translation() - p_ee) / eps;
+
+                for row in 0..3 {
+                    let num = dp[row];
+                    let ana = j_ana[(row, col)];
+                    assert!(
+                        (num - ana).abs() < tol,
+                        "config {ci}, col {col}, linear row {row}: \
+                         numerical = {num:.12e}, analytical = {ana:.12e}, diff = {}",
+                        (num - ana).abs()
+                    );
+                }
+
+                // --- Angular velocity: extract ω from ΔR = R_pert · R_eeᵀ ---
+                // For small ε, ΔR ≈ I + [ω]× · ε, so ω · ε ≈ skew(ΔR)
+                let r_rel = sol_pert.rotation() * r_ee.transpose();
+                let wx = (r_rel[(2, 1)] - r_rel[(1, 2)]) / (2.0 * eps);
+                let wy = (r_rel[(0, 2)] - r_rel[(2, 0)]) / (2.0 * eps);
+                let wz = (r_rel[(1, 0)] - r_rel[(0, 1)]) / (2.0 * eps);
+                let omega = Vec3::new(wx, wy, wz);
+
+                for row in 0..3 {
+                    let num = omega[row];
+                    let ana = j_ana[(3 + row, col)];
+                    assert!(
+                        (num - ana).abs() < tol,
+                        "config {ci}, col {col}, angular row {row}: \
+                         numerical = {num:.12e}, analytical = {ana:.12e}, diff = {}",
+                        (num - ana).abs()
+                    );
+                }
+            }
+        }
     }
 
     #[test]

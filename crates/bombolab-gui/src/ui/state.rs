@@ -5,7 +5,7 @@
 // la definición de robots para simulación y el estado del robot físico.
 // ---------------------------------------------------------------------------
 
-use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
+use bombolab_core::{fabri_creator, DHParams, Joint, JointType, Robot, Segment};
 
 use crate::hardware::{MockRobotController, RobotController};
 
@@ -76,7 +76,11 @@ impl RobotDef {
     /// Los valores angulares se almacenan en grados (formato de la UI).
     /// Los valores lineales están en mm (unidades del fabricante).
     ///
-    /// Tabla DH (Craig):
+    /// Lee la configuración desde `bombolab_core::fabri_creator()` para
+    /// mantener una única fuente de verdad — la GUI SIEMPRE refleja el
+    /// robot canónico.
+    ///
+    /// Tabla DH (estándar):
     /// | i | α     | a    | d    | θ |
     /// |---|-------|------|------|---|
     /// | 1 | -90°  | 15   | 95   | 0 |
@@ -85,22 +89,16 @@ impl RobotDef {
     /// | 4 |  90°  | 35   |  0   | 0 |
     /// | 5 |   0°  |  0   |  0   | 0 |
     pub fn fabri_creator() -> Self {
-        let dh_params: [(f64, f64, f64, f64); 5] = [
-            (0.0, 95.0, 15.0, -90.0),   // α=-90°, a=15, d=95, θ=0°
-            (0.0, 162.0, 0.0, 0.0),     // α=0°, a=0, d=162, θ=0°
-            (0.0, 0.0, 111.0, -90.0),   // α=-90°, a=111, d=0, θ=0°
-            (0.0, 0.0, 35.0, 90.0),     // α=90°, a=35, d=0, θ=0°
-            (0.0, 0.0, 0.0, 0.0),       // α=0°, a=0, d=0, θ=0°
-        ];
-
-        let segments: Vec<SegmentUi> = dh_params
+        let core = fabri_creator();
+        let segments = core
+            .segments
             .iter()
-            .map(|&(theta, d, a, alpha)| SegmentUi {
-                joint_type: JointType::Revolute,
-                theta,
-                d,
-                a,
-                alpha,
+            .map(|seg| SegmentUi {
+                joint_type: seg.joint.joint_type,
+                theta: seg.dh.theta.to_degrees(),
+                d: seg.dh.d,
+                a: seg.dh.a,
+                alpha: seg.dh.alpha.to_degrees(),
             })
             .collect();
 

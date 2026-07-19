@@ -10,7 +10,7 @@
 // viewport 3D decide de dónde tomar los datos según el modo.
 // ---------------------------------------------------------------------------
 
-use bombolab_core::{forward_kinematics, Iso3, JointType};
+use bombolab_core::{base_transform, forward_kinematics, tool_transform, JointType};
 
 use crate::ui::state::{AppMode, PanelView, RobotDef, SegmentUi};
 use crate::ui::viewport::{draw_robot_skeleton, Point3D};
@@ -399,13 +399,12 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
         return vec![Point3D::origin()];
     }
 
-    // Ejecutar cinemática directa
+    // Ejecutar cinemática directa con base transform (elevación real)
     let domain_robot = robot.to_robot();
-    let base = Iso3::identity();
-    let (frames, _effector) = forward_kinematics(base, &domain_robot);
+    let (frames, _effector) = forward_kinematics(base_transform(), &domain_robot);
 
     // Construir lista de puntos: base + cada frame
-    let mut points = vec![Point3D::origin()]; // base en el origen
+    let mut points = vec![Point3D::origin()]; // ground en el origen
     for frame in &frames {
         let t = frame.translation.vector;
         points.push(Point3D::new(t.x as f32, t.y as f32, t.z as f32));
@@ -421,7 +420,7 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
 /// telemetría como valores articulares. Así se elimina la duplicación de
 /// lógica DH que existía antes.
 fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D> {
-    use bombolab_core::{Robot, Segment};
+    use bombolab_core::{base_transform, Robot, Segment};
 
     // Resolver qué modelo cinemático usar, con validación de índice
     // para evitar panic si el robot fue borrado desde la simulación.
@@ -454,9 +453,9 @@ fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D>
         })
         .collect();
 
-    // Ejecutar cinemática directa (misma función que usa simulación)
+    // Ejecutar cinemática directa con base transform (elevación real)
     let robot = Robot::new(segments);
-    let (frames, _) = forward_kinematics(Iso3::identity(), &robot);
+    let (frames, _) = forward_kinematics(base_transform(), &robot);
 
     // Extraer puntos: base + cada frame transformado
     let mut points = vec![Point3D::origin()];
@@ -510,11 +509,11 @@ fn render_main(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         let robot = &state.robots[idx];
         if !robot.segments.is_empty() {
             let domain_robot = robot.to_robot();
-            let base = Iso3::identity();
-            let (_frames, effector) = forward_kinematics(base, &domain_robot);
+            let (_frames, effector) = forward_kinematics(base_transform(), &domain_robot);
+            let tool_pose = effector * tool_transform();
 
-            let pos = effector.translation.vector;
-            ui.label("End-Effector");
+            let pos = tool_pose.translation.vector;
+            ui.label("End-Effector (tool tip)");
             ui.indent("ee_pos", |ui| {
                 ui.label(format!("Pos: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z));
                 ui.label("Rot: (see details)");
@@ -787,16 +786,16 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
 
     ui.add_space(8.0);
     ui.separator();
-    ui.heading("End-Effector Pose (T_0_n)");
+    ui.heading("End-Effector Pose (T_0_tool)");
     ui.add_space(4.0);
 
-    // Compute real FK for end-effector
+    // Compute FK con base + tool transform para el efector real
     let domain_robot = state.robots[idx].to_robot();
-    let base = Iso3::identity();
-    let (_frames, effector) = forward_kinematics(base, &domain_robot);
+    let (_frames, effector) = forward_kinematics(base_transform(), &domain_robot);
+    let tool_pose = effector * tool_transform();
 
     // Format the real transformation matrix
-    let t = effector;
+    let t = tool_pose;
     let m = t.to_matrix();
     ui.monospace(format!(
         "┌ {:7.3} {:7.3} {:7.3} {:7.3} ┐\n\

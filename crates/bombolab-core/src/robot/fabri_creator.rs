@@ -34,10 +34,10 @@ pub fn fabri_creator() -> Robot {
             DHParams::new(0.0, 0.0, 111.0, -FRAC_PI_2),
         ),
         // Joint 4 — Wrist Roll
-        // α = 90°, a = 41 mm, d = 0 mm
+        // α = 90°, a = 35 mm, d = 0 mm
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(0.0, 0.0, 41.0, FRAC_PI_2),
+            DHParams::new(0.0, 0.0, 35.0, FRAC_PI_2),
         ),
         // Joint 5 — Wrist Pitch
         // α = 0°, a = 0 mm, d = 0 mm
