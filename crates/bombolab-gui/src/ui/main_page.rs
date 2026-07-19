@@ -10,10 +10,10 @@
 // viewport 3D decide de dónde tomar los datos según el modo.
 // ---------------------------------------------------------------------------
 
-use bombolab_core::{forward_kinematics, Iso3, JointType};
+use bombolab_core::{base_transform, forward_kinematics, tool_transform, JointType};
 
 use crate::ui::state::{AppMode, PanelView, RobotDef, SegmentUi};
-use crate::ui::viewport::{draw_robot_skeleton, Point3D};
+use crate::ui::viewport::{draw_axes, draw_robot_skeleton, Point3D};
 // ---------------------------------------------------------------------------
 // Render principal (llamado desde lib.rs → main.rs)
 // ---------------------------------------------------------------------------
@@ -76,8 +76,28 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         let rect = ui.available_rect_before_wrap();
         let painter = ui.painter();
 
+        // ── Control de cámara: drag rota, scroll hace zoom ──
+        let (drag_delta, scroll_delta) = ui.input(|i| {
+            let drag = if i.pointer.button_down(egui::PointerButton::Primary) {
+                i.pointer.delta()
+            } else {
+                egui::vec2(0.0, 0.0)
+            };
+            let scroll = i.smooth_scroll_delta;
+            (drag, scroll)
+        });
+
+        // Aplicar drag → yaw/pitch
+        if drag_delta != egui::Vec2::ZERO || scroll_delta != egui::Vec2::ZERO {
+            state.camera.yaw += drag_delta.x * 0.008;
+            state.camera.pitch += drag_delta.y * 0.008;
+            state.camera.pitch = state.camera.pitch.clamp(-1.5, 1.5);
+            state.camera.zoom = (state.camera.zoom * (1.0 + scroll_delta.y * 0.002))
+                .clamp(0.1, 10.0);
+        }
+
         // Fondo oscuro tipo viewport 3D
-        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(30, 30, 30));
+        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(28, 28, 32));
 
         // Calcular los puntos 3D según el modo activo
         let points: Vec<Point3D> = match state.mode {
@@ -94,16 +114,23 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         };
 
         if has_valid_data {
-            // ── Renderizar esqueleto 3D ──
+            let viewport_size = rect.width().min(rect.height());
+
+            // ── Renderizar esqueleto 3D con cámara orbital ──
             draw_robot_skeleton(
                 &painter,
                 rect,
                 &points,
-                egui::Color32::from_rgb(255, 200, 50),   // Color articulaciones (amarillo)
-                egui::Color32::from_rgb(220, 180, 60),   // Color eslabones (oro)
+                &state.camera,
+                egui::Color32::from_rgb(255, 180, 50),   // Color articulaciones
+                egui::Color32::from_rgb(220, 160, 60),   // Color eslabones
                 3.0,                                      // Grosor de líneas (px)
                 6.0,                                      // Radio de círculos (px)
+                true,                                     // Mostrar labels
             );
+
+            // ── Ejes de coordenadas ──
+            draw_axes(&painter, rect, &state.camera, viewport_size * 0.003, 60.0);
         } else {
             // ── Placeholder ──
             let msg = match state.mode {
@@ -395,17 +422,16 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
     };
 
     let robot = &state.robots[idx];
-    if robot.segments.is_empty() {
+    if robot.segments.is_empty() || state.sim_angles.is_empty() {
         return vec![Point3D::origin()];
     }
 
-    // Ejecutar cinemática directa
-    let domain_robot = robot.to_robot();
-    let base = Iso3::identity();
-    let (frames, _effector) = forward_kinematics(base, &domain_robot);
+    // Ejecutar cinemática directa con los ángulos actuales de simulación
+    let domain_robot = robot.to_robot_with_joints(&state.sim_angles);
+    let (frames, _effector) = forward_kinematics(base_transform(), &domain_robot);
 
     // Construir lista de puntos: base + cada frame
-    let mut points = vec![Point3D::origin()]; // base en el origen
+    let mut points = vec![Point3D::origin()]; // ground en el origen
     for frame in &frames {
         let t = frame.translation.vector;
         points.push(Point3D::new(t.x as f32, t.y as f32, t.z as f32));
@@ -421,7 +447,7 @@ fn compute_simulation_points(state: &super::state::AppState) -> Vec<Point3D> {
 /// telemetría como valores articulares. Así se elimina la duplicación de
 /// lógica DH que existía antes.
 fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D> {
-    use bombolab_core::{Robot, Segment};
+    use bombolab_core::{base_transform, Robot, Segment};
 
     // Resolver qué modelo cinemático usar, con validación de índice
     // para evitar panic si el robot fue borrado desde la simulación.
@@ -454,9 +480,9 @@ fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D>
         })
         .collect();
 
-    // Ejecutar cinemática directa (misma función que usa simulación)
+    // Ejecutar cinemática directa con base transform (elevación real)
     let robot = Robot::new(segments);
-    let (frames, _) = forward_kinematics(Iso3::identity(), &robot);
+    let (frames, _) = forward_kinematics(base_transform(), &robot);
 
     // Extraer puntos: base + cada frame transformado
     let mut points = vec![Point3D::origin()];
@@ -480,87 +506,99 @@ fn compute_physical_robot_points(state: &super::state::AppState) -> Vec<Point3D>
 fn render_main(ui: &mut egui::Ui, state: &mut super::state::AppState) {
     ui.add_space(8.0);
 
+    // ─── Selección de robot ─────────────────────────────────────────────
     if ui.button("Select / Define Robot").clicked() {
         state.view = PanelView::RobotList;
     }
 
-    ui.add_space(4.0);
-
-    if ui.button("Define Movements").clicked() {
-        state.view = PanelView::Movements;
-    }
-
-    // Show selected robot summary if any
-    if let Some(idx) = state.selected_robot {
-        ui.add_space(16.0);
-        ui.separator();
-        ui.label("Current Robot");
-        ui.separator();
-        let robot = &state.robots[idx];
-        ui.label(format!("{} — {} DOF", robot.name, robot.dof()));
-    }
-
-    ui.add_space(16.0);
-    ui.separator();
-    ui.label("Results");
-    ui.separator();
-
-    // Compute FK if a robot is selected
+    // ─── Control de articulaciones ──────────────────────────────────────
     if let Some(idx) = state.selected_robot {
         let robot = &state.robots[idx];
         if !robot.segments.is_empty() {
-            let domain_robot = robot.to_robot();
-            let base = Iso3::identity();
-            let (_frames, effector) = forward_kinematics(base, &domain_robot);
+            // Asegurar tamaño del vector de ángulos
+            let dof = robot.segments.len();
+            if state.sim_angles.len() != dof {
+                state.sim_angles.resize(dof, 0.0);
+            }
 
-            let pos = effector.translation.vector;
-            ui.label("End-Effector");
+            ui.add_space(12.0);
+            ui.separator();
+            ui.label("Joint Control (q)");
+            ui.separator();
+
+            // Sliders para cada articulación
+            for i in 0..dof {
+                ui.add_space(2.0);
+                let label = match i {
+                    0 => "Base (Yaw)",
+                    1 => "Shoulder",
+                    2 => "Elbow",
+                    3 => "Wrist Roll",
+                    4 => "Wrist Pitch",
+                    _ => "",
+                };
+                ui.add(
+                    egui::Slider::new(&mut state.sim_angles[i], -90.0..=90.0)
+                        .suffix("°")
+                        .text(label),
+                );
+            }
+
+            // ─── FK result ──────────────────────────────────────────────
+            let domain_robot = robot.to_robot_with_joints(&state.sim_angles);
+            let (_frames, effector) = forward_kinematics(base_transform(), &domain_robot);
+            let tool_pose = effector * tool_transform();
+            let pos = tool_pose.translation.vector;
+
+            // Matriz de rotación del efector (top-left 3×3 de T_0_5)
+            let m_ee = effector.to_matrix();
+            let rot = || -> [[f64; 3]; 3] {
+                [
+                    [m_ee[(0, 0)], m_ee[(0, 1)], m_ee[(0, 2)]],
+                    [m_ee[(1, 0)], m_ee[(1, 1)], m_ee[(1, 2)]],
+                    [m_ee[(2, 0)], m_ee[(2, 1)], m_ee[(2, 2)]],
+                ]
+            };
+            let r = rot();
+
+            ui.add_space(12.0);
+            ui.separator();
+            ui.label("End-Effector (tool tip)");
+            ui.separator();
+
             ui.indent("ee_pos", |ui| {
-                ui.label(format!("Pos: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z));
-                ui.label("Rot: (see details)");
-            });
-
-            ui.add_space(4.0);
-
-            ui.label("Frames");
-            ui.indent("frames", |ui| {
-                ui.label(format!(
-                    "Frame 0: ({:.3}, {:.3}, {:.3})",
+                ui.monospace(format!(
+                    "Pos: {:>7.2}  {:>7.2}  {:>7.2}",
                     pos.x, pos.y, pos.z
                 ));
+                ui.monospace(format!(
+                    "Rot: [{:>6.3} {:>6.3} {:>6.3}]",
+                    r[0][0], r[0][1], r[0][2]
+                ));
+                ui.monospace(format!(
+                    "     [{:>6.3} {:>6.3} {:>6.3}]",
+                    r[1][0], r[1][1], r[1][2]
+                ));
+                ui.monospace(format!(
+                    "     [{:>6.3} {:>6.3} {:>6.3}]",
+                    r[2][0], r[2][1], r[2][2]
+                ));
             });
+
+            ui.add_space(8.0);
+            if ui.button("View Details").clicked() {
+                state.show_details = true;
+            }
         } else {
-            ui.label("End-Effector");
-            ui.indent("ee_pos", |ui| {
-                ui.label("Pos: --");
-                ui.label("Rot: --");
-            });
-
-            ui.add_space(4.0);
-
-            ui.label("Frames");
-            ui.indent("frames", |ui| {
-                ui.label("Frame 0: --");
-            });
+            ui.add_space(16.0);
+            ui.label("Robot sin segmentos definidos.");
         }
     } else {
-        ui.label("End-Effector");
-        ui.indent("ee_pos", |ui| {
-            ui.label("Pos: --");
-            ui.label("Rot: --");
-        });
-
-        ui.add_space(4.0);
-
-        ui.label("Frames");
-        ui.indent("frames", |ui| {
-            ui.label("Frame 0: --");
-        });
-    }
-
-    ui.add_space(8.0);
-    if ui.button("View Details").clicked() {
-        state.show_details = true;
+        ui.add_space(16.0);
+        ui.colored_label(
+            egui::Color32::DARK_GRAY,
+            "Seleccione o cree un robot en 'Select / Define Robot'",
+        );
     }
 }
 
@@ -577,7 +615,16 @@ fn render_robot_list(ui: &mut egui::Ui, state: &mut super::state::AppState) {
 
     if state.robots.is_empty() {
         ui.add_space(16.0);
-        ui.label("No robots defined yet.");
+        ui.colored_label(
+            egui::Color32::DARK_GRAY,
+            "No hay robots definidos.",
+        );
+        ui.add_space(8.0);
+        if ui.button("+ Cargar FABRI Creator").clicked() {
+            let idx = state.robots.len();
+            state.robots.push(RobotDef::fabri_creator());
+            state.selected_robot = Some(idx);
+        }
     } else {
         for (i, robot) in state.robots.iter().enumerate() {
             ui.horizontal(|ui| {
@@ -654,11 +701,14 @@ fn render_movements(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         if ui.button("< Back").clicked() {
             state.view = PanelView::Main;
         }
-        ui.heading("Movements");
+        ui.heading("Joint Control");
     });
     ui.separator();
-    ui.add_space(16.0);
-    ui.label("Coming soon...");
+    ui.add_space(8.0);
+    ui.colored_label(
+        egui::Color32::DARK_GRAY,
+        "Usá los sliders en la vista principal para controlar las articulaciones en tiempo real.",
+    );
 }
 
 // ── Segment form (shared) ──
@@ -787,16 +837,16 @@ fn render_details(ui: &mut egui::Ui, state: &mut super::state::AppState) {
 
     ui.add_space(8.0);
     ui.separator();
-    ui.heading("End-Effector Pose (T_0_n)");
+    ui.heading("End-Effector Pose (T_0_tool)");
     ui.add_space(4.0);
 
-    // Compute real FK for end-effector
+    // Compute FK con base + tool transform para el efector real
     let domain_robot = state.robots[idx].to_robot();
-    let base = Iso3::identity();
-    let (_frames, effector) = forward_kinematics(base, &domain_robot);
+    let (_frames, effector) = forward_kinematics(base_transform(), &domain_robot);
+    let tool_pose = effector * tool_transform();
 
     // Format the real transformation matrix
-    let t = effector;
+    let t = tool_pose;
     let m = t.to_matrix();
     ui.monospace(format!(
         "┌ {:7.3} {:7.3} {:7.3} {:7.3} ┐\n\

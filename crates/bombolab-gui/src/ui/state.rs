@@ -5,7 +5,7 @@
 // la definición de robots para simulación y el estado del robot físico.
 // ---------------------------------------------------------------------------
 
-use bombolab_core::{DHParams, Joint, JointType, Robot, Segment};
+use bombolab_core::{fabri_creator, DHParams, Joint, JointType, Robot, Segment};
 
 use crate::hardware::{MockRobotController, RobotController};
 
@@ -76,7 +76,11 @@ impl RobotDef {
     /// Los valores angulares se almacenan en grados (formato de la UI).
     /// Los valores lineales están en mm (unidades del fabricante).
     ///
-    /// Tabla DH (Craig):
+    /// Lee la configuración desde `bombolab_core::fabri_creator()` para
+    /// mantener una única fuente de verdad — la GUI SIEMPRE refleja el
+    /// robot canónico.
+    ///
+    /// Tabla DH (estándar):
     /// | i | α     | a    | d    | θ |
     /// |---|-------|------|------|---|
     /// | 1 | -90°  | 15   | 95   | 0 |
@@ -85,22 +89,16 @@ impl RobotDef {
     /// | 4 |  90°  | 35   |  0   | 0 |
     /// | 5 |   0°  |  0   |  0   | 0 |
     pub fn fabri_creator() -> Self {
-        let dh_params: [(f64, f64, f64, f64); 5] = [
-            (0.0, 95.0, 15.0, -90.0),   // α=-90°, a=15, d=95, θ=0°
-            (0.0, 162.0, 0.0, 0.0),     // α=0°, a=0, d=162, θ=0°
-            (0.0, 0.0, 111.0, -90.0),   // α=-90°, a=111, d=0, θ=0°
-            (0.0, 0.0, 35.0, 90.0),     // α=90°, a=35, d=0, θ=0°
-            (0.0, 0.0, 0.0, 0.0),       // α=0°, a=0, d=0, θ=0°
-        ];
-
-        let segments: Vec<SegmentUi> = dh_params
+        let core = fabri_creator();
+        let segments = core
+            .segments
             .iter()
-            .map(|&(theta, d, a, alpha)| SegmentUi {
-                joint_type: JointType::Revolute,
-                theta,
-                d,
-                a,
-                alpha,
+            .map(|seg| SegmentUi {
+                joint_type: seg.joint.joint_type,
+                theta: seg.dh.theta.to_degrees(),
+                d: seg.dh.d,
+                a: seg.dh.a,
+                alpha: seg.dh.alpha.to_degrees(),
             })
             .collect();
 
@@ -116,8 +114,25 @@ impl RobotDef {
     }
 
     /// Convierte este RobotDef a un `Robot` de dominio para cálculos FK.
+    ///
+    /// Todos los joint values se inicializan en 0 (q=0 — home cinemático).
     pub fn to_robot(&self) -> Robot {
         let segments: Vec<Segment> = self.segments.iter().map(|s| s.to_segment(0.0)).collect();
+        Robot::new(segments)
+    }
+
+    /// Convierte este RobotDef a un `Robot` de dominio con valores articulares
+    /// específicos.
+    ///
+    /// `q_deg` — ángulos en **grados** (uno por segmento).
+    /// Cada valor se convierte a radianes y se asigna como joint value del segmento.
+    pub fn to_robot_with_joints(&self, q_deg: &[f64]) -> Robot {
+        let segments: Vec<Segment> = self
+            .segments
+            .iter()
+            .zip(q_deg.iter())
+            .map(|(seg_ui, angle_deg)| seg_ui.to_segment((*angle_deg).to_radians()))
+            .collect();
         Robot::new(segments)
     }
 }
@@ -199,6 +214,30 @@ impl PhysicalRobotState {
 }
 
 // ---------------------------------------------------------------------------
+// Cámara 3D orbital
+// ---------------------------------------------------------------------------
+
+/// Estado de la cámara orbital del viewport 3D.
+pub struct Camera {
+    /// Rotación horizontal alrededor del eje Y (radianes).
+    pub yaw: f32,
+    /// Rotación vertical alrededor del eje X (radianes).
+    pub pitch: f32,
+    /// Factor de zoom adicional (1.0 = escala automática).
+    pub zoom: f32,
+}
+
+impl Camera {
+    pub fn new() -> Self {
+        Self {
+            yaw: -0.45,   // vista frontal-lateral por defecto
+            pitch: -0.35, // ligeramente elevada
+            zoom: 1.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Estado global de la aplicación
 // ---------------------------------------------------------------------------
 
@@ -213,6 +252,13 @@ pub struct AppState {
     pub selected_robot: Option<usize>,
     /// Indica si la ventana de detalles de transformación está abierta.
     pub show_details: bool,
+    /// Ángulos articulares actuales en el modo simulación (grados).
+    /// Se redimensiona al DOF del robot seleccionado.
+    pub sim_angles: Vec<f64>,
+
+    // ─── Viewport 3D ───
+    /// Cámara orbital del viewport (yaw, pitch, zoom).
+    pub camera: Camera,
 
     // ─── General ───
     /// Modo activo de la aplicación (Simulación | Robot Físico).
@@ -234,6 +280,8 @@ impl AppState {
             robots: Vec::new(),
             selected_robot: None,
             show_details: false,
+            sim_angles: Vec::new(),
+            camera: Camera::new(),
             mode: AppMode::Simulation,
             physical_robot: PhysicalRobotState::new(4),
             robot_controller: Box::new(MockRobotController::new(4)),
