@@ -1,44 +1,42 @@
 # Bombolab
 
-Forward Kinematics Visualizer for robotic arms, built in Rust.
+Forward Kinematics Visualizer for robotic arms.
 
-Bombolab models robots as serial chains of revolute/prismatic joints using Denavit-Hartenberg (DH) parameters, computes forward kinematics, and provides a desktop GUI for interactive visualization and parameter editing.
+Bombolab models robots as serial chains of revolute/prismatic joints using Denavit-Hartenberg (DH) parameters, computes forward kinematics, and provides a **web 3D visualizer** (React + Three.js) plus a legacy **desktop GUI** (egui/Rust).
 
 ## Features
 
-- **DH Parameter Editor** -- Define robot segments with theta, d, a, alpha parameters
-- **Joint Types** -- Support for both revolute and prismatic joints
-- **Forward Kinematics** -- Real-time computation of transformation matrices and end-effector pose
-- **3D Wireframe Viewport** -- Isometric skeleton rendering with ground grid
-- **Physical Robot Tab** -- Serial port connection, telemetry, joint angle control
-- **Hardware Abstraction** -- Trait-based controller with mock for offline development
-- **Interactive GUI** -- Desktop application with egui for editing robot configurations
-- **CLI Tools** -- `dh-solve` (numeric/symbolic) and `quaternion-solve`
+- **Forward Kinematics** — Standard DH, validada por diferencias finitas
+- **Jacobian** — Geométrica 6×n, validada numéricamente
+- **Web 3D Visualizer** — React + Three.js con cámara orbital, workspace point cloud
+- **WebSerial** — Control directo del Arduino desde Chrome (sin bridge)
+- **Gripper** — Pinza paralela 75mm con control de apertura
+- **CLI Tools** — `dh-solve` (numeric/symbolic), `quaternion-solve`, `ws-bridge`
+- **Desktop GUI** (legacy) — egui con editor DH paramétrico
 
 ## Getting Started
 
 ### Prerequisites
 
 - [Rust](https://www.rust-lang.org/tools/install) 1.85+ (edition 2024)
-- Cargo (included with Rust)
+- [Node.js](https://nodejs.org/) 20+ (para web)
+- Cargo + npm
 
-### Installation
+### Instalación
 
 ```bash
 git clone https://github.com/charfranr/bombolab.git
 cd bombolab
+
+# Rust (CLI + GUI legacy)
 cargo run
+
+# Web visualizer
+cd web && npm install && npm run dev
+# → http://localhost:5173
 ```
 
 ### Build
-
-```bash
-# Release build
-cargo build --release
-
-# Debug build
-cargo build
-```
 
 ## Project Structure
 
@@ -46,8 +44,20 @@ cargo build
 bombolab/
 ├── Cargo.toml                   # Root app manifest (eframe entrypoint)
 ├── crates/
-│   ├── bombolab-core/           # Domain model, kinematics, math (lib + 2 bins)
+│   ├── bombolab-core/           # Domain model, kinematics, math (lib + bins)
 │   │   └── src/
+│   ├── bombolab-gui/            # Desktop GUI (egui - legacy)
+├── web/                         # Visualizador 3D web
+│   ├── src/
+│   │   ├── kinematics/          # FK en TypeScript
+│   │   ├── components/          # React components (RobotViewer, JointControls)
+│   │   ├── robot/               # Definición del robot
+│   │   └── serial.ts            # WebSerial
+│   ├── package.json
+│   └── vite.config.ts
+├── arduino/                     # Firmware (PlatformIO, C++)
+├── docs/                        # Documentación
+└── entrega-fase2.typ
 │   │       ├── lib.rs           # Re-exports: robot, math, kinematics
 │   │       ├── robot/           # Joint, DHParams, Segment, Robot, errors
 │   │       ├── kinematics/      # Forward kinematics, DH solve
