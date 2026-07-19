@@ -197,12 +197,12 @@ mod tests {
 
     #[test]
     fn fabri_creator_home_pose() {
-        // FABRI Creator DH table (corregida: a₄=35) — misma configuración
-        // que `fabri_creator_jacobian_finite_differences` en home.
+        // FABRI Creator DH table (corregida: a₄=35, J2 θ=-π/2, J3 θ=+π/2)
+        // En home (q=0): brazo vertical d₁+a₂=257, horizontal a₁+a₃+a₄=161, Y=0.
         let table = vec![
             DHParameter::new(-FRAC_PI_2, 15.0, 95.0, 0.0),
-            DHParameter::new(0.0, 0.0, 162.0, 0.0),
-            DHParameter::new(-FRAC_PI_2, 111.0, 0.0, 0.0),
+            DHParameter::new(0.0, 162.0, 0.0, -FRAC_PI_2),
+            DHParameter::new(-FRAC_PI_2, 111.0, 0.0, FRAC_PI_2),
             DHParameter::new(FRAC_PI_2, 35.0, 0.0, 0.0),
             DHParameter::new(0.0, 0.0, 0.0, 0.0),
         ];
@@ -217,12 +217,11 @@ mod tests {
         assert_eq!(j.ncols(), 5);
         assert!(j.iter().all(|v| v.is_finite()));
 
-        // Verify home-pose FK position (sin base transform: empieza en origen).
-        // Arm extends along +X (15+111+35=161), offset Y from d₂=162, Z from d₁=95.
+        // Home (q=0): brazo vertical, extendido en X, Y=0
         let p = sol.translation();
-        assert!((p.x - 161.0).abs() < 1e-10, "home x: {}", p.x);
-        assert!((p.y - 162.0).abs() < 1e-10, "home y: {}", p.y);
-        assert!((p.z - 95.0).abs() < 1e-10, "home z: {}", p.z);
+        assert!((p.x - 161.0).abs() < 1e-10, "home x: {}", p.x);   // a₁+a₃+a₄ = 15+111+35
+        assert!((p.y - 0.0).abs() < 1e-10, "home y: {}", p.y);     // Y=0 (no más offset)
+        assert!((p.z - 257.0).abs() < 1e-10, "home z: {}", p.z);   // d₁+a₂ = 95+162
     }
 
     /// Finite-difference validation of the geometric Jacobian.
@@ -236,15 +235,15 @@ mod tests {
     #[test]
     fn fabri_creator_jacobian_finite_differences() {
 
-        // FABRI Creator: Standard DH (corrected: a₄=35)
-        // DHParameter::new(alpha, a, d, theta)
+        // FABRI Creator: Standard DH (corregida: a₄=35, J2 θ=-π/2, J3 θ=+π/2)
+        // DHParameter::new(alpha, a, d, theta) donde theta = θ_fixed + qᵢ
         let make_table = |q: &[f64; 5]| -> Vec<DHParameter> {
             vec![
-                DHParameter::new(-FRAC_PI_2, 15.0, 95.0, q[0]),
-                DHParameter::new(0.0, 0.0, 162.0, q[1]),
-                DHParameter::new(-FRAC_PI_2, 111.0, 0.0, q[2]),
-                DHParameter::new(FRAC_PI_2, 35.0, 0.0, q[3]),
-                DHParameter::new(0.0, 0.0, 0.0, q[4]),
+                DHParameter::new(-FRAC_PI_2, 15.0, 95.0, 0.0 + q[0]),
+                DHParameter::new(0.0, 162.0, 0.0, -FRAC_PI_2 + q[1]),
+                DHParameter::new(-FRAC_PI_2, 111.0, 0.0, FRAC_PI_2 + q[2]),
+                DHParameter::new(FRAC_PI_2, 35.0, 0.0, 0.0 + q[3]),
+                DHParameter::new(0.0, 0.0, 0.0, 0.0 + q[4]),
             ]
         };
 

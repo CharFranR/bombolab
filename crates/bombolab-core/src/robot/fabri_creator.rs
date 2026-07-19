@@ -16,31 +16,31 @@ pub fn fabri_creator() -> Robot {
 
     let segments = vec![
         // Joint 1 — Base (Yaw)
-        // α = -90°, a = 15 mm, d = 95 mm
+        // θ=0,  d=95,  a=15,  α=-π/2
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
             DHParams::new(0.0, 95.0, 15.0, -FRAC_PI_2),
         ),
-        // Joint 2 — Shoulder
-        // α = 0°, a = 0 mm, d = 162 mm
+        // Joint 2 — Shoulder (eleva el brazo)
+        // θ=-π/2,  d=0,  a=162,  α=0
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(0.0, 162.0, 0.0, 0.0),
+            DHParams::new(-FRAC_PI_2, 0.0, 162.0, 0.0),
         ),
-        // Joint 3 — Elbow
-        // α = -90°, a = 111 mm, d = 0 mm
+        // Joint 3 — Elbow (extiende el antebrazo)
+        // θ=+π/2,  d=0,  a=111,  α=-π/2
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(0.0, 0.0, 111.0, -FRAC_PI_2),
+            DHParams::new(FRAC_PI_2, 0.0, 111.0, -FRAC_PI_2),
         ),
         // Joint 4 — Wrist Roll
-        // α = 90°, a = 35 mm, d = 0 mm
+        // θ=0,  d=0,  a=35,  α=+π/2
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
             DHParams::new(0.0, 0.0, 35.0, FRAC_PI_2),
         ),
         // Joint 5 — Wrist Pitch
-        // α = 0°, a = 0 mm, d = 0 mm
+        // θ=0,  d=0,  a=0,  α=0
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
             DHParams::new(0.0, 0.0, 0.0, 0.0),

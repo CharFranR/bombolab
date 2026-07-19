@@ -25,7 +25,12 @@ impl Segment {
 
     pub fn dh_params(&self) -> (f64, f64, f64, f64) {
         match self.joint.joint_type {
-            JointType::Revolute => (self.joint.value, self.dh.d, self.dh.a, self.dh.alpha),
+            JointType::Revolute => (
+                self.joint.value + self.dh.theta,
+                self.dh.d,
+                self.dh.a,
+                self.dh.alpha,
+            ),
             JointType::Prismatic => (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha),
         }
     }
