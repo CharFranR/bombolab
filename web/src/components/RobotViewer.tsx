@@ -141,9 +141,10 @@ function RobotScene({ robot }: { robot: RobotDef }) {
     [robot.segments, robot.baseTransform],
   );
 
-  // Posiciones de cada frame (tx=f[3], ty=f[7], tz=f[11] en row-major)
+  // Posiciones: robot X→Three X, robot Z→Three Y (up!), robot Y→Three Z
+  // DH tiene Z=up, Three.js tiene Y=up — swap Y↔Z
   const positions = useMemo(
-    () => frames.map(f => [f[3], f[7], f[11]] as [number, number, number]),
+    () => frames.map(f => [f[3], f[11], f[7]] as [number, number, number]),
     [frames],
   );
 
@@ -190,7 +191,7 @@ function RobotScene({ robot }: { robot: RobotDef }) {
         const tool = dhMatrix({ theta: 0, d: 0, a: robot.toolTransform[0], alpha: 0 }, 0);
         // Aplicar tool: last · tool
         const m = mulMat4(last, tool);
-        const tip: [number, number, number] = [m[3], m[7], m[11]];
+        const tip: [number, number, number] = [m[3], m[11], m[7]];
         return (
           <>
             <Link from={positions[positions.length - 1]} to={tip} width={6} />
