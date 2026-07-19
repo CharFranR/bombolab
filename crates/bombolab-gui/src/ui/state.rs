@@ -114,8 +114,25 @@ impl RobotDef {
     }
 
     /// Convierte este RobotDef a un `Robot` de dominio para cálculos FK.
+    ///
+    /// Todos los joint values se inicializan en 0 (q=0 — home cinemático).
     pub fn to_robot(&self) -> Robot {
         let segments: Vec<Segment> = self.segments.iter().map(|s| s.to_segment(0.0)).collect();
+        Robot::new(segments)
+    }
+
+    /// Convierte este RobotDef a un `Robot` de dominio con valores articulares
+    /// específicos.
+    ///
+    /// `q_deg` — ángulos en **grados** (uno por segmento).
+    /// Cada valor se convierte a radianes y se asigna como joint value del segmento.
+    pub fn to_robot_with_joints(&self, q_deg: &[f64]) -> Robot {
+        let segments: Vec<Segment> = self
+            .segments
+            .iter()
+            .zip(q_deg.iter())
+            .map(|(seg_ui, angle_deg)| seg_ui.to_segment((*angle_deg).to_radians()))
+            .collect();
         Robot::new(segments)
     }
 }
@@ -211,6 +228,9 @@ pub struct AppState {
     pub selected_robot: Option<usize>,
     /// Indica si la ventana de detalles de transformación está abierta.
     pub show_details: bool,
+    /// Ángulos articulares actuales en el modo simulación (grados).
+    /// Se redimensiona al DOF del robot seleccionado.
+    pub sim_angles: Vec<f64>,
 
     // ─── General ───
     /// Modo activo de la aplicación (Simulación | Robot Físico).
@@ -232,6 +252,7 @@ impl AppState {
             robots: Vec::new(),
             selected_robot: None,
             show_details: false,
+            sim_angles: Vec::new(),
             mode: AppMode::Simulation,
             physical_robot: PhysicalRobotState::new(4),
             robot_controller: Box::new(MockRobotController::new(4)),
