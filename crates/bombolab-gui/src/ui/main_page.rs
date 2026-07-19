@@ -13,7 +13,7 @@
 use bombolab_core::{base_transform, forward_kinematics, tool_transform, JointType};
 
 use crate::ui::state::{AppMode, PanelView, RobotDef, SegmentUi};
-use crate::ui::viewport::{draw_robot_skeleton, Point3D};
+use crate::ui::viewport::{draw_axes, draw_robot_skeleton, Point3D};
 // ---------------------------------------------------------------------------
 // Render principal (llamado desde lib.rs → main.rs)
 // ---------------------------------------------------------------------------
@@ -76,8 +76,28 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         let rect = ui.available_rect_before_wrap();
         let painter = ui.painter();
 
+        // ── Control de cámara: drag rota, scroll hace zoom ──
+        let (drag_delta, scroll_delta) = ui.input(|i| {
+            let drag = if i.pointer.button_down(egui::PointerButton::Primary) {
+                i.pointer.delta()
+            } else {
+                egui::vec2(0.0, 0.0)
+            };
+            let scroll = i.smooth_scroll_delta;
+            (drag, scroll)
+        });
+
+        // Aplicar drag → yaw/pitch
+        if drag_delta != egui::Vec2::ZERO || scroll_delta != egui::Vec2::ZERO {
+            state.camera.yaw += drag_delta.x * 0.008;
+            state.camera.pitch += drag_delta.y * 0.008;
+            state.camera.pitch = state.camera.pitch.clamp(-1.5, 1.5);
+            state.camera.zoom = (state.camera.zoom * (1.0 + scroll_delta.y * 0.002))
+                .clamp(0.1, 10.0);
+        }
+
         // Fondo oscuro tipo viewport 3D
-        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(30, 30, 30));
+        painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(28, 28, 32));
 
         // Calcular los puntos 3D según el modo activo
         let points: Vec<Point3D> = match state.mode {
@@ -94,16 +114,23 @@ pub fn render(ui: &mut egui::Ui, state: &mut super::state::AppState) {
         };
 
         if has_valid_data {
-            // ── Renderizar esqueleto 3D ──
+            let viewport_size = rect.width().min(rect.height());
+
+            // ── Renderizar esqueleto 3D con cámara orbital ──
             draw_robot_skeleton(
                 &painter,
                 rect,
                 &points,
-                egui::Color32::from_rgb(255, 200, 50),   // Color articulaciones (amarillo)
-                egui::Color32::from_rgb(220, 180, 60),   // Color eslabones (oro)
+                &state.camera,
+                egui::Color32::from_rgb(255, 180, 50),   // Color articulaciones
+                egui::Color32::from_rgb(220, 160, 60),   // Color eslabones
                 3.0,                                      // Grosor de líneas (px)
                 6.0,                                      // Radio de círculos (px)
+                true,                                     // Mostrar labels
             );
+
+            // ── Ejes de coordenadas ──
+            draw_axes(&painter, rect, &state.camera, viewport_size * 0.003, 60.0);
         } else {
             // ── Placeholder ──
             let msg = match state.mode {

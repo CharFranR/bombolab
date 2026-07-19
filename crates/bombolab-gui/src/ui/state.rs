@@ -214,6 +214,30 @@ impl PhysicalRobotState {
 }
 
 // ---------------------------------------------------------------------------
+// Cámara 3D orbital
+// ---------------------------------------------------------------------------
+
+/// Estado de la cámara orbital del viewport 3D.
+pub struct Camera {
+    /// Rotación horizontal alrededor del eje Y (radianes).
+    pub yaw: f32,
+    /// Rotación vertical alrededor del eje X (radianes).
+    pub pitch: f32,
+    /// Factor de zoom adicional (1.0 = escala automática).
+    pub zoom: f32,
+}
+
+impl Camera {
+    pub fn new() -> Self {
+        Self {
+            yaw: -0.45,   // vista frontal-lateral por defecto
+            pitch: -0.35, // ligeramente elevada
+            zoom: 1.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Estado global de la aplicación
 // ---------------------------------------------------------------------------
 
@@ -231,6 +255,10 @@ pub struct AppState {
     /// Ángulos articulares actuales en el modo simulación (grados).
     /// Se redimensiona al DOF del robot seleccionado.
     pub sim_angles: Vec<f64>,
+
+    // ─── Viewport 3D ───
+    /// Cámara orbital del viewport (yaw, pitch, zoom).
+    pub camera: Camera,
 
     // ─── General ───
     /// Modo activo de la aplicación (Simulación | Robot Físico).
@@ -253,6 +281,7 @@ impl AppState {
             selected_robot: None,
             show_details: false,
             sim_angles: Vec::new(),
+            camera: Camera::new(),
             mode: AppMode::Simulation,
             physical_robot: PhysicalRobotState::new(4),
             robot_controller: Box::new(MockRobotController::new(4)),
