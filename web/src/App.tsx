@@ -1,50 +1,27 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
-import { fabriCreator, fabriCreatorSegments } from './robot/fabri_creator';
-import { forwardKinematics } from './kinematics/forward';
-import { IkSolver } from './kinematics/ik';
+import { initWasm, fabriCreator, forwardKinematics, solveIk } from './wasm';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 
-const ikSolver = new IkSolver();
-
-function generateWorkspace(samples: number): [number, number, number][] {
-  const points: [number, number, number][] = [];
-  const robot = fabriCreator();
-  const DEG = Math.PI / 180;
-  for (let i = 0; i < samples; i++) {
-    const q = robot.segments.map(() => (Math.random() * 160 - 80) * DEG);
-    const segs = robot.segments.map((s, j) => ({ ...s, q: q[j] }));
-    const fk = forwardKinematics(segs, robot.baseTransform);
-    // tool transform
-    const tool = [1, 0, 0, robot.toolTransform[0],
-                  0, 1, 0, robot.toolTransform[1],
-                  0, 0, 1, robot.toolTransform[2],
-                  0, 0, 0, 1] as const;
-    const m = mulMat4(fk.ee, tool as any);
-    points.push([m[3], m[11], m[7]]); // Three.js Y-up swap
-  }
-  return points;
-}
-
-function mulMat4(a: any, b: any): number[] {
-  const m = (r: number, c: number) =>
-    a[r * 4 + 0] * b[0 * 4 + c] +
-    a[r * 4 + 1] * b[1 * 4 + c] +
-    a[r * 4 + 2] * b[2 * 4 + c] +
-    a[r * 4 + 3] * b[3 * 4 + c];
-  return [
-    m(0,0), m(0,1), m(0,2), m(0,3),
-    m(1,0), m(1,1), m(1,2), m(1,3),
-    m(2,0), m(2,1), m(2,2), m(2,3),
-    m(3,0), m(3,1), m(3,2), m(3,3),
-  ];
+function LoadingScreen({ error }: { error?: string }) {
+  return (
+    <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+      {error ? (
+        <p style={{ fontSize: 14, color: '#e55' }}>Error: {error}</p>
+      ) : (
+        <p style={{ fontSize: 16, color: '#888' }}>Cargando WASM...</p>
+      )}
+    </div>
+  );
 }
 
 export default function App() {
-  const [robot, setRobot] = useState<RobotDef>(() => fabriCreator());
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [robot, setRobot] = useState<RobotDef | null>(null);
   const [gripper, setGripper] = useState(50);
   const [connected, setConnected] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
@@ -54,12 +31,15 @@ export default function App() {
   const [ikError, setIkError] = useState<number | null>(null);
   const portRef = useRef<SerialPort | null>(null);
 
-  const workspacePoints = useMemo(
-    () => showWorkspace ? generateWorkspace(2000) : [],
-    [showWorkspace],
-  );
+  useEffect(() => {
+    initWasm()
+      .then(() => {
+        setRobot(fabriCreator());
+        setReady(true);
+      })
+      .catch((e) => setLoadError(e.message ?? String(e)));
+  }, []);
 
-  // Enviar q al Arduino via serial — guardado en ref para acceso desde handlers
   const sendQ = useCallback((segments: Segment[], g: number) => {
     const port = portRef.current;
     if (!port) return;
@@ -74,18 +54,18 @@ export default function App() {
   sendQRef.current = sendQ;
 
   const handleConnect = useCallback(async () => {
+    if (!robot) return;
     try {
       setSerialError(null);
       const port = await requestSerialPort();
       await openPort(port);
       portRef.current = port;
       setConnected(true);
-      // Enviar estado actual al conectar
       sendQ(robot.segments, gripper);
     } catch (e: any) {
       setSerialError(e.message ?? 'Error al conectar');
     }
-  }, [robot.segments, gripper, sendQ]);
+  }, [robot, gripper, sendQ]);
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -97,37 +77,39 @@ export default function App() {
 
   const handleJointChange = useCallback((index: number, qRad: number) => {
     setRobot(prev => {
-      const segments = prev.segments.map((seg, i) => ({
-        ...seg,
-        q: i === index ? qRad : seg.q,
-      }));
-      return { ...prev, segments };
+      if (!prev) return prev;
+      return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: i === index ? qRad : seg.q })) };
     });
   }, []);
 
-  // IK: cuando el target cambia, resolver y actualizar q
   useEffect(() => {
-    if (!ikMode || !ikTarget) return;
-    const result = ikSolver.solvePosition(ikTarget, robot.segments.map(s => s.q), robot);
+    if (!ikMode || !ikTarget || !robot) return;
+    const result = solveIk(robot, ikTarget, robot.segments.map(s => s.q));
     setIkError(result.error);
     setRobot(prev => {
-      const segments = prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 }));
-      return { ...prev, segments };
+      if (!prev) return prev;
+      return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
     });
   }, [ikTarget, ikMode]);
 
-  // Enviar q cada vez que cambia
   useEffect(() => {
+    if (!robot) return;
     sendQ(robot.segments, gripper);
-  }, [robot.segments, gripper, sendQ]);
+  }, [robot, gripper, sendQ]);
 
   const handleReset = useCallback(() => {
     const home = fabriCreator();
     setRobot(home);
     setGripper(50);
-    // Forzar envío a home usando la ref (evita stale closure)
     sendQRef.current(home.segments, 50);
   }, []);
+
+  const workspacePoints = useMemo(
+    () => showWorkspace ? generateWorkspace(2000) : [],
+    [showWorkspace],
+  );
+
+  if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc' }}>
@@ -201,7 +183,6 @@ export default function App() {
           <button
             onClick={() => {
               if (!ikMode) {
-                // Entrar en IK: target en posición actual del tool
                 const fk = forwardKinematics(robot.segments, robot.baseTransform);
                 const toolM = [
                   1, 0, 0, robot.toolTransform[0],
@@ -291,4 +272,17 @@ export default function App() {
       <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} />
     </div>
   );
+}
+
+function generateWorkspace(samples: number): [number, number, number][] {
+  const points: [number, number, number][] = [];
+  const robot = fabriCreator();
+  const DEG = Math.PI / 180;
+  for (let i = 0; i < samples; i++) {
+    const q = robot.segments.map(() => (Math.random() * 160 - 80) * DEG);
+    const segs = robot.segments.map((s, j) => ({ ...s, q: q[j] }));
+    const fk = forwardKinematics(segs, robot.baseTransform);
+    points.push([fk.ee[3], fk.ee[11], fk.ee[7]]);
+  }
+  return points;
 }

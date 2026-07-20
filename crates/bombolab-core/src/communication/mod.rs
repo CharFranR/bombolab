@@ -35,6 +35,7 @@
 //! | A0  | S5    | J5      | Wrist pitch  |
 //! | A1  | S6    | Gripper | —            |
 
+#[cfg(feature = "serial")]
 pub mod arduino_nano;
 pub mod command;
 pub mod interpolation;
@@ -42,6 +43,7 @@ pub mod mapper;
 
 use std::fmt;
 
+#[cfg(feature = "serial")]
 pub use arduino_nano::ArduinoNano;
 pub use command::ServoCommand;
 pub use interpolation::{

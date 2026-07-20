@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RobotDef, Mat4 } from '../kinematics/types';
-import { forwardKinematics, dhMatrix } from '../kinematics/forward';
+import { forwardKinematics } from '../wasm';
 import IkTarget from './IkTarget';
 
 // ─── Colores ───────────────────────────────────────────────────────────────
@@ -223,7 +223,12 @@ function RobotScene({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTa
       {/* Gripper paralelo 75mm — acostado en XY, mordazas abren en Y (laterales) */}
       {frames.length > 0 && (() => {
         const last = frames[frames.length - 1];
-        const tool = dhMatrix({ theta: 0, d: 0, a: robot.toolTransform[0], alpha: 0 }, 0);
+        const tool: Mat4 = [
+          1, 0, 0, robot.toolTransform[0],
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1,
+        ];
         const m = mulMat4(last, tool);
         const tp = framePose(m);
         const tq = new THREE.Quaternion(...tp.quat);

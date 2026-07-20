@@ -3,7 +3,7 @@ use std::fmt;
 use nalgebra::SMatrix;
 
 use crate::math::{Iso3, Vec3};
-use crate::robot::{DHParams, Joint, Robot, Segment};
+use crate::robot::{DHParams, Joint, JointType, Robot, Segment};
 
 use super::forward::forward_kinematics;
 
@@ -130,19 +130,30 @@ impl IkSolver {
             }
 
             // 3. Jacobiana lineal 3×n
-            //    Joint i rota sobre Z_{i-1}. frames[i] = T_0_{i+1}
-            //    J1 usa Z₀ (base), J2 usa Z₁ (frames[0]), etc.
+            //    Joint i rota sobre el eje de su tipo:
+            //    - Revolute / Prismatic: eje Z_{i-1}
+            //    - Twist:               eje X_{i-1}
+            //    J1 usa el eje base (Z₀ o X₀), J2 usa frames[0], etc.
             let mut j = SMatrix::<f64, 3, 5>::zeros();
             let base_z = Vec3::z();
+            let base_x = Vec3::x();
             let base_p = base.translation.vector;
             for i in 0..n {
-                let (z_i, p_i) = if i == 0 {
-                    (base_z, base_p)
+                let (axis_i, p_i) = if i == 0 {
+                    let ax = match robot_q.segments[i].joint.joint_type {
+                        JointType::Twist => base_x,
+                        _ => base_z,
+                    };
+                    (ax, base_p)
                 } else {
                     let prev = &frames[i - 1];
-                    (prev * Vec3::z(), prev.translation.vector)
+                    let ax = match robot_q.segments[i].joint.joint_type {
+                        JointType::Twist => prev * Vec3::x(),
+                        _ => prev * Vec3::z(),
+                    };
+                    (ax, prev.translation.vector)
                 };
-                j.column_mut(i).copy_from(&z_i.cross(&(p_ee - p_i)));
+                j.column_mut(i).copy_from(&axis_i.cross(&(p_ee - p_i)));
             }
 
             // 4. DLS: Δq = J^T · (J·J^T + λ²·I)⁻¹ · error

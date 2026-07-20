@@ -9,6 +9,7 @@ export interface DHParams {
 /** Parámetros DH + valor articular q. */
 export interface Segment extends DHParams {
   q: number; // rad — valor actual de la articulación
+  joint_type?: string; // "revolute", "twist", "prismatic"
 }
 
 /** Matriz 4×4 como array plano [row0col0, row0col1, ...] */

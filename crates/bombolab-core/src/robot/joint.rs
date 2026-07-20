@@ -6,6 +6,7 @@ use super::errors::{Error, Result};
 pub enum JointType {
     Revolute,
     Prismatic,
+    Twist,
 }
 
 impl fmt::Display for JointType {
@@ -13,6 +14,7 @@ impl fmt::Display for JointType {
         match self {
             JointType::Revolute => write!(f, "R"),
             JointType::Prismatic => write!(f, "P"),
+            JointType::Twist => write!(f, "T"),
         }
     }
 }
@@ -115,5 +117,6 @@ mod tests {
     fn test_joint_type_display() {
         assert_eq!(JointType::Revolute.to_string(), "R");
         assert_eq!(JointType::Prismatic.to_string(), "P");
+        assert_eq!(JointType::Twist.to_string(), "T");
     }
 }

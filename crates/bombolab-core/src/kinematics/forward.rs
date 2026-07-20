@@ -1,16 +1,25 @@
 use crate::math::{Iso3, Quat, Rot3, Tras, Vec3};
 
-use crate::robot::{Robot, Segment};
+use crate::robot::{JointType, Robot, Segment};
 
 pub fn matrix_from_segment(segment: &Segment) -> Iso3 {
-    let (theta, d, a, alpha) = segment.dh_params();
-
-    let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
-    let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
-    let rotation = Quat::from_rotation_matrix(&(rot_z * rot_x));
-    let translation = Tras::new(a * theta.cos(), a * theta.sin(), d);
-
-    Iso3::from_parts(translation, rotation)
+    match segment.joint.joint_type {
+        JointType::Twist => {
+            let (_, _, a, alpha) = segment.dh_params();
+            let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&rot_x);
+            let translation = Tras::new(a, 0.0, 0.0);
+            Iso3::from_parts(translation, rotation)
+        }
+        JointType::Revolute | JointType::Prismatic => {
+            let (theta, d, a, alpha) = segment.dh_params();
+            let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
+            let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&(rot_z * rot_x));
+            let translation = Tras::new(a * theta.cos(), a * theta.sin(), d);
+            Iso3::from_parts(translation, rotation)
+        }
+    }
 }
 
 pub fn forward_kinematics(base: Iso3, robot: &Robot) -> (Vec<Iso3>, Iso3) {

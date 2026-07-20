@@ -1,11 +1,12 @@
 import type { Mat4, Pose, RobotDef } from '../kinematics/types';
-import { forwardKinematics } from '../kinematics/forward';
+import { forwardKinematics } from '../wasm';
 import { useMemo } from 'react';
 
 export default function InfoPanel({ robot }: { robot: RobotDef }) {
   const result = useMemo(
     () => {
       const fk = forwardKinematics(robot.segments, robot.baseTransform);
+      const frames = fk.frames;
       // Aplicar tool transform
       const tool = fk.frames[fk.frames.length - 1];
       const toolMat: Mat4 = [
@@ -15,7 +16,7 @@ export default function InfoPanel({ robot }: { robot: RobotDef }) {
         0, 0, 0, 1,
       ];
       const m = mulMat4(tool, toolMat);
-      return { ee: fk.pose, tool: poseFromMat4(m) };
+      return { ee: poseFromMat4(frames[frames.length - 1]), tool: poseFromMat4(m) };
     },
     [robot.segments, robot.baseTransform, robot.toolTransform],
   );

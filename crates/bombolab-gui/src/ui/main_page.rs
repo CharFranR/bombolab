@@ -723,6 +723,7 @@ fn render_segment(ui: &mut egui::Ui, index: usize, segment: &mut SegmentUi) {
                 ui.label("Type:");
                 ui.selectable_value(&mut segment.joint_type, JointType::Revolute, "Revolute");
                 ui.selectable_value(&mut segment.joint_type, JointType::Prismatic, "Prismatic");
+                ui.selectable_value(&mut segment.joint_type, JointType::Twist, "Twist");
             });
 
             ui.add_space(4.0);
@@ -749,6 +750,14 @@ fn render_segment(ui: &mut egui::Ui, index: usize, segment: &mut SegmentUi) {
                             .suffix(" m")
                             .text("d"),
                     );
+                    ui.add(egui::Slider::new(&mut segment.a, 0.0..=10.0).text("a"));
+                    ui.add(
+                        egui::Slider::new(&mut segment.alpha, -360.0..=360.0)
+                            .suffix("°")
+                            .text("α"),
+                    );
+                }
+                JointType::Twist => {
                     ui.add(egui::Slider::new(&mut segment.a, 0.0..=10.0).text("a"));
                     ui.add(
                         egui::Slider::new(&mut segment.alpha, -360.0..=360.0)

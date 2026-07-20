@@ -1,8 +1,11 @@
+#[cfg(feature = "serial")]
 pub mod communication;
+
 pub mod kinematics;
 pub mod math;
 pub mod robot;
 
+#[cfg(feature = "serial")]
 pub use communication::{ServoCommand, ServoMapper};
 pub use kinematics::{
     compute_a_matrix, forward_kinematics, matrix_from_segment, solve, DHParameter, DHSolution,

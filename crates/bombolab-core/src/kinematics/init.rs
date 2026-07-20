@@ -38,14 +38,15 @@ fn read_i32(prompt: &str) -> i32 {
 
 fn read_joint_type(prompt: &str) -> JointType {
     loop {
-        print!("{} (0 = Revolute, 1 = Prismatic): ", prompt);
+        print!("{} (0 = Revolute, 1 = Prismatic, 2 = Twist): ", prompt);
         io::stdout().flush().unwrap();
         let mut input = String::new();
         io::stdin().read_line(&mut input).unwrap();
         match input.trim() {
             "0" => return JointType::Revolute,
             "1" => return JointType::Prismatic,
-            _ => println!("Invalid option, enter 0 or 1."),
+            "2" => return JointType::Twist,
+            _ => println!("Invalid option, enter 0, 1, or 2."),
         }
     }
 }

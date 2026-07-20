@@ -16,6 +16,7 @@ path = "src/bin/quaternion-solve.rs"
 [[bin]]
 name = "serial-test"
 path = "src/bin/serial-test.rs"
+required-features = ["serial"]
 
 [[bin]]
 name = "ws-bridge"
@@ -24,8 +25,8 @@ required-features = ["ws-bridge"]
 
 [dependencies]
 nalgebra = "0.35.0"
-serialport = "4"
-ctrlc = "3"
+serialport = { version = "4", optional = true }
+ctrlc = { version = "3", optional = true }
 futures-util = { version = "0.3", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
@@ -33,4 +34,6 @@ tokio = { version = "1", features = ["full"], optional = true }
 tokio-tungstenite = { version = "0.24", optional = true }
 
 [features]
-ws-bridge = ["futures-util", "serde", "serde_json", "tokio", "tokio-tungstenite"]
+default = ["serial"]
+serial = ["dep:serialport", "dep:ctrlc"]
+ws-bridge = ["serial", "futures-util", "serde", "serde_json", "tokio", "tokio-tungstenite"]
