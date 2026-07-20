@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b82e27b9.js";
+            window.path_to_searchindex_js = "../searchindex-65767c36.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4e9e8c5a.js"></script>
@@ -181,7 +181,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h1>
-<p>Bombolab is a Rust workspace with a clean separation between the math/model layer and the GUI layer.</p>
+<p>Bombolab is a Rust workspace with WASM interop and a web frontend.</p>
 <h2 id="workspace-layout"><a class="header" href="#workspace-layout">Workspace Layout</a></h2>
 <pre><code>bombolab/
 ├── Cargo.toml                    # Workspace root
@@ -199,39 +199,52 @@
 │   │       │   └── constants.rs  # PI, DEG_TO_RAD, RAD_TO_DEG
 │   │       ├── robot/
 │   │       │   ├── mod.rs
-│   │       │   ├── joint.rs      # JointType, Joint
+│   │       │   ├── joint.rs      # JointType (Revolute, Prismatic, Twist), Joint
 │   │       │   ├── link.rs       # DHParams
-│   │       │   ├── segment.rs    # Segment, Robot (with servo offsets)
+│   │       │   ├── segment.rs    # Segment, Robot (with servo offsets/directions)
 │   │       │   ├── errors.rs     # Error, Result types
 │   │       │   └── fabri_creator.rs  # FABRI Creator robot config
 │   │       ├── kinematics/
 │   │       │   ├── mod.rs
 │   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
+│   │       │   ├── ik.rs         # IkSolver (DLS IK), IkError
 │   │       │   └── init.rs       # Interactive CLI tester
 │   │       ├── communication/    # Serial communication with hardware
 │   │       │   ├── mod.rs        # ConnectionError, protocol constants
 │   │       │   ├── arduino_nano.rs   # ArduinoNano serial wrapper
+│   │       │   ├── mapper.rs     # ServoMapper (q → servo degrees)
 │   │       │   └── interpolation.rs  # Smooth servo movement
 │   │       └── bin/
 │   │           ├── dh-solve.rs           # DH table solver CLI
 │   │           ├── quaternion-solve.rs   # Quaternion operations CLI
 │   │           └── serial-test.rs        # Interactive serial tester
-│   └── bombolab-gui/             # Desktop GUI
+│   └── bombolab-wasm/             # WASM bridge
 │       ├── Cargo.toml
-│       └── src/
-│           ├── lib.rs
-│           └── ui/
-│               ├── main_page.rs  # egui rendering and layout
-│               └── state.rs      # AppState, RobotDef, SegmentUi
-└── docs/
-    ├── forward_kinematics.md     # Original FK documentation
-    └── src/                      # mdBook source
-        ├── SUMMARY.md
-        └── ...
+│       └── src/lib.rs             # FK, IK, fabri_creator exports via wasm-bindgen
+├── web/                           # Web visualizer
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── components/            # React components
+│       │   ├── RobotViewer.tsx    # 3D scene (Three.js), FK rendering, gripper
+│       │   ├── JointControls.tsx  # Joint slider UI
+│       │   ├── InfoPanel.tsx      # End-effector position/rotation display
+│       │   └── IkTarget.tsx       # Draggable IK target
+│       ├── kinematics/types.ts    # TypeScript interfaces (Mat4, Segment, RobotDef)
+│       ├── wasm.ts                # WASM bridge: FK, IK, robot factory
+│       ├── serial.ts              # WebSerial
+│       └── pkg/                   # Generated WASM binary (gitignored)
+├── arduino/                       # PlatformIO firmware (C++)
+├── book/                          # mdBook source
+│   ├── book.toml
+│   └── src/
+│       ├── SUMMARY.md
+│       └── ...
+└── docs/fabri-creator/            # Hardware docs, DH table definition
 </code></pre>
 <h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate Responsibilities</a></h2>
 <h3 id="bombolab-core"><a class="header" href="#bombolab-core">bombolab-core</a></h3>
-<p>The core library contains all math, data models, and kinematics computation. It has <strong>no GUI dependency</strong>.</p>
+<p>The core library contains all math, data models, and kinematics computation. It has <strong>no GUI dependency</strong> and can be compiled to WASM.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -242,62 +255,69 @@
 <tr><td><code>math::hmatrix</code></td><td><code>Movement</code>, <code>rotation_and_translation()</code>, <code>translation_and_rotation()</code>, <code>make_movement()</code></td></tr>
 <tr><td><code>math::quaternion</code></td><td><code>Quaternion</code>, <code>solve_add()</code>, <code>solve_subtract()</code>, <code>solve_multiply()</code>, <code>solve_divide()</code></td></tr>
 <tr><td><code>math::constants</code></td><td><code>PI</code>, <code>DEG_TO_RAD</code>, <code>RAD_TO_DEG</code>, <code>FRAC_PI_2</code>, <code>FRAC_PI_4</code>, <code>EPS</code>, <code>TAU</code></td></tr>
-<tr><td><code>robot::joint</code></td><td><code>JointType</code> (Revolute/Prismatic), <code>Joint</code></td></tr>
+<tr><td><code>robot::joint</code></td><td><code>JointType</code> (Revolute/Prismatic/<strong>Twist</strong>), <code>Joint</code></td></tr>
 <tr><td><code>robot::link</code></td><td><code>DHParams</code></td></tr>
-<tr><td><code>robot::segment</code></td><td><code>Segment</code>, <code>Robot</code> (with <code>home_pose</code>, <code>servo_offsets</code>, q/servo conversion)</td></tr>
+<tr><td><code>robot::segment</code></td><td><code>Segment</code>, <code>Robot</code> (with <code>home_pose</code>, <code>servo_offsets</code>, <code>servo_directions</code>, q/servo conversion)</td></tr>
 <tr><td><code>robot::errors</code></td><td><code>Error</code> enum, <code>Result&lt;T&gt;</code> type alias</td></tr>
 <tr><td><code>robot::fabri_creator</code></td><td>FABRI Creator 5-DOF robot configuration, base/tool transforms</td></tr>
 <tr><td><code>kinematics::forward</code></td><td><code>forward_kinematics()</code>, <code>matrix_from_segment()</code></td></tr>
+<tr><td><code>kinematics::ik</code></td><td><code>IkSolver</code>, <code>IkError</code></td></tr>
 <tr><td><code>kinematics::init</code></td><td>Interactive CLI for building robots and testing FK</td></tr>
 <tr><td><code>communication</code></td><td>Serial protocol constants, <code>ConnectionError</code> enum</td></tr>
 <tr><td><code>communication::arduino_nano</code></td><td><code>ArduinoNano</code> serial connection wrapper</td></tr>
+<tr><td><code>communication::mapper</code></td><td><code>ServoMapper</code> — maps kinematic q to servo angles</td></tr>
 <tr><td><code>communication::interpolation</code></td><td><code>InterpolationConfig</code>, <code>interpolate_joint()</code>, <code>interpolate_all()</code></td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="bombolab-gui"><a class="header" href="#bombolab-gui">bombolab-gui</a></h3>
-<p>The GUI layer depends on <code>bombolab-core</code> and adds:</p>
+<h3 id="bombolab-wasm"><a class="header" href="#bombolab-wasm">bombolab-wasm</a></h3>
+<p>The WASM bridge exposes core functionality to the web frontend:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Module</th><th>What It Contains</th></tr>
+<tr><th>Export</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ui::state</code></td><td><code>AppState</code>, <code>RobotDef</code>, <code>SegmentUi</code>, <code>PanelView</code></td></tr>
-<tr><td><code>ui::main_page</code></td><td>egui panel layout, robot editor, FK visualization</td></tr>
+<tr><td><code>fabri_creator()</code></td><td>Returns FABRI Creator robot definition</td></tr>
+<tr><td><code>forward_kinematics(robot)</code></td><td>Compute FK frames + end-effector</td></tr>
+<tr><td><code>solve_ik(robot, target, q_init)</code></td><td>IK solver returning q + convergence</td></tr>
+<tr><td><code>base_transform()</code> / <code>tool_transform()</code></td><td>Robot transforms</td></tr>
 </tbody>
 </table>
 </div>
+<p>All matrix data is serialized as row-major 3×4 arrays, matching the original TypeScript FK format.</p>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
-<pre><code>User Input (GUI or CLI)
-        │
-        ▼
-┌─────────────────┐
-│  Robot / Table   │  ← robot model or raw DH parameters
+<pre><code>┌─────────────────┐
+│  Sliders / IK   │  ← user input (React UI)
+│  Target Drag     │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Forward Kin.    │  ← forward_kinematics() or solve()
+│  wasm.ts         │  ← TypeScript bridge → Rust WASM
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Iso3 /     │  ← frames, end-effector pose
-│  Matrix4         │
+│  Rust core       │  ← forward_kinematics() / IkSolver
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Display         │  ← GUI rendering or CLI output
-└─────────────────┘
+│  frames (Iso3)   │  ← poses in DH coordinates
+└────────┬────────┘
+         │
+         ▼
+┌──────────────────────────┐
+│  framePose() → Three.js  │  ← coordinate swap (Z-up → Y-up)
+└──────────────────────────┘
 </code></pre>
 <h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency Graph</a></h2>
 <pre><code>bombolab (workspace root)
 ├── bombolab-core    (nalgebra, serialport, ctrlc)
-└── bombolab-gui     (bombolab-core + egui + eframe)
+└── bombolab-wasm    (bombolab-core + wasm-bindgen + serde)
 </code></pre>
-<p>The core crate depends on <code>nalgebra</code> for linear algebra, <code>serialport</code> for hardware communication, and <code>ctrlc</code> for clean shutdown handling. The GUI crate adds <code>egui</code> and <code>eframe</code> for the desktop interface.</p>
+<p>The core crate depends on <code>nalgebra</code> for linear algebra, <code>serialport</code> for hardware communication (behind feature gate <code>serial</code> for WASM compat), and <code>ctrlc</code> for clean shutdown. The WASM crate adds <code>wasm-bindgen</code> and <code>serde</code> for JavaScript interop.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li><a href="./design-decisions.html">Design Decisions</a> – why the code is structured this way</li>

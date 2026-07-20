@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b82e27b9.js";
+            window.path_to_searchindex_js = "../searchindex-65767c36.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4e9e8c5a.js"></script>
@@ -193,13 +193,17 @@ T₀ₙ = A₁ · A₂ · ... · Aₙ
 <p>Each <code>T₀ᵢ</code> is the pose (position + rotation) of frame <code>i</code> expressed in the base frame.</p>
 <h2 id="how-bombolab-computes-it"><a class="header" href="#how-bombolab-computes-it">How Bombolab Computes It</a></h2>
 <h3 id="step-1-build-each-a-matrix"><a class="header" href="#step-1-build-each-a-matrix">Step 1: Build Each A Matrix</a></h3>
-<p>For each segment, <code>compute_a_matrix()</code> produces a 4x4 transformation from the DH parameters:</p>
+<p>For each segment, <code>matrix_from_segment()</code> produces the isometry from the segment’s joint value and DH parameters. This is handled internally by <code>forward_kinematics()</code>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{DHParameter, compute_a_matrix};
+</span>use bombolab_core::{Iso3, Robot, Segment, Joint, JointType, DHParams, forward_kinematics};
 
-let p = DHParameter::new(alpha, a, d, theta);
-let a_i = compute_a_matrix(p);
+let robot = Robot::new(vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+]);
 <span class="boring">}</span></code></pre>
 <h3 id="step-2-compose-the-chain"><a class="header" href="#step-2-compose-the-chain">Step 2: Compose the Chain</a></h3>
 <p><code>forward_kinematics()</code> multiplies them sequentially:</p>
@@ -230,23 +234,37 @@ let pos = end_effector.translation.vector;
 let rot = end_effector.rotation;
 <span class="boring">}</span></code></pre>
 <h2 id="matrix_from_segment"><a class="header" href="#matrix_from_segment">matrix_from_segment</a></h2>
-<p>Each segment produces an <code>Iso3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
+<p>Each segment produces an <code>Iso3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra), dispatching on joint type:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt; {
-    let (theta, d, a, alpha) = segment.dh_params();
-
-    let rot_z = Rot3::from_axis_angle(&amp;Vec3::z_axis(), theta);
-    let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
-    let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
-
-    let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
-
-    Iso3::from_parts(translation, rotation)
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3 {
+    match segment.joint.joint_type {
+        JointType::Twist =&gt; {
+            // RotX(alpha + q) · TransX(a)
+            // Wrist roll: rotation about the forearm axis (X)
+            let (_, _, a, alpha) = segment.dh_params();
+            let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&amp;rot_x);
+            let translation = Tras::new(a, 0.0, 0.0);
+            Iso3::from_parts(translation, rotation)
+        }
+        JointType::Revolute | JointType::Prismatic =&gt; {
+            // RotZ(theta) · TransZ(d) · TransX(a) · RotX(alpha)
+            let (theta, d, a, alpha) = segment.dh_params();
+            let rot_z = Rot3::from_axis_angle(&amp;Vec3::z_axis(), theta);
+            let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&amp;(rot_z * rot_x));
+            let translation = Tras::new(a * theta.cos(), a * theta.sin(), d);
+            Iso3::from_parts(translation, rotation)
+        }
+    }
 }
 <span class="boring">}</span></code></pre>
-<h3 id="why-unitquaternion"><a class="header" href="#why-unitquaternion">Why UnitQuaternion?</a></h3>
-<p><code>Iso3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rot3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Iso3::from_parts()</code> expects a quaternion.</p>
+<h3 id="why-two-formulas"><a class="header" href="#why-two-formulas">Why Two Formulas?</a></h3>
+<ul>
+<li><strong>Revolute/Prismatic</strong>: standard DH — rotation around Z (the joint axis), then translation along X and Z</li>
+<li><strong>Twist</strong>: rotation around X instead of Z. Used for wrist roll joints (J4 in FABRI Creator) where the forearm twists along its own axis. The joint value adds to <code>alpha</code> instead of <code>theta</code>.</li>
+</ul>
 <h3 id="the-translation"><a class="header" href="#the-translation">The Translation</a></h3>
 <p>The translation components are:</p>
 <ul>

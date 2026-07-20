@@ -28,6 +28,7 @@ pub struct Joint {
 |-----------|-------------------|----------|
 | `Revolute` | angle (radians) | rotation around Z |
 | `Prismatic` | displacement (meters) | translation along Z |
+| `Twist` | angle (radians) | rotation around X (wrist roll) |
 
 Key methods:
 
@@ -67,21 +68,27 @@ The `dh_params()` method resolves which DH parameter is the joint variable:
 ```rust
 let (theta, d, a, alpha) = segment.dh_params();
 
-// Revolute:  theta = joint.value,  d = dh.d
-// Prismatic: theta = dh.theta,     d = joint.value
+// Revolute:  theta = joint.value + dh.theta,  d = dh.d
+// Prismatic: theta = dh.theta,                d = joint.value
+// Twist:     theta = 0,  d = 0,  a = dh.a,   alpha = joint.value + dh.alpha
 ```
 
-This is the key insight: **the same struct handles both joint types** by swapping which parameter comes from the joint.
+This is the key insight: **the same struct handles all joint types** by swapping which parameter comes from the joint.
+
+For Twist joints, alpha absorbs the joint value and the transformation becomes `RotX(alpha+q) · TransX(a)` — rotation about the X axis instead of Z. This models wrist roll joints where the forearm twists along its own axis.
 
 ### Robot
 
 ```rust
 pub struct Robot {
     pub segments: Vec<Segment>,
-    pub home_pose: Vec<f64>,     // servo angles at kinematic zero (radians)
-    pub servo_offsets: Vec<f64>, // servo_angle = q + offset (radians)
+    pub home_pose: Vec<f64>,         // servo angles at kinematic zero (radians)
+    pub servo_offsets: Vec<f64>,     // servo_angle = q + offset (radians)
+    pub servo_directions: Vec<f64>,  // +1 horario, -1 anti horario
 }
 ```
+
+The `servo_directions` field maps rotation direction: `direction * q + offset`. This accounts for servos mounted in opposite orientations.
 
 Methods:
 
@@ -89,6 +96,7 @@ Methods:
 |--------|-------------|
 | `Robot::new(segments)` | Create a robot with zero offsets (backward compatible) |
 | `Robot::with_offsets(segments, home_pose, servo_offsets)` | Create with explicit servo mapping |
+| `Robot::with_directions(segments, home_pose, offsets, directions)` | Create with offsets + direction per joint |
 | `robot.dof()` | Number of degrees of freedom (segment count) |
 | `robot.segment(i)` | Get segment by index (returns `Result`) |
 | `robot.segment_mut(i)` | Get mutable segment by index |
@@ -103,18 +111,20 @@ Methods:
 
 ## Kinematic Coordinates vs Servo Angles
 
-FK/IK/Jacobians operate on **kinematic coordinates** (`q`), where `q=0` is the home pose. Physical servo angles are different because servos have an offset at their neutral position.
+FK/IK/Jacobians operate on **kinematic coordinates** (`q`), where `q=0` is the home pose. Physical servo angles are different because servos have an offset at their neutral position and may be mounted in opposite orientations.
 
 ```
-servo_angle = q + offset
+servo_angle = direction * q + offset
 ```
+
+Where `direction` is `+1` (horario) or `-1` (anti horario). This accounts for servos mounted on opposite sides of the arm — a positive q might mean "clockwise" on one side and "counter-clockwise" on the other.
 
 For example, if J1's servo is at 90° when the robot is at its home pose:
 
 ```
-q = 0°        →  servo = 0° + 90° = 90°   (home position)
-q = 30°       →  servo = 30° + 90° = 120°
-q = -45°      →  servo = -45° + 90° = 45°
+q = 0°        →  servo = 1·0° + 90° = 90°   (home position)
+q = 30°       →  servo = 1·30° + 90° = 120°
+q = -45°      →  servo = 1·(-45°) + 90° = 45°
 ```
 
 The `home_pose` field stores the servo angles at `q=[0,0,...,0]`. The `servo_offsets` field stores the constant offset per joint. For a well-configured robot, `home_pose == servo_offsets` (since at `q=0`, `servo = 0 + offset = offset`).
@@ -223,29 +233,6 @@ match robot.set_joint_values(joints) {
     Err(e) => eprintln!("Error: {}", e),
 }
 ```
-
-## GUI State Model
-
-The GUI layer adds its own types for UI state:
-
-```rust
-// UI representation of a segment
-pub struct SegmentUi {
-    pub joint_type: JointType,
-    pub theta: f64,
-    pub d: f64,
-    pub a: f64,
-    pub alpha: f64,
-}
-
-// Full robot definition for the UI
-pub struct RobotDef {
-    pub name: String,
-    pub segments: Vec<SegmentUi>,
-}
-```
-
-`RobotDef::to_robot()` converts to a domain `Robot` for kinematics computation.
 
 ## References
 

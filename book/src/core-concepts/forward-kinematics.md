@@ -20,13 +20,17 @@ Each `T₀ᵢ` is the pose (position + rotation) of frame `i` expressed in the b
 
 ### Step 1: Build Each A Matrix
 
-For each segment, `compute_a_matrix()` produces a 4x4 transformation from the DH parameters:
+For each segment, `matrix_from_segment()` produces the isometry from the segment's joint value and DH parameters. This is handled internally by `forward_kinematics()`:
 
 ```rust
-use bombolab_core::{DHParameter, compute_a_matrix};
+use bombolab_core::{Iso3, Robot, Segment, Joint, JointType, DHParams, forward_kinematics};
 
-let p = DHParameter::new(alpha, a, d, theta);
-let a_i = compute_a_matrix(p);
+let robot = Robot::new(vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+]);
 ```
 
 ### Step 2: Compose the Chain
@@ -62,25 +66,37 @@ let rot = end_effector.rotation;
 
 ## matrix_from_segment
 
-Each segment produces an `Iso3<f64>` (a combined rotation + translation from nalgebra):
+Each segment produces an `Iso3<f64>` (a combined rotation + translation from nalgebra), dispatching on joint type:
 
 ```rust
-pub fn matrix_from_segment(segment: &Segment) -> Iso3<f64> {
-    let (theta, d, a, alpha) = segment.dh_params();
-
-    let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
-    let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
-    let rotation = UnitQuaternion::from_rotation_matrix(&(rot_z * rot_x));
-
-    let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
-
-    Iso3::from_parts(translation, rotation)
+pub fn matrix_from_segment(segment: &Segment) -> Iso3 {
+    match segment.joint.joint_type {
+        JointType::Twist => {
+            // RotX(alpha + q) · TransX(a)
+            // Wrist roll: rotation about the forearm axis (X)
+            let (_, _, a, alpha) = segment.dh_params();
+            let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&rot_x);
+            let translation = Tras::new(a, 0.0, 0.0);
+            Iso3::from_parts(translation, rotation)
+        }
+        JointType::Revolute | JointType::Prismatic => {
+            // RotZ(theta) · TransZ(d) · TransX(a) · RotX(alpha)
+            let (theta, d, a, alpha) = segment.dh_params();
+            let rot_z = Rot3::from_axis_angle(&Vec3::z_axis(), theta);
+            let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&(rot_z * rot_x));
+            let translation = Tras::new(a * theta.cos(), a * theta.sin(), d);
+            Iso3::from_parts(translation, rotation)
+        }
+    }
 }
 ```
 
-### Why UnitQuaternion?
+### Why Two Formulas?
 
-`Iso3` stores rotation internally as a `UnitQuaternion`, not a `Rot3`. The conversion via `UnitQuaternion::from_rotation_matrix()` is necessary because `Iso3::from_parts()` expects a quaternion.
+- **Revolute/Prismatic**: standard DH — rotation around Z (the joint axis), then translation along X and Z
+- **Twist**: rotation around X instead of Z. Used for wrist roll joints (J4 in FABRI Creator) where the forearm twists along its own axis. The joint value adds to `alpha` instead of `theta`.
 
 ### The Translation
 

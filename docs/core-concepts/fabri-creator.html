@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b82e27b9.js";
+            window.path_to_searchindex_js = "../searchindex-65767c36.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4e9e8c5a.js"></script>
@@ -214,14 +214,14 @@ println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Source</th></tr>
+<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Type</th><th>Source</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>-90°</td><td>15</td><td>95</td><td>θ₁</td><td>15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z</td></tr>
-<tr><td>2</td><td>0°</td><td>0</td><td>162</td><td>θ₂</td><td>162mm vertical link (J2→J3); no horizontal offset (pure vertical)</td></tr>
-<tr><td>3</td><td>-90°</td><td>111</td><td>0</td><td>θ₃</td><td>111mm horizontal link (J3→J4); twist -90° reorients rotation plane</td></tr>
-<tr><td>4</td><td>90°</td><td>35</td><td>0</td><td>θ₄</td><td>35mm horizontal link (J4→J5); twist +90° reorients back</td></tr>
-<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>θ₅</td><td>Zero-length final joint (wrist pitch); tool transform handles the rest</td></tr>
+<tr><td>1</td><td>-90°</td><td>15</td><td>95</td><td>θ₁</td><td>Revolute</td><td>15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z</td></tr>
+<tr><td>2</td><td>0°</td><td>0</td><td>162</td><td>θ₂</td><td>Revolute</td><td>162mm vertical link (J2→J3); no horizontal offset (pure vertical)</td></tr>
+<tr><td>3</td><td>-90°</td><td>111</td><td>0</td><td>θ₃</td><td>Revolute</td><td>111mm horizontal link (J3→J4); twist -90° reorients rotation plane</td></tr>
+<tr><td>4</td><td>90°</td><td>35</td><td>0</td><td>—</td><td><strong>Twist</strong></td><td>35mm horizontal link (J4→J5); joint value adds to α, rotates about X</td></tr>
+<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>θ₅</td><td>Revolute</td><td>Zero-length final joint (wrist pitch); tool transform handles the rest</td></tr>
 </tbody>
 </table>
 </div>
@@ -237,17 +237,18 @@ println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Joint</th><th>Type</th><th>Motion</th></tr>
+<tr><th>Joint</th><th>Type</th><th>Motion</th><th>DH Formula</th></tr>
 </thead>
 <tbody>
-<tr><td>J1</td><td>Revolute</td><td>Base yaw (rotation around Z)</td></tr>
-<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch</td></tr>
-<tr><td>J3</td><td>Revolute</td><td>Elbow pitch</td></tr>
-<tr><td>J4</td><td>Revolute</td><td>Wrist roll</td></tr>
-<tr><td>J5</td><td>Revolute</td><td>Wrist pitch</td></tr>
+<tr><td>J1</td><td>Revolute</td><td>Base yaw</td><td><code>RotZ(θ₁+q) · TransZ(d₁) · TransX(a₁) · RotX(α₁)</code></td></tr>
+<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch</td><td><code>RotZ(θ₂+q) · TransZ(d₂) · TransX(a₂) · RotX(α₂)</code></td></tr>
+<tr><td>J3</td><td>Revolute</td><td>Elbow pitch</td><td><code>RotZ(θ₃+q) · TransZ(d₃) · TransX(a₃) · RotX(α₃)</code></td></tr>
+<tr><td>J4</td><td><strong>Twist</strong></td><td>Wrist roll (X-axis)</td><td><strong><code>RotX(α₄+q) · TransX(a₄)</code></strong></td></tr>
+<tr><td>J5</td><td>Revolute</td><td>Wrist pitch</td><td><code>RotZ(θ₅+q) · TransZ(d₅) · TransX(a₅) · RotX(α₅)</code></td></tr>
 </tbody>
 </table>
 </div>
+<p>J4 uses <code>Twist</code> instead of <code>Revolute</code> because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type swaps the rotation axis from Z to X, and the joint value adds directly to <code>alpha</code> instead of <code>theta</code>.</p>
 <h2 id="physical-dimensions"><a class="header" href="#physical-dimensions">Physical Dimensions</a></h2>
 <pre><code>        marcador
            ↑ 75mm (tool transform)

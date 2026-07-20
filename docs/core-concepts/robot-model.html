@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b82e27b9.js";
+            window.path_to_searchindex_js = "../searchindex-65767c36.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4e9e8c5a.js"></script>
@@ -207,6 +207,7 @@
 <tbody>
 <tr><td><code>Revolute</code></td><td>angle (radians)</td><td>rotation around Z</td></tr>
 <tr><td><code>Prismatic</code></td><td>displacement (meters)</td><td>translation along Z</td></tr>
+<tr><td><code>Twist</code></td><td>angle (radians)</td><td>rotation around X (wrist roll)</td></tr>
 </tbody>
 </table>
 </div>
@@ -244,19 +245,23 @@ joint.range()             // returns [value_min, value_max]
 </span><span class="boring">fn main() {
 </span>let (theta, d, a, alpha) = segment.dh_params();
 
-// Revolute:  theta = joint.value,  d = dh.d
-// Prismatic: theta = dh.theta,     d = joint.value
+// Revolute:  theta = joint.value + dh.theta,  d = dh.d
+// Prismatic: theta = dh.theta,                d = joint.value
+// Twist:     theta = 0,  d = 0,  a = dh.a,   alpha = joint.value + dh.alpha
 <span class="boring">}</span></code></pre>
-<p>This is the key insight: <strong>the same struct handles both joint types</strong> by swapping which parameter comes from the joint.</p>
+<p>This is the key insight: <strong>the same struct handles all joint types</strong> by swapping which parameter comes from the joint.</p>
+<p>For Twist joints, alpha absorbs the joint value and the transformation becomes <code>RotX(alpha+q) · TransX(a)</code> — rotation about the X axis instead of Z. This models wrist roll joints where the forearm twists along its own axis.</p>
 <h3 id="robot"><a class="header" href="#robot">Robot</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub struct Robot {
     pub segments: Vec&lt;Segment&gt;,
-    pub home_pose: Vec&lt;f64&gt;,     // servo angles at kinematic zero (radians)
-    pub servo_offsets: Vec&lt;f64&gt;, // servo_angle = q + offset (radians)
+    pub home_pose: Vec&lt;f64&gt;,         // servo angles at kinematic zero (radians)
+    pub servo_offsets: Vec&lt;f64&gt;,     // servo_angle = q + offset (radians)
+    pub servo_directions: Vec&lt;f64&gt;,  // +1 horario, -1 anti horario
 }
 <span class="boring">}</span></code></pre>
+<p>The <code>servo_directions</code> field maps rotation direction: <code>direction * q + offset</code>. This accounts for servos mounted in opposite orientations.</p>
 <p>Methods:</p>
 <div class="table-wrapper">
 <table>
@@ -266,6 +271,7 @@ joint.range()             // returns [value_min, value_max]
 <tbody>
 <tr><td><code>Robot::new(segments)</code></td><td>Create a robot with zero offsets (backward compatible)</td></tr>
 <tr><td><code>Robot::with_offsets(segments, home_pose, servo_offsets)</code></td><td>Create with explicit servo mapping</td></tr>
+<tr><td><code>Robot::with_directions(segments, home_pose, offsets, directions)</code></td><td>Create with offsets + direction per joint</td></tr>
 <tr><td><code>robot.dof()</code></td><td>Number of degrees of freedom (segment count)</td></tr>
 <tr><td><code>robot.segment(i)</code></td><td>Get segment by index (returns <code>Result</code>)</td></tr>
 <tr><td><code>robot.segment_mut(i)</code></td><td>Get mutable segment by index</td></tr>
@@ -281,13 +287,14 @@ joint.range()             // returns [value_min, value_max]
 </table>
 </div>
 <h2 id="kinematic-coordinates-vs-servo-angles"><a class="header" href="#kinematic-coordinates-vs-servo-angles">Kinematic Coordinates vs Servo Angles</a></h2>
-<p>FK/IK/Jacobians operate on <strong>kinematic coordinates</strong> (<code>q</code>), where <code>q=0</code> is the home pose. Physical servo angles are different because servos have an offset at their neutral position.</p>
-<pre><code>servo_angle = q + offset
+<p>FK/IK/Jacobians operate on <strong>kinematic coordinates</strong> (<code>q</code>), where <code>q=0</code> is the home pose. Physical servo angles are different because servos have an offset at their neutral position and may be mounted in opposite orientations.</p>
+<pre><code>servo_angle = direction * q + offset
 </code></pre>
+<p>Where <code>direction</code> is <code>+1</code> (horario) or <code>-1</code> (anti horario). This accounts for servos mounted on opposite sides of the arm — a positive q might mean “clockwise” on one side and “counter-clockwise” on the other.</p>
 <p>For example, if J1’s servo is at 90° when the robot is at its home pose:</p>
-<pre><code>q = 0°        →  servo = 0° + 90° = 90°   (home position)
-q = 30°       →  servo = 30° + 90° = 120°
-q = -45°      →  servo = -45° + 90° = 45°
+<pre><code>q = 0°        →  servo = 1·0° + 90° = 90°   (home position)
+q = 30°       →  servo = 1·30° + 90° = 120°
+q = -45°      →  servo = 1·(-45°) + 90° = 45°
 </code></pre>
 <p>The <code>home_pose</code> field stores the servo angles at <code>q=[0,0,...,0]</code>. The <code>servo_offsets</code> field stores the constant offset per joint. For a well-configured robot, <code>home_pose == servo_offsets</code> (since at <code>q=0</code>, <code>servo = 0 + offset = offset</code>).</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -389,26 +396,6 @@ match robot.set_joint_values(joints) {
     Err(e) =&gt; eprintln!("Error: {}", e),
 }
 <span class="boring">}</span></code></pre>
-<h2 id="gui-state-model"><a class="header" href="#gui-state-model">GUI State Model</a></h2>
-<p>The GUI layer adds its own types for UI state:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// UI representation of a segment
-pub struct SegmentUi {
-    pub joint_type: JointType,
-    pub theta: f64,
-    pub d: f64,
-    pub a: f64,
-    pub alpha: f64,
-}
-
-// Full robot definition for the UI
-pub struct RobotDef {
-    pub name: String,
-    pub segments: Vec&lt;SegmentUi&gt;,
-}
-<span class="boring">}</span></code></pre>
-<p><code>RobotDef::to_robot()</code> converts to a domain <code>Robot</code> for kinematics computation.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li><a href="./dh-parameters.html">DH Parameters</a> – what the DHParams fields mean</li>

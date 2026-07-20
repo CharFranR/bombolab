@@ -37,13 +37,13 @@ println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 
 Craig convention, units: millimeters. These values come from **physical measurements** of the actual FABRI Creator robot — link lengths, joint offsets, and twist angles measured with calipers and protractors.
 
-| i | α | a | d | θ | Source |
-|---|-----|-----|-----|-----|--------|
-| 1 | -90° | 15 | 95 | θ₁ | 15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z |
-| 2 | 0° | 0 | 162 | θ₂ | 162mm vertical link (J2→J3); no horizontal offset (pure vertical) |
-| 3 | -90° | 111 | 0 | θ₃ | 111mm horizontal link (J3→J4); twist -90° reorients rotation plane |
-| 4 | 90° | 35 | 0 | θ₄ | 35mm horizontal link (J4→J5); twist +90° reorients back |
-| 5 | 0° | 0 | 0 | θ₅ | Zero-length final joint (wrist pitch); tool transform handles the rest |
+| i | α | a | d | θ | Type | Source |
+|---|-----|-----|-----|-----|------|--------|
+| 1 | -90° | 15 | 95 | θ₁ | Revolute | 15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z |
+| 2 | 0° | 0 | 162 | θ₂ | Revolute | 162mm vertical link (J2→J3); no horizontal offset (pure vertical) |
+| 3 | -90° | 111 | 0 | θ₃ | Revolute | 111mm horizontal link (J3→J4); twist -90° reorients rotation plane |
+| 4 | 90° | 35 | 0 | — | **Twist** | 35mm horizontal link (J4→J5); joint value adds to α, rotates about X |
+| 5 | 0° | 0 | 0 | θ₅ | Revolute | Zero-length final joint (wrist pitch); tool transform handles the rest |
 
 **Why these values?**
 
@@ -55,13 +55,15 @@ Craig convention, units: millimeters. These values come from **physical measurem
 
 **Joint types:**
 
-| Joint | Type | Motion |
-|-------|------|--------|
-| J1 | Revolute | Base yaw (rotation around Z) |
-| J2 | Revolute | Shoulder pitch |
-| J3 | Revolute | Elbow pitch |
-| J4 | Revolute | Wrist roll |
-| J5 | Revolute | Wrist pitch |
+| Joint | Type | Motion | DH Formula |
+|-------|------|--------|------------|
+| J1 | Revolute | Base yaw | `RotZ(θ₁+q) · TransZ(d₁) · TransX(a₁) · RotX(α₁)` |
+| J2 | Revolute | Shoulder pitch | `RotZ(θ₂+q) · TransZ(d₂) · TransX(a₂) · RotX(α₂)` |
+| J3 | Revolute | Elbow pitch | `RotZ(θ₃+q) · TransZ(d₃) · TransX(a₃) · RotX(α₃)` |
+| J4 | **Twist** | Wrist roll (X-axis) | **`RotX(α₄+q) · TransX(a₄)`** |
+| J5 | Revolute | Wrist pitch | `RotZ(θ₅+q) · TransZ(d₅) · TransX(a₅) · RotX(α₅)` |
+
+J4 uses `Twist` instead of `Revolute` because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type swaps the rotation axis from Z to X, and the joint value adds directly to `alpha` instead of `theta`.
 
 ## Physical Dimensions
 

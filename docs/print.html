@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b82e27b9.js";
+            window.path_to_searchindex_js = "searchindex-65767c36.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4e9e8c5a.js"></script>
@@ -524,13 +524,17 @@ T₀ₙ = A₁ · A₂ · ... · Aₙ
 <p>Each <code>T₀ᵢ</code> is the pose (position + rotation) of frame <code>i</code> expressed in the base frame.</p>
 <h2 id="how-bombolab-computes-it"><a class="header" href="#how-bombolab-computes-it">How Bombolab Computes It</a></h2>
 <h3 id="step-1-build-each-a-matrix"><a class="header" href="#step-1-build-each-a-matrix">Step 1: Build Each A Matrix</a></h3>
-<p>For each segment, <code>compute_a_matrix()</code> produces a 4x4 transformation from the DH parameters:</p>
+<p>For each segment, <code>matrix_from_segment()</code> produces the isometry from the segment’s joint value and DH parameters. This is handled internally by <code>forward_kinematics()</code>:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{DHParameter, compute_a_matrix};
+</span>use bombolab_core::{Iso3, Robot, Segment, Joint, JointType, DHParams, forward_kinematics};
 
-let p = DHParameter::new(alpha, a, d, theta);
-let a_i = compute_a_matrix(p);
+let robot = Robot::new(vec![
+    Segment::new(
+        Joint::new(JointType::Revolute, 0.0, PI, -PI),
+        DHParams::new(0.0, 0.0, 1.0, 0.0),
+    ),
+]);
 <span class="boring">}</span></code></pre>
 <h3 id="step-2-compose-the-chain"><a class="header" href="#step-2-compose-the-chain">Step 2: Compose the Chain</a></h3>
 <p><code>forward_kinematics()</code> multiplies them sequentially:</p>
@@ -561,23 +565,37 @@ let pos = end_effector.translation.vector;
 let rot = end_effector.rotation;
 <span class="boring">}</span></code></pre>
 <h2 id="matrix_from_segment"><a class="header" href="#matrix_from_segment">matrix_from_segment</a></h2>
-<p>Each segment produces an <code>Iso3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra):</p>
+<p>Each segment produces an <code>Iso3&lt;f64&gt;</code> (a combined rotation + translation from nalgebra), dispatching on joint type:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt; {
-    let (theta, d, a, alpha) = segment.dh_params();
-
-    let rot_z = Rot3::from_axis_angle(&amp;Vec3::z_axis(), theta);
-    let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
-    let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
-
-    let translation = Translation3::new(a * theta.cos(), a * theta.sin(), d);
-
-    Iso3::from_parts(translation, rotation)
+</span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3 {
+    match segment.joint.joint_type {
+        JointType::Twist =&gt; {
+            // RotX(alpha + q) · TransX(a)
+            // Wrist roll: rotation about the forearm axis (X)
+            let (_, _, a, alpha) = segment.dh_params();
+            let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&amp;rot_x);
+            let translation = Tras::new(a, 0.0, 0.0);
+            Iso3::from_parts(translation, rotation)
+        }
+        JointType::Revolute | JointType::Prismatic =&gt; {
+            // RotZ(theta) · TransZ(d) · TransX(a) · RotX(alpha)
+            let (theta, d, a, alpha) = segment.dh_params();
+            let rot_z = Rot3::from_axis_angle(&amp;Vec3::z_axis(), theta);
+            let rot_x = Rot3::from_axis_angle(&amp;Vec3::x_axis(), alpha);
+            let rotation = Quat::from_rotation_matrix(&amp;(rot_z * rot_x));
+            let translation = Tras::new(a * theta.cos(), a * theta.sin(), d);
+            Iso3::from_parts(translation, rotation)
+        }
+    }
 }
 <span class="boring">}</span></code></pre>
-<h3 id="why-unitquaternion"><a class="header" href="#why-unitquaternion">Why UnitQuaternion?</a></h3>
-<p><code>Iso3</code> stores rotation internally as a <code>UnitQuaternion</code>, not a <code>Rot3</code>. The conversion via <code>UnitQuaternion::from_rotation_matrix()</code> is necessary because <code>Iso3::from_parts()</code> expects a quaternion.</p>
+<h3 id="why-two-formulas"><a class="header" href="#why-two-formulas">Why Two Formulas?</a></h3>
+<ul>
+<li><strong>Revolute/Prismatic</strong>: standard DH — rotation around Z (the joint axis), then translation along X and Z</li>
+<li><strong>Twist</strong>: rotation around X instead of Z. Used for wrist roll joints (J4 in FABRI Creator) where the forearm twists along its own axis. The joint value adds to <code>alpha</code> instead of <code>theta</code>.</li>
+</ul>
 <h3 id="the-translation"><a class="header" href="#the-translation">The Translation</a></h3>
 <p>The translation components are:</p>
 <ul>
@@ -676,6 +694,7 @@ println!("End-effector: ({:.3}, {:.3}, {:.3})", pos.x, pos.y, pos.z);
 <tbody>
 <tr><td><code>Revolute</code></td><td>angle (radians)</td><td>rotation around Z</td></tr>
 <tr><td><code>Prismatic</code></td><td>displacement (meters)</td><td>translation along Z</td></tr>
+<tr><td><code>Twist</code></td><td>angle (radians)</td><td>rotation around X (wrist roll)</td></tr>
 </tbody>
 </table>
 </div>
@@ -713,19 +732,23 @@ joint.range()             // returns [value_min, value_max]
 </span><span class="boring">fn main() {
 </span>let (theta, d, a, alpha) = segment.dh_params();
 
-// Revolute:  theta = joint.value,  d = dh.d
-// Prismatic: theta = dh.theta,     d = joint.value
+// Revolute:  theta = joint.value + dh.theta,  d = dh.d
+// Prismatic: theta = dh.theta,                d = joint.value
+// Twist:     theta = 0,  d = 0,  a = dh.a,   alpha = joint.value + dh.alpha
 <span class="boring">}</span></code></pre>
-<p>This is the key insight: <strong>the same struct handles both joint types</strong> by swapping which parameter comes from the joint.</p>
+<p>This is the key insight: <strong>the same struct handles all joint types</strong> by swapping which parameter comes from the joint.</p>
+<p>For Twist joints, alpha absorbs the joint value and the transformation becomes <code>RotX(alpha+q) · TransX(a)</code> — rotation about the X axis instead of Z. This models wrist roll joints where the forearm twists along its own axis.</p>
 <h3 id="robot"><a class="header" href="#robot">Robot</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub struct Robot {
     pub segments: Vec&lt;Segment&gt;,
-    pub home_pose: Vec&lt;f64&gt;,     // servo angles at kinematic zero (radians)
-    pub servo_offsets: Vec&lt;f64&gt;, // servo_angle = q + offset (radians)
+    pub home_pose: Vec&lt;f64&gt;,         // servo angles at kinematic zero (radians)
+    pub servo_offsets: Vec&lt;f64&gt;,     // servo_angle = q + offset (radians)
+    pub servo_directions: Vec&lt;f64&gt;,  // +1 horario, -1 anti horario
 }
 <span class="boring">}</span></code></pre>
+<p>The <code>servo_directions</code> field maps rotation direction: <code>direction * q + offset</code>. This accounts for servos mounted in opposite orientations.</p>
 <p>Methods:</p>
 <div class="table-wrapper">
 <table>
@@ -735,6 +758,7 @@ joint.range()             // returns [value_min, value_max]
 <tbody>
 <tr><td><code>Robot::new(segments)</code></td><td>Create a robot with zero offsets (backward compatible)</td></tr>
 <tr><td><code>Robot::with_offsets(segments, home_pose, servo_offsets)</code></td><td>Create with explicit servo mapping</td></tr>
+<tr><td><code>Robot::with_directions(segments, home_pose, offsets, directions)</code></td><td>Create with offsets + direction per joint</td></tr>
 <tr><td><code>robot.dof()</code></td><td>Number of degrees of freedom (segment count)</td></tr>
 <tr><td><code>robot.segment(i)</code></td><td>Get segment by index (returns <code>Result</code>)</td></tr>
 <tr><td><code>robot.segment_mut(i)</code></td><td>Get mutable segment by index</td></tr>
@@ -750,13 +774,14 @@ joint.range()             // returns [value_min, value_max]
 </table>
 </div>
 <h2 id="kinematic-coordinates-vs-servo-angles"><a class="header" href="#kinematic-coordinates-vs-servo-angles">Kinematic Coordinates vs Servo Angles</a></h2>
-<p>FK/IK/Jacobians operate on <strong>kinematic coordinates</strong> (<code>q</code>), where <code>q=0</code> is the home pose. Physical servo angles are different because servos have an offset at their neutral position.</p>
-<pre><code>servo_angle = q + offset
+<p>FK/IK/Jacobians operate on <strong>kinematic coordinates</strong> (<code>q</code>), where <code>q=0</code> is the home pose. Physical servo angles are different because servos have an offset at their neutral position and may be mounted in opposite orientations.</p>
+<pre><code>servo_angle = direction * q + offset
 </code></pre>
+<p>Where <code>direction</code> is <code>+1</code> (horario) or <code>-1</code> (anti horario). This accounts for servos mounted on opposite sides of the arm — a positive q might mean “clockwise” on one side and “counter-clockwise” on the other.</p>
 <p>For example, if J1’s servo is at 90° when the robot is at its home pose:</p>
-<pre><code>q = 0°        →  servo = 0° + 90° = 90°   (home position)
-q = 30°       →  servo = 30° + 90° = 120°
-q = -45°      →  servo = -45° + 90° = 45°
+<pre><code>q = 0°        →  servo = 1·0° + 90° = 90°   (home position)
+q = 30°       →  servo = 1·30° + 90° = 120°
+q = -45°      →  servo = 1·(-45°) + 90° = 45°
 </code></pre>
 <p>The <code>home_pose</code> field stores the servo angles at <code>q=[0,0,...,0]</code>. The <code>servo_offsets</code> field stores the constant offset per joint. For a well-configured robot, <code>home_pose == servo_offsets</code> (since at <code>q=0</code>, <code>servo = 0 + offset = offset</code>).</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -858,26 +883,6 @@ match robot.set_joint_values(joints) {
     Err(e) =&gt; eprintln!("Error: {}", e),
 }
 <span class="boring">}</span></code></pre>
-<h2 id="gui-state-model"><a class="header" href="#gui-state-model">GUI State Model</a></h2>
-<p>The GUI layer adds its own types for UI state:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// UI representation of a segment
-pub struct SegmentUi {
-    pub joint_type: JointType,
-    pub theta: f64,
-    pub d: f64,
-    pub a: f64,
-    pub alpha: f64,
-}
-
-// Full robot definition for the UI
-pub struct RobotDef {
-    pub name: String,
-    pub segments: Vec&lt;SegmentUi&gt;,
-}
-<span class="boring">}</span></code></pre>
-<p><code>RobotDef::to_robot()</code> converts to a domain <code>Robot</code> for kinematics computation.</p>
 <h2 id="references-2"><a class="header" href="#references-2">References</a></h2>
 <ul>
 <li><a href="#dh-parameters">DH Parameters</a> – what the DHParams fields mean</li>
@@ -919,14 +924,14 @@ println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Source</th></tr>
+<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Type</th><th>Source</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>-90°</td><td>15</td><td>95</td><td>θ₁</td><td>15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z</td></tr>
-<tr><td>2</td><td>0°</td><td>0</td><td>162</td><td>θ₂</td><td>162mm vertical link (J2→J3); no horizontal offset (pure vertical)</td></tr>
-<tr><td>3</td><td>-90°</td><td>111</td><td>0</td><td>θ₃</td><td>111mm horizontal link (J3→J4); twist -90° reorients rotation plane</td></tr>
-<tr><td>4</td><td>90°</td><td>35</td><td>0</td><td>θ₄</td><td>35mm horizontal link (J4→J5); twist +90° reorients back</td></tr>
-<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>θ₅</td><td>Zero-length final joint (wrist pitch); tool transform handles the rest</td></tr>
+<tr><td>1</td><td>-90°</td><td>15</td><td>95</td><td>θ₁</td><td>Revolute</td><td>15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z</td></tr>
+<tr><td>2</td><td>0°</td><td>0</td><td>162</td><td>θ₂</td><td>Revolute</td><td>162mm vertical link (J2→J3); no horizontal offset (pure vertical)</td></tr>
+<tr><td>3</td><td>-90°</td><td>111</td><td>0</td><td>θ₃</td><td>Revolute</td><td>111mm horizontal link (J3→J4); twist -90° reorients rotation plane</td></tr>
+<tr><td>4</td><td>90°</td><td>35</td><td>0</td><td>—</td><td><strong>Twist</strong></td><td>35mm horizontal link (J4→J5); joint value adds to α, rotates about X</td></tr>
+<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>θ₅</td><td>Revolute</td><td>Zero-length final joint (wrist pitch); tool transform handles the rest</td></tr>
 </tbody>
 </table>
 </div>
@@ -942,17 +947,18 @@ println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Joint</th><th>Type</th><th>Motion</th></tr>
+<tr><th>Joint</th><th>Type</th><th>Motion</th><th>DH Formula</th></tr>
 </thead>
 <tbody>
-<tr><td>J1</td><td>Revolute</td><td>Base yaw (rotation around Z)</td></tr>
-<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch</td></tr>
-<tr><td>J3</td><td>Revolute</td><td>Elbow pitch</td></tr>
-<tr><td>J4</td><td>Revolute</td><td>Wrist roll</td></tr>
-<tr><td>J5</td><td>Revolute</td><td>Wrist pitch</td></tr>
+<tr><td>J1</td><td>Revolute</td><td>Base yaw</td><td><code>RotZ(θ₁+q) · TransZ(d₁) · TransX(a₁) · RotX(α₁)</code></td></tr>
+<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch</td><td><code>RotZ(θ₂+q) · TransZ(d₂) · TransX(a₂) · RotX(α₂)</code></td></tr>
+<tr><td>J3</td><td>Revolute</td><td>Elbow pitch</td><td><code>RotZ(θ₃+q) · TransZ(d₃) · TransX(a₃) · RotX(α₃)</code></td></tr>
+<tr><td>J4</td><td><strong>Twist</strong></td><td>Wrist roll (X-axis)</td><td><strong><code>RotX(α₄+q) · TransX(a₄)</code></strong></td></tr>
+<tr><td>J5</td><td>Revolute</td><td>Wrist pitch</td><td><code>RotZ(θ₅+q) · TransZ(d₅) · TransX(a₅) · RotX(α₅)</code></td></tr>
 </tbody>
 </table>
 </div>
+<p>J4 uses <code>Twist</code> instead of <code>Revolute</code> because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type swaps the rotation axis from Z to X, and the joint value adds directly to <code>alpha</code> instead of <code>theta</code>.</p>
 <h2 id="physical-dimensions"><a class="header" href="#physical-dimensions">Physical Dimensions</a></h2>
 <pre><code>        marcador
            ↑ 75mm (tool transform)
@@ -1545,126 +1551,125 @@ assert_eq!(j.ncols(), 2);
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="inverse-kinematics"><a class="header" href="#inverse-kinematics">Inverse Kinematics</a></h1>
-<p><strong>The IK solver finds joint values that place the end effector at a desired pose.</strong> You specify a target (position + optional orientation), and the solver iteratively adjusts joint angles until the robot reaches it.</p>
+<p><strong>The IK solver finds joint angles that place the end effector at a desired position.</strong> You specify a 3D target, and the solver iteratively adjusts joint angles until the robot reaches it.</p>
 <h2 id="the-core-idea-1"><a class="header" href="#the-core-idea-1">The Core Idea</a></h2>
-<p>Forward kinematics answers: <em>given joint values, where is the end effector?</em> Inverse kinematics answers the opposite: <em>given a target pose, what joint values get me there?</em></p>
+<p>Forward kinematics answers: <em>given joint values, where is the end effector?</em> Inverse kinematics answers the opposite: <em>given a target position, what joint values get me there?</em></p>
 <p>For serial chains with more than a few joints, there’s no closed-form solution. Bombolab uses a <strong>damped pseudoinverse (Levenberg–Marquardt)</strong> approach:</p>
 <pre><code>Δq = Jᵀ(J·Jᵀ + λ²·I)⁻¹ · Δx
 </code></pre>
 <p>Where:</p>
 <ul>
 <li><code>Δq</code> = joint correction</li>
-<li><code>J</code> = geometric Jacobian (6×n)</li>
+<li><code>J</code> = linear Jacobian (3×n)</li>
 <li><code>λ</code> = damping factor (regularizes near singularities)</li>
-<li><code>Δx</code> = pose error (6×1: position + orientation)</li>
+<li><code>Δx</code> = position error (3×1)</li>
 </ul>
-<h2 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h2>
-<h3 id="step-1-set-up-the-target"><a class="header" href="#step-1-set-up-the-target">Step 1: Set up the target</a></h3>
+<h2 id="iksolver"><a class="header" href="#iksolver">IkSolver</a></h2>
+<p>The solver takes a <code>Robot</code>, base transform, tool transform, target position, and initial guess:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{inverse_kinematics, IkOptions, solve, JointKind::Revolute};
-use nalgebra::{Isometry3, Translation3, UnitQuaternion};
+</span>use bombolab_core::{
+    Robot, Iso3, IkSolver, fabri_creator, base_transform, tool_transform,
+};
 
-let table = vec![
-    DHParameter::new(0.0, 1.0, 0.0, 0.0),
-    DHParameter::new(0.0, 1.0, 0.0, 0.0),
-];
-let kinds = vec![Revolute, Revolute];
-let initial_guess = vec![0.0, 0.0];
+let robot = fabri_creator();
+let base = base_transform();
+let tool = tool_transform();
 
-// Target: position (1.5, 0.5, 0.0), no orientation constraint
-let target = Isometry3::from_parts(
-    Translation3::new(1.5, 0.5, 0.0),
-    UnitQuaternion::identity(),
-);
+// Target: position (200, 0, 280) in mm
+let target = [200.0, 0.0, 280.0];
+let q_init = vec![0.0; 5];
+
+let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+//   max_iterations: 200
+//   position tolerance: 1mm
+//   damping: 0.05
+//   max step size: 0.5 rad
+
+let result = solver.solve_position(&amp;target, &amp;q_init, &amp;robot, &amp;base, &amp;tool);
 <span class="boring">}</span></code></pre>
-<h3 id="step-2-configure-and-solve"><a class="header" href="#step-2-configure-and-solve">Step 2: Configure and solve</a></h3>
+<h2 id="result"><a class="header" href="#result">Result</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let options = IkOptions::default();
-let result = inverse_kinematics(&amp;table, &amp;kinds, &amp;initial_guess, &amp;target, &amp;options)?;
-
-println!("Converged: {} in {} iterations", result.converged, result.iterations);
-println!("Joint angles: {:?}", result.joint_angles);
-println!("Final pose error: {}", result.final_error);
+</span>match result {
+    Ok(q) =&gt; {
+        println!("Converged! Joint angles: {:?}", q);
+    }
+    Err(IkError::MaxIterationsReached { error }) =&gt; {
+        println!("Did not converge, best error: {:.3}mm", error);
+    }
+    Err(IkError::DegenerateChain) =&gt; {
+        println!("Robot has no joints");
+    }
+}
 <span class="boring">}</span></code></pre>
-<h3 id="step-3-verify"><a class="header" href="#step-3-verify">Step 3: Verify</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// Round-trip check: FK(IK) ≈ target
-let fk_solution = solve_segments(&amp;table, &amp;result.joint_angles);
-let end_pos = fk_solution.translation();
-println!("End effector at: ({:.3}, {:.3}, {:.3})", end_pos.x, end_pos.y, end_pos.z);
-<span class="boring">}</span></code></pre>
+<p>The solver returns <code>Ok(q)</code> when the position error is below <code>tolerance</code> (default 1mm). If it reaches <code>max_iterations</code> without converging, it returns the best attempt in the error variant.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Option</th><th>Default</th><th>Description</th></tr>
+<tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>tolerance_pos</code></td><td>1.0</td><td>Position convergence threshold (mm)</td></tr>
-<tr><td><code>tolerance_angle</code></td><td>0.1</td><td>Orientation convergence threshold (rad, ~6°)</td></tr>
-<tr><td><code>max_iterations</code></td><td>200</td><td>Maximum iterations before giving up</td></tr>
-<tr><td><code>damping</code></td><td>0.1</td><td>Initial damping factor <code>λ</code> for pseudoinverse regularization</td></tr>
-<tr><td><code>min_damping</code></td><td>1e-6</td><td>Floor for damping — prevents rank-1 updates from going to zero</td></tr>
-<tr><td><code>damping_update</code></td><td><code>GainRatio</code></td><td>Adaptation strategy: <code>GainRatio</code> (trust-region) or <code>Fixed</code></td></tr>
-<tr><td><code>joint_limits</code></td><td><code>None</code></td><td>Joint limits as <code>Vec&lt;(f64, f64)&gt;</code> — clamps after each iteration</td></tr>
+<tr><td><code>max_iterations</code></td><td>50</td><td>Maximum iterations before giving up</td></tr>
+<tr><td><code>tolerance</code></td><td>1.0</td><td>Position convergence threshold (mm)</td></tr>
+<tr><td><code>damping</code></td><td>0.1</td><td>Initial damping factor λ for pseudoinverse regularization</td></tr>
+<tr><td><code>step_size</code></td><td>0.5</td><td>Maximum joint angle change per iteration (rad, ~28°)</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="damping-strategies"><a class="header" href="#damping-strategies">Damping Strategies</a></h3>
-<p><strong><code>GainRatio</code> (default):</strong> Trust-region approach — adapts <code>λ</code> based on how well the linearized model predicted the actual error reduction:</p>
-<ul>
-<li>Large reduction → <code>λ</code> decreases (bigger steps)</li>
-<li>Poor reduction → <code>λ</code> increases (smaller, safer steps)</li>
-</ul>
-<p><strong><code>Fixed</code>:</strong> Constant damping. Simpler, but less robust near singularities.</p>
-<h2 id="result"><a class="header" href="#result">Result</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct IkResult {
-    pub converged: bool,           // Did we hit all tolerances?
-    pub joint_angles: Vec&lt;f64&gt;,    // Final joint values
-    pub iterations: u32,           // Iterations used
-    pub final_error: f64,          // Final pose error norm
-    pub position_error: f64,       // Final position error
-    pub orientation_error: f64,    // Final orientation error
-    pub damping_used: f64,         // Final damping value
-}
-<span class="boring">}</span></code></pre>
+<h3 id="how-damping-works"><a class="header" href="#how-damping-works">How Damping Works</a></h3>
+<p>The damping term <code>λ²·I</code> ensures the pseudoinverse is well-behaved near singularities. Higher damping = smaller, safer steps. Lower damping = faster convergence but risk of instability near singular configurations.</p>
+<h3 id="step-size-clamping"><a class="header" href="#step-size-clamping">Step Size Clamping</a></h3>
+<p>The solver limits each iteration’s total joint change to <code>step_size</code> radians. If the raw DLS step exceeds this, the entire step vector is scaled down. This prevents wildly large joint movements when far from the target.</p>
 <h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
-<p><code>inverse_kinematics</code> returns <code>Result&lt;IkResult, IkError&gt;</code>:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Error</th><th>Cause</th></tr>
 </thead>
 <tbody>
-<tr><td><code>MismatchedLengths</code></td><td>Joint count doesn’t match DH table length</td></tr>
-<tr><td><code>EmptyChain</code></td><td>No joints provided</td></tr>
-<tr><td><code>InvalidOptions</code></td><td>Invalid damping or tolerance values</td></tr>
-<tr><td><code>DidNotConverge</code></td><td>Reached <code>max_iterations</code> without converging</td></tr>
+<tr><td><code>IkError::DegenerateChain</code></td><td>Robot has 0 DOF</td></tr>
+<tr><td><code>IkError::MaxIterationsReached { error }</code></td><td>Reached max iterations without converging; <code>error</code> is the final position error in mm</td></tr>
 </tbody>
 </table>
 </div>
-<p>Even when <code>converged</code> is <code>false</code>, <code>joint_angles</code> contains the best attempt — useful for re-seeding with a different initial guess.</p>
-<h2 id="task-dof-free-z-roll"><a class="header" href="#task-dof-free-z-roll">Task DOF: Free Z-Roll</a></h2>
-<p>The solver includes a <strong>Task DOF</strong> model for the orientation error. By default, rotation about the end-effector’s Z axis is treated as a <strong>free DOF</strong> — the solver does not penalize Z-roll errors.</p>
-<p>This matches how most serial robots work: the last joint typically controls Z rotation, and imposing a fixed Z orientation over-constrains the problem. You can disable this via <code>IkOptions</code> (not yet exposed — open an issue if you need it).</p>
+<p>Even when <code>MaxIterationsReached</code> is returned, the <code>q</code> values in the error represent the best attempt — useful for re-seeding with a different initial guess.</p>
+<h2 id="jacobian-how-twist-joints-work"><a class="header" href="#jacobian-how-twist-joints-work">Jacobian: How Twist Joints Work</a></h2>
+<p>The solver builds a 3×n linear Jacobian. Each column is the linear velocity contribution of joint <code>i</code>:</p>
+<pre><code>J[:, i] = axis_i × (p_ee − p_i)
+</code></pre>
+<p>The <strong>axis</strong> depends on joint type:</p>
+<ul>
+<li><strong>Revolute/Prismatic</strong>: <code>Z_{i-1}</code> (Z axis of the previous frame)</li>
+<li><strong>Twist</strong>: <code>X_{i-1}</code> (X axis of the previous frame)</li>
+</ul>
+<p>This correctly handles wrist roll (J4 in FABRI Creator) where rotation is about the forearm’s X axis.</p>
 <h2 id="example-fabri-creator-at-home-pose"><a class="header" href="#example-fabri-creator-at-home-pose">Example: FABRI Creator at Home Pose</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let home = vec![0.0, 0.0, 0.0, 0.0, 0.0];
-let target = fk(&amp;fabri_creator_robot, &amp;home); // FK computes where home is
-let result = ik(&amp;table, &amp;kinds, &amp;home, &amp;target, &amp;IkOptions::default())?;
-assert!(result.converged);
+</span>let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+let robot = fabri_creator();
+let base = base_transform();
+let tool = tool_transform();
+
+// At home (q=0), the tool tip is at approximately (236, 0, 314)
+// Asking for that position should give q≈0
+let target = [236.0, 0.0, 314.0];
+let q_init = vec![0.0; 5];
+
+let result = solver.solve_position(&amp;target, &amp;q_init, &amp;robot, &amp;base, &amp;tool);
+assert!(result.is_ok());
+let q = result.unwrap();
+for (i, &amp;val) in q.iter().enumerate() {
+    assert!(val.abs() &lt; 0.05, "J{} should be near 0", i + 1);
+}
 <span class="boring">}</span></code></pre>
 <h2 id="when-it-fails"><a class="header" href="#when-it-fails">When It Fails</a></h2>
 <ul>
-<li><strong>Far from a reachable target:</strong> the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better <code>initial_guess</code> or use a multi-start strategy.</li>
+<li><strong>Far from a reachable target:</strong> the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better <code>q_init</code> or use a multi-start strategy.</li>
 <li><strong>Near singularities:</strong> the solver handles this with damping, but extremely high joint speeds may still appear. Increase <code>damping</code> if the solver becomes unstable.</li>
-<li><strong>Orientation-only targets are not supported yet</strong> — <code>TaskDOF</code> still requires a position component.</li>
+<li><strong>Unreachable target:</strong> the solver will hit <code>max_iterations</code> and return the best attempt with <code>MaxIterationsReached</code>.</li>
 </ul>
 <h2 id="references-3"><a class="header" href="#references-3">References</a></h2>
 <ul>
@@ -1675,7 +1680,7 @@ assert!(result.converged);
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="project-structure-1"><a class="header" href="#project-structure-1">Project Structure</a></h1>
-<p>Bombolab is a Rust workspace with a clean separation between the math/model layer and the GUI layer.</p>
+<p>Bombolab is a Rust workspace with WASM interop and a web frontend.</p>
 <h2 id="workspace-layout"><a class="header" href="#workspace-layout">Workspace Layout</a></h2>
 <pre><code>bombolab/
 ├── Cargo.toml                    # Workspace root
@@ -1693,39 +1698,52 @@ assert!(result.converged);
 │   │       │   └── constants.rs  # PI, DEG_TO_RAD, RAD_TO_DEG
 │   │       ├── robot/
 │   │       │   ├── mod.rs
-│   │       │   ├── joint.rs      # JointType, Joint
+│   │       │   ├── joint.rs      # JointType (Revolute, Prismatic, Twist), Joint
 │   │       │   ├── link.rs       # DHParams
-│   │       │   ├── segment.rs    # Segment, Robot (with servo offsets)
+│   │       │   ├── segment.rs    # Segment, Robot (with servo offsets/directions)
 │   │       │   ├── errors.rs     # Error, Result types
 │   │       │   └── fabri_creator.rs  # FABRI Creator robot config
 │   │       ├── kinematics/
 │   │       │   ├── mod.rs
 │   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
+│   │       │   ├── ik.rs         # IkSolver (DLS IK), IkError
 │   │       │   └── init.rs       # Interactive CLI tester
 │   │       ├── communication/    # Serial communication with hardware
 │   │       │   ├── mod.rs        # ConnectionError, protocol constants
 │   │       │   ├── arduino_nano.rs   # ArduinoNano serial wrapper
+│   │       │   ├── mapper.rs     # ServoMapper (q → servo degrees)
 │   │       │   └── interpolation.rs  # Smooth servo movement
 │   │       └── bin/
 │   │           ├── dh-solve.rs           # DH table solver CLI
 │   │           ├── quaternion-solve.rs   # Quaternion operations CLI
 │   │           └── serial-test.rs        # Interactive serial tester
-│   └── bombolab-gui/             # Desktop GUI
+│   └── bombolab-wasm/             # WASM bridge
 │       ├── Cargo.toml
-│       └── src/
-│           ├── lib.rs
-│           └── ui/
-│               ├── main_page.rs  # egui rendering and layout
-│               └── state.rs      # AppState, RobotDef, SegmentUi
-└── docs/
-    ├── forward_kinematics.md     # Original FK documentation
-    └── src/                      # mdBook source
-        ├── SUMMARY.md
-        └── ...
+│       └── src/lib.rs             # FK, IK, fabri_creator exports via wasm-bindgen
+├── web/                           # Web visualizer
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── components/            # React components
+│       │   ├── RobotViewer.tsx    # 3D scene (Three.js), FK rendering, gripper
+│       │   ├── JointControls.tsx  # Joint slider UI
+│       │   ├── InfoPanel.tsx      # End-effector position/rotation display
+│       │   └── IkTarget.tsx       # Draggable IK target
+│       ├── kinematics/types.ts    # TypeScript interfaces (Mat4, Segment, RobotDef)
+│       ├── wasm.ts                # WASM bridge: FK, IK, robot factory
+│       ├── serial.ts              # WebSerial
+│       └── pkg/                   # Generated WASM binary (gitignored)
+├── arduino/                       # PlatformIO firmware (C++)
+├── book/                          # mdBook source
+│   ├── book.toml
+│   └── src/
+│       ├── SUMMARY.md
+│       └── ...
+└── docs/fabri-creator/            # Hardware docs, DH table definition
 </code></pre>
 <h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate Responsibilities</a></h2>
 <h3 id="bombolab-core"><a class="header" href="#bombolab-core">bombolab-core</a></h3>
-<p>The core library contains all math, data models, and kinematics computation. It has <strong>no GUI dependency</strong>.</p>
+<p>The core library contains all math, data models, and kinematics computation. It has <strong>no GUI dependency</strong> and can be compiled to WASM.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1736,62 +1754,69 @@ assert!(result.converged);
 <tr><td><code>math::hmatrix</code></td><td><code>Movement</code>, <code>rotation_and_translation()</code>, <code>translation_and_rotation()</code>, <code>make_movement()</code></td></tr>
 <tr><td><code>math::quaternion</code></td><td><code>Quaternion</code>, <code>solve_add()</code>, <code>solve_subtract()</code>, <code>solve_multiply()</code>, <code>solve_divide()</code></td></tr>
 <tr><td><code>math::constants</code></td><td><code>PI</code>, <code>DEG_TO_RAD</code>, <code>RAD_TO_DEG</code>, <code>FRAC_PI_2</code>, <code>FRAC_PI_4</code>, <code>EPS</code>, <code>TAU</code></td></tr>
-<tr><td><code>robot::joint</code></td><td><code>JointType</code> (Revolute/Prismatic), <code>Joint</code></td></tr>
+<tr><td><code>robot::joint</code></td><td><code>JointType</code> (Revolute/Prismatic/<strong>Twist</strong>), <code>Joint</code></td></tr>
 <tr><td><code>robot::link</code></td><td><code>DHParams</code></td></tr>
-<tr><td><code>robot::segment</code></td><td><code>Segment</code>, <code>Robot</code> (with <code>home_pose</code>, <code>servo_offsets</code>, q/servo conversion)</td></tr>
+<tr><td><code>robot::segment</code></td><td><code>Segment</code>, <code>Robot</code> (with <code>home_pose</code>, <code>servo_offsets</code>, <code>servo_directions</code>, q/servo conversion)</td></tr>
 <tr><td><code>robot::errors</code></td><td><code>Error</code> enum, <code>Result&lt;T&gt;</code> type alias</td></tr>
 <tr><td><code>robot::fabri_creator</code></td><td>FABRI Creator 5-DOF robot configuration, base/tool transforms</td></tr>
 <tr><td><code>kinematics::forward</code></td><td><code>forward_kinematics()</code>, <code>matrix_from_segment()</code></td></tr>
+<tr><td><code>kinematics::ik</code></td><td><code>IkSolver</code>, <code>IkError</code></td></tr>
 <tr><td><code>kinematics::init</code></td><td>Interactive CLI for building robots and testing FK</td></tr>
 <tr><td><code>communication</code></td><td>Serial protocol constants, <code>ConnectionError</code> enum</td></tr>
 <tr><td><code>communication::arduino_nano</code></td><td><code>ArduinoNano</code> serial connection wrapper</td></tr>
+<tr><td><code>communication::mapper</code></td><td><code>ServoMapper</code> — maps kinematic q to servo angles</td></tr>
 <tr><td><code>communication::interpolation</code></td><td><code>InterpolationConfig</code>, <code>interpolate_joint()</code>, <code>interpolate_all()</code></td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="bombolab-gui"><a class="header" href="#bombolab-gui">bombolab-gui</a></h3>
-<p>The GUI layer depends on <code>bombolab-core</code> and adds:</p>
+<h3 id="bombolab-wasm"><a class="header" href="#bombolab-wasm">bombolab-wasm</a></h3>
+<p>The WASM bridge exposes core functionality to the web frontend:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Module</th><th>What It Contains</th></tr>
+<tr><th>Export</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>ui::state</code></td><td><code>AppState</code>, <code>RobotDef</code>, <code>SegmentUi</code>, <code>PanelView</code></td></tr>
-<tr><td><code>ui::main_page</code></td><td>egui panel layout, robot editor, FK visualization</td></tr>
+<tr><td><code>fabri_creator()</code></td><td>Returns FABRI Creator robot definition</td></tr>
+<tr><td><code>forward_kinematics(robot)</code></td><td>Compute FK frames + end-effector</td></tr>
+<tr><td><code>solve_ik(robot, target, q_init)</code></td><td>IK solver returning q + convergence</td></tr>
+<tr><td><code>base_transform()</code> / <code>tool_transform()</code></td><td>Robot transforms</td></tr>
 </tbody>
 </table>
 </div>
+<p>All matrix data is serialized as row-major 3×4 arrays, matching the original TypeScript FK format.</p>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
-<pre><code>User Input (GUI or CLI)
-        │
-        ▼
-┌─────────────────┐
-│  Robot / Table   │  ← robot model or raw DH parameters
+<pre><code>┌─────────────────┐
+│  Sliders / IK   │  ← user input (React UI)
+│  Target Drag     │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Forward Kin.    │  ← forward_kinematics() or solve()
+│  wasm.ts         │  ← TypeScript bridge → Rust WASM
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Iso3 /     │  ← frames, end-effector pose
-│  Matrix4         │
+│  Rust core       │  ← forward_kinematics() / IkSolver
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Display         │  ← GUI rendering or CLI output
-└─────────────────┘
+│  frames (Iso3)   │  ← poses in DH coordinates
+└────────┬────────┘
+         │
+         ▼
+┌──────────────────────────┐
+│  framePose() → Three.js  │  ← coordinate swap (Z-up → Y-up)
+└──────────────────────────┘
 </code></pre>
 <h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency Graph</a></h2>
 <pre><code>bombolab (workspace root)
 ├── bombolab-core    (nalgebra, serialport, ctrlc)
-└── bombolab-gui     (bombolab-core + egui + eframe)
+└── bombolab-wasm    (bombolab-core + wasm-bindgen + serde)
 </code></pre>
-<p>The core crate depends on <code>nalgebra</code> for linear algebra, <code>serialport</code> for hardware communication, and <code>ctrlc</code> for clean shutdown handling. The GUI crate adds <code>egui</code> and <code>eframe</code> for the desktop interface.</p>
+<p>The core crate depends on <code>nalgebra</code> for linear algebra, <code>serialport</code> for hardware communication (behind feature gate <code>serial</code> for WASM compat), and <code>ctrlc</code> for clean shutdown. The WASM crate adds <code>wasm-bindgen</code> and <code>serde</code> for JavaScript interop.</p>
 <h2 id="references-4"><a class="header" href="#references-4">References</a></h2>
 <ul>
 <li><a href="#design-decisions">Design Decisions</a> – why the code is structured this way</li>
@@ -2232,11 +2257,11 @@ cargo run --bin ik-solve &lt;x_mm&gt; &lt;y_mm&gt; &lt;z_mm&gt; [roll_deg] [pitc
 </span>// Math
 pub use math::{DHParameter, DHSolution, DEG_TO_RAD, PI, RAD_TO_DEG, compute_a_matrix, solve};
 pub use math::{Iso3, Rot3, Mat4, Vec3, Quat};
-pub use math::{Movement, geometric_jacobian, JacobianError, JointKind};
+pub use math::{geometric_jacobian, JacobianError, Movement};
 
 // Kinematics
-pub use kinematics::{forward_kinematics, inverse_kinematics, matrix_from_segment};
-pub use kinematics::{IkError, IkOptions, IkResult, build_dh_table};
+pub use kinematics::forward_kinematics;
+pub use kinematics::{IkSolver, IkError};
 
 // Robot model
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
@@ -2470,9 +2495,22 @@ pub fn solve_divide(quaternions: &amp;[Quaternion]) -&gt; Quaternion
 pub enum JointType {
     Revolute,
     Prismatic,
+    Twist,
 }
 <span class="boring">}</span></code></pre>
-<p>Implements <code>Display</code>: <code>"R"</code> for Revolute, <code>"P"</code> for Prismatic.</p>
+<p>Implements <code>Display</code>: <code>"R"</code> for Revolute, <code>"P"</code> for Prismatic, <code>"T"</code> for Twist.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Joint variable</th><th>DH formula</th><th>Used for</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Revolute</code></td><td><code>q</code> → <code>theta</code></td><td><code>RotZ(θ)·TransZ(d)·TransX(a)·RotX(α)</code></td><td>Standard rotary joints</td></tr>
+<tr><td><code>Prismatic</code></td><td><code>q</code> → <code>d</code></td><td><code>RotZ(θ)·TransZ(d)·TransX(a)·RotX(α)</code></td><td>Linear/sliding joints</td></tr>
+<tr><td><code>Twist</code></td><td><code>q</code> → <code>alpha</code></td><td><code>RotX(α+q)·TransX(a)</code></td><td>Wrist roll (rotation about forearm axis)</td></tr>
+</tbody>
+</table>
+</div>
 <h3 id="joint-1"><a class="header" href="#joint-1"><code>Joint</code></a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -2541,6 +2579,9 @@ pub enum JointType {
 </span><span class="boring">fn main() {
 </span>pub struct Robot {
     pub segments: Vec&lt;Segment&gt;,
+    pub home_pose: Vec&lt;f64&gt;,         // servo angles at kinematic zero (radians)
+    pub servo_offsets: Vec&lt;f64&gt;,     // servo_angle = q + offset (radians)
+    pub servo_directions: Vec&lt;f64&gt;,  // +1 horario, -1 anti horario
 }
 <span class="boring">}</span></code></pre>
 <div class="table-wrapper">
@@ -2549,7 +2590,9 @@ pub enum JointType {
 <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>new</code></td><td><code>(segments: Vec&lt;Segment&gt;) -&gt; Self</code></td><td>Create robot</td></tr>
+<tr><td><code>new</code></td><td><code>(segments: Vec&lt;Segment&gt;) -&gt; Self</code></td><td>Create robot with zero offsets</td></tr>
+<tr><td><code>with_offsets</code></td><td><code>(segments, home_pose, offsets) -&gt; Self</code></td><td>Create with explicit servo mapping</td></tr>
+<tr><td><code>with_directions</code></td><td><code>(segments, home_pose, offsets, directions) -&gt; Self</code></td><td>Create with offsets + directions</td></tr>
 <tr><td><code>dof</code></td><td><code>(&amp;self) -&gt; usize</code></td><td>Degrees of freedom (segment count)</td></tr>
 <tr><td><code>segment</code></td><td><code>(&amp;self, index: usize) -&gt; Result&lt;&amp;Segment&gt;</code></td><td>Get segment by index</td></tr>
 <tr><td><code>segment_mut</code></td><td><code>(&amp;mut self, index: usize) -&gt; Result&lt;&amp;mut Segment&gt;</code></td><td>Get mutable segment</td></tr>
@@ -2558,9 +2601,16 @@ pub enum JointType {
 <tr><td><code>is_empty</code></td><td><code>(&amp;self) -&gt; bool</code></td><td>True if no segments</td></tr>
 <tr><td><code>add_segment</code></td><td><code>(&amp;mut self, segment: Segment)</code></td><td>Append segment</td></tr>
 <tr><td><code>remove_segment</code></td><td><code>(&amp;mut self, index: usize) -&gt; Result&lt;Segment&gt;</code></td><td>Remove and return segment</td></tr>
+<tr><td><code>q_to_servo</code></td><td><code>(&amp;self, q: &amp;[f64]) -&gt; Vec&lt;f64&gt;</code></td><td>Kinematic q → servo angles</td></tr>
+<tr><td><code>servo_to_q</code></td><td><code>(&amp;self, servo: &amp;[f64]) -&gt; Vec&lt;f64&gt;</code></td><td>Servo angles → kinematic q</td></tr>
+<tr><td><code>kinematic_home</code></td><td><code>(&amp;self) -&gt; Vec&lt;f64&gt;</code></td><td>Home in kinematic space (should be zeros)</td></tr>
 </tbody>
 </table>
 </div>
+<p>The servo conversion formulas:</p>
+<pre><code>horario (dir = +1):    servo = q + offset   → q = servo - offset
+anti horario (dir = -1): servo = offset - q → q = offset - servo
+</code></pre>
 <h3 id="error"><a class="header" href="#error"><code>Error</code></a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -2710,62 +2760,43 @@ assert_eq!(frames.len(), 1);
 </span>pub fn matrix_from_segment(segment: &amp;Segment) -&gt; Iso3&lt;f64&gt;
 <span class="boring">}</span></code></pre>
 <p>Returns the isometry representing the segment’s DH transformation: <code>RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)</code>.</p>
-<h3 id="inverse_kinematics"><a class="header" href="#inverse_kinematics"><code>inverse_kinematics</code></a></h3>
-<p>Iterative IK solver using damped pseudoinverse (Levenberg–Marquardt).</p>
+<h3 id="iksolver-1"><a class="header" href="#iksolver-1"><code>IkSolver</code></a></h3>
+<p>Position-only IK solver using damped pseudoinverse (Levenberg–Marquardt). Operates on a complete <code>Robot</code> with base and tool transforms.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub fn inverse_kinematics(
-    dh_table: &amp;[DHParameter],
-    joint_kinds: &amp;[JointKind],
-    initial_guess: &amp;[f64],
-    target: &amp;Iso3,
-    options: &amp;IkOptions,
-) -&gt; Result&lt;IkResult, IkError&gt;
-
-pub fn build_dh_table(robot: &amp;Robot) -&gt; Vec&lt;DHParameter&gt;
+</span>pub struct IkSolver {
+    pub max_iterations: usize,
+    pub tolerance: f64,
+    pub damping: f64,
+    pub step_size: f64,
+}
 <span class="boring">}</span></code></pre>
-<p><strong>Parameters</strong>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new</code></td><td><code>(max_iterations, tolerance, damping, step_size) -&gt; Self</code></td><td>Create solver</td></tr>
+<tr><td><code>solve_position</code></td><td><code>(&amp;self, target, q_init, robot, base, tool) -&gt; Result&lt;Vec&lt;f64&gt;, IkError&gt;</code></td><td>Solve IK</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Parameters for <code>solve_position</code></strong>:</p>
 <ul>
-<li><code>dh_table</code> — DH parameters for each joint</li>
-<li><code>joint_kinds</code> — <code>Revolute</code> or <code>Prismatic</code> per joint</li>
-<li><code>initial_guess</code> — seed joint angles (radians)</li>
-<li><code>target</code> — desired end-effector pose</li>
-<li><code>options</code> — convergence settings</li>
+<li><code>target: &amp;[f64; 3]</code> — desired [x, y, z] position in world coordinates (mm)</li>
+<li><code>q_init: &amp;[f64]</code> — seed joint angles (radians)</li>
+<li><code>robot: &amp;Robot</code> — the robot to solve</li>
+<li><code>base: &amp;Iso3</code> — base transform from ground to joint 1</li>
+<li><code>tool: &amp;Iso3</code> — tool transform from last joint to end effector</li>
 </ul>
-<h3 id="ikoptions"><a class="header" href="#ikoptions"><code>IkOptions</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct IkOptions {
-    pub tolerance_pos: f64,    // mm (default: 0.1)
-    pub tolerance_angle: f64,  // rad (default: 0.1)
-    pub max_iterations: u32,   // (default: 200)
-    pub damping: f64,          // initial λ (default: 0.1)
-    pub min_damping: f64,      // floor (default: 1e-6)
-    pub damping_update: DampingStrategy,  // GainRatio or Fixed
-    pub joint_limits: Option&lt;Vec&lt;(f64, f64)&gt;&gt;,
-}
-<span class="boring">}</span></code></pre>
-<h3 id="ikresult"><a class="header" href="#ikresult"><code>IkResult</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct IkResult {
-    pub converged: bool,
-    pub joint_angles: Vec&lt;f64&gt;,
-    pub iterations: u32,
-    pub final_error: f64,
-    pub position_error: f64,
-    pub orientation_error: f64,
-    pub damping_used: f64,
-}
-<span class="boring">}</span></code></pre>
+<p><strong>Returns</strong>: <code>Ok(q)</code> on convergence, <code>Err(IkError)</code> otherwise.</p>
 <h3 id="ikerror"><a class="header" href="#ikerror"><code>IkError</code></a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub enum IkError {
-    MismatchedLengths,
-    EmptyChain,
-    InvalidOptions,
-    DidNotConverge { iterations: u32, final_errors: (f64, f64) },
+    DegenerateChain,
+    MaxIterationsReached { error: f64 },
 }
 <span class="boring">}</span></code></pre>
 <h3 id="geometric_jacobian-1"><a class="header" href="#geometric_jacobian-1"><code>geometric_jacobian</code></a></h3>
@@ -2773,25 +2804,22 @@ pub fn build_dh_table(robot: &amp;Robot) -&gt; Vec&lt;DHParameter&gt;
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub fn geometric_jacobian(
-    intermediates: &amp;[Mat4],
-    joint_kinds: &amp;[JointKind],
-    end_effector: &amp;Mat4,
+    intermediates: &amp;[Iso3],
+    joint_types: &amp;[JointType],
+    end_effector: &amp;Iso3,
 ) -&gt; Result&lt;MatDyn, JacobianError&gt;
 <span class="boring">}</span></code></pre>
+<p>The Jacobian uses the correct rotation axis per joint type:</p>
+<ul>
+<li><strong>Revolute/Prismatic</strong>: <code>Z_{i-1}</code> (Z axis of the previous frame)</li>
+<li><strong>Twist</strong>: <code>X_{i-1}</code> (X axis of the previous frame)</li>
+</ul>
 <h3 id="jacobianerror-1"><a class="header" href="#jacobianerror-1"><code>JacobianError</code></a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub enum JacobianError {
     EmptyChain,
     JointKindMismatch { intermediates: usize, kinds: usize },
-}
-<span class="boring">}</span></code></pre>
-<h3 id="jointkind-1"><a class="header" href="#jointkind-1"><code>JointKind</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub enum JointKind {
-    Revolute,
-    Prismatic,
 }
 <span class="boring">}</span></code></pre>
 <hr>

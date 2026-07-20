@@ -13,11 +13,11 @@ The top-level `bombolab_core` module re-exports the most commonly used items:
 // Math
 pub use math::{DHParameter, DHSolution, DEG_TO_RAD, PI, RAD_TO_DEG, compute_a_matrix, solve};
 pub use math::{Iso3, Rot3, Mat4, Vec3, Quat};
-pub use math::{Movement, geometric_jacobian, JacobianError, JointKind};
+pub use math::{geometric_jacobian, JacobianError, Movement};
 
 // Kinematics
-pub use kinematics::{forward_kinematics, inverse_kinematics, matrix_from_segment};
-pub use kinematics::{IkError, IkOptions, IkResult, build_dh_table};
+pub use kinematics::forward_kinematics;
+pub use kinematics::{IkSolver, IkError};
 
 // Robot model
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
@@ -254,10 +254,17 @@ All operations are sequential: `solve_op(&[q1, q2, q3])` applies left to right.
 pub enum JointType {
     Revolute,
     Prismatic,
+    Twist,
 }
 ```
 
-Implements `Display`: `"R"` for Revolute, `"P"` for Prismatic.
+Implements `Display`: `"R"` for Revolute, `"P"` for Prismatic, `"T"` for Twist.
+
+| Variant | Joint variable | DH formula | Used for |
+|---------|---------------|------------|----------|
+| `Revolute` | `q` → `theta` | `RotZ(θ)·TransZ(d)·TransX(a)·RotX(α)` | Standard rotary joints |
+| `Prismatic` | `q` → `d` | `RotZ(θ)·TransZ(d)·TransX(a)·RotX(α)` | Linear/sliding joints |
+| `Twist` | `q` → `alpha` | `RotX(α+q)·TransX(a)` | Wrist roll (rotation about forearm axis) |
 
 ### `Joint`
 
@@ -312,12 +319,17 @@ pub struct Segment {
 ```rust
 pub struct Robot {
     pub segments: Vec<Segment>,
+    pub home_pose: Vec<f64>,         // servo angles at kinematic zero (radians)
+    pub servo_offsets: Vec<f64>,     // servo_angle = q + offset (radians)
+    pub servo_directions: Vec<f64>,  // +1 horario, -1 anti horario
 }
 ```
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `new` | `(segments: Vec<Segment>) -> Self` | Create robot |
+| `new` | `(segments: Vec<Segment>) -> Self` | Create robot with zero offsets |
+| `with_offsets` | `(segments, home_pose, offsets) -> Self` | Create with explicit servo mapping |
+| `with_directions` | `(segments, home_pose, offsets, directions) -> Self` | Create with offsets + directions |
 | `dof` | `(&self) -> usize` | Degrees of freedom (segment count) |
 | `segment` | `(&self, index: usize) -> Result<&Segment>` | Get segment by index |
 | `segment_mut` | `(&mut self, index: usize) -> Result<&mut Segment>` | Get mutable segment |
@@ -326,6 +338,16 @@ pub struct Robot {
 | `is_empty` | `(&self) -> bool` | True if no segments |
 | `add_segment` | `(&mut self, segment: Segment)` | Append segment |
 | `remove_segment` | `(&mut self, index: usize) -> Result<Segment>` | Remove and return segment |
+| `q_to_servo` | `(&self, q: &[f64]) -> Vec<f64>` | Kinematic q → servo angles |
+| `servo_to_q` | `(&self, servo: &[f64]) -> Vec<f64>` | Servo angles → kinematic q |
+| `kinematic_home` | `(&self) -> Vec<f64>` | Home in kinematic space (should be zeros) |
+
+The servo conversion formulas:
+
+```
+horario (dir = +1):    servo = q + offset   → q = servo - offset
+anti horario (dir = -1): servo = offset - q → q = offset - servo
+```
 
 ### `Error`
 
@@ -479,65 +501,39 @@ pub fn matrix_from_segment(segment: &Segment) -> Iso3<f64>
 
 Returns the isometry representing the segment's DH transformation: `RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)`.
 
-### `inverse_kinematics`
+### `IkSolver`
 
-Iterative IK solver using damped pseudoinverse (Levenberg–Marquardt).
-
-```rust
-pub fn inverse_kinematics(
-    dh_table: &[DHParameter],
-    joint_kinds: &[JointKind],
-    initial_guess: &[f64],
-    target: &Iso3,
-    options: &IkOptions,
-) -> Result<IkResult, IkError>
-
-pub fn build_dh_table(robot: &Robot) -> Vec<DHParameter>
-```
-
-**Parameters**:
-- `dh_table` — DH parameters for each joint
-- `joint_kinds` — `Revolute` or `Prismatic` per joint
-- `initial_guess` — seed joint angles (radians)
-- `target` — desired end-effector pose
-- `options` — convergence settings
-
-### `IkOptions`
+Position-only IK solver using damped pseudoinverse (Levenberg–Marquardt). Operates on a complete `Robot` with base and tool transforms.
 
 ```rust
-pub struct IkOptions {
-    pub tolerance_pos: f64,    // mm (default: 0.1)
-    pub tolerance_angle: f64,  // rad (default: 0.1)
-    pub max_iterations: u32,   // (default: 200)
-    pub damping: f64,          // initial λ (default: 0.1)
-    pub min_damping: f64,      // floor (default: 1e-6)
-    pub damping_update: DampingStrategy,  // GainRatio or Fixed
-    pub joint_limits: Option<Vec<(f64, f64)>>,
+pub struct IkSolver {
+    pub max_iterations: usize,
+    pub tolerance: f64,
+    pub damping: f64,
+    pub step_size: f64,
 }
 ```
 
-### `IkResult`
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `new` | `(max_iterations, tolerance, damping, step_size) -> Self` | Create solver |
+| `solve_position` | `(&self, target, q_init, robot, base, tool) -> Result<Vec<f64>, IkError>` | Solve IK |
 
-```rust
-pub struct IkResult {
-    pub converged: bool,
-    pub joint_angles: Vec<f64>,
-    pub iterations: u32,
-    pub final_error: f64,
-    pub position_error: f64,
-    pub orientation_error: f64,
-    pub damping_used: f64,
-}
-```
+**Parameters for `solve_position`**:
+- `target: &[f64; 3]` — desired [x, y, z] position in world coordinates (mm)
+- `q_init: &[f64]` — seed joint angles (radians)
+- `robot: &Robot` — the robot to solve
+- `base: &Iso3` — base transform from ground to joint 1
+- `tool: &Iso3` — tool transform from last joint to end effector
+
+**Returns**: `Ok(q)` on convergence, `Err(IkError)` otherwise.
 
 ### `IkError`
 
 ```rust
 pub enum IkError {
-    MismatchedLengths,
-    EmptyChain,
-    InvalidOptions,
-    DidNotConverge { iterations: u32, final_errors: (f64, f64) },
+    DegenerateChain,
+    MaxIterationsReached { error: f64 },
 }
 ```
 
@@ -547,11 +543,15 @@ Compute the 6×n geometric Jacobian for a serial chain.
 
 ```rust
 pub fn geometric_jacobian(
-    intermediates: &[Mat4],
-    joint_kinds: &[JointKind],
-    end_effector: &Mat4,
+    intermediates: &[Iso3],
+    joint_types: &[JointType],
+    end_effector: &Iso3,
 ) -> Result<MatDyn, JacobianError>
 ```
+
+The Jacobian uses the correct rotation axis per joint type:
+- **Revolute/Prismatic**: `Z_{i-1}` (Z axis of the previous frame)
+- **Twist**: `X_{i-1}` (X axis of the previous frame)
 
 ### `JacobianError`
 
@@ -559,15 +559,6 @@ pub fn geometric_jacobian(
 pub enum JacobianError {
     EmptyChain,
     JointKindMismatch { intermediates: usize, kinds: usize },
-}
-```
-
-### `JointKind`
-
-```rust
-pub enum JointKind {
-    Revolute,
-    Prismatic,
 }
 ```
 

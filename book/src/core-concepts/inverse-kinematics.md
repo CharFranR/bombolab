@@ -1,10 +1,10 @@
 # Inverse Kinematics
 
-**The IK solver finds joint values that place the end effector at a desired pose.** You specify a target (position + optional orientation), and the solver iteratively adjusts joint angles until the robot reaches it.
+**The IK solver finds joint angles that place the end effector at a desired position.** You specify a 3D target, and the solver iteratively adjusts joint angles until the robot reaches it.
 
 ## The Core Idea
 
-Forward kinematics answers: *given joint values, where is the end effector?* Inverse kinematics answers the opposite: *given a target pose, what joint values get me there?*
+Forward kinematics answers: *given joint values, where is the end effector?* Inverse kinematics answers the opposite: *given a target position, what joint values get me there?*
 
 For serial chains with more than a few joints, there's no closed-form solution. Bombolab uses a **damped pseudoinverse (Levenberg–Marquardt)** approach:
 
@@ -14,119 +14,120 @@ For serial chains with more than a few joints, there's no closed-form solution. 
 
 Where:
 - `Δq` = joint correction
-- `J` = geometric Jacobian (6×n)
+- `J` = linear Jacobian (3×n)
 - `λ` = damping factor (regularizes near singularities)
-- `Δx` = pose error (6×1: position + orientation)
+- `Δx` = position error (3×1)
 
-## How It Works
+## IkSolver
 
-### Step 1: Set up the target
-
-```rust
-use bombolab_core::{inverse_kinematics, IkOptions, solve, JointKind::Revolute};
-use nalgebra::{Isometry3, Translation3, UnitQuaternion};
-
-let table = vec![
-    DHParameter::new(0.0, 1.0, 0.0, 0.0),
-    DHParameter::new(0.0, 1.0, 0.0, 0.0),
-];
-let kinds = vec![Revolute, Revolute];
-let initial_guess = vec![0.0, 0.0];
-
-// Target: position (1.5, 0.5, 0.0), no orientation constraint
-let target = Isometry3::from_parts(
-    Translation3::new(1.5, 0.5, 0.0),
-    UnitQuaternion::identity(),
-);
-```
-
-### Step 2: Configure and solve
+The solver takes a `Robot`, base transform, tool transform, target position, and initial guess:
 
 ```rust
-let options = IkOptions::default();
-let result = inverse_kinematics(&table, &kinds, &initial_guess, &target, &options)?;
+use bombolab_core::{
+    Robot, Iso3, IkSolver, fabri_creator, base_transform, tool_transform,
+};
 
-println!("Converged: {} in {} iterations", result.converged, result.iterations);
-println!("Joint angles: {:?}", result.joint_angles);
-println!("Final pose error: {}", result.final_error);
+let robot = fabri_creator();
+let base = base_transform();
+let tool = tool_transform();
+
+// Target: position (200, 0, 280) in mm
+let target = [200.0, 0.0, 280.0];
+let q_init = vec![0.0; 5];
+
+let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+//   max_iterations: 200
+//   position tolerance: 1mm
+//   damping: 0.05
+//   max step size: 0.5 rad
+
+let result = solver.solve_position(&target, &q_init, &robot, &base, &tool);
 ```
-
-### Step 3: Verify
-
-```rust
-// Round-trip check: FK(IK) ≈ target
-let fk_solution = solve_segments(&table, &result.joint_angles);
-let end_pos = fk_solution.translation();
-println!("End effector at: ({:.3}, {:.3}, {:.3})", end_pos.x, end_pos.y, end_pos.z);
-```
-
-## Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `tolerance_pos` | 1.0 | Position convergence threshold (mm) |
-| `tolerance_angle` | 0.1 | Orientation convergence threshold (rad, ~6°) |
-| `max_iterations` | 200 | Maximum iterations before giving up |
-| `damping` | 0.1 | Initial damping factor `λ` for pseudoinverse regularization |
-| `min_damping` | 1e-6 | Floor for damping — prevents rank-1 updates from going to zero |
-| `damping_update` | `GainRatio` | Adaptation strategy: `GainRatio` (trust-region) or `Fixed` |
-| `joint_limits` | `None` | Joint limits as `Vec<(f64, f64)>` — clamps after each iteration |
-
-### Damping Strategies
-
-**`GainRatio` (default):** Trust-region approach — adapts `λ` based on how well the linearized model predicted the actual error reduction:
-- Large reduction → `λ` decreases (bigger steps)
-- Poor reduction → `λ` increases (smaller, safer steps)
-
-**`Fixed`:** Constant damping. Simpler, but less robust near singularities.
 
 ## Result
 
 ```rust
-pub struct IkResult {
-    pub converged: bool,           // Did we hit all tolerances?
-    pub joint_angles: Vec<f64>,    // Final joint values
-    pub iterations: u32,           // Iterations used
-    pub final_error: f64,          // Final pose error norm
-    pub position_error: f64,       // Final position error
-    pub orientation_error: f64,    // Final orientation error
-    pub damping_used: f64,         // Final damping value
+match result {
+    Ok(q) => {
+        println!("Converged! Joint angles: {:?}", q);
+    }
+    Err(IkError::MaxIterationsReached { error }) => {
+        println!("Did not converge, best error: {:.3}mm", error);
+    }
+    Err(IkError::DegenerateChain) => {
+        println!("Robot has no joints");
+    }
 }
 ```
 
-## Error Handling
+The solver returns `Ok(q)` when the position error is below `tolerance` (default 1mm). If it reaches `max_iterations` without converging, it returns the best attempt in the error variant.
 
-`inverse_kinematics` returns `Result<IkResult, IkError>`:
+## Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_iterations` | 50 | Maximum iterations before giving up |
+| `tolerance` | 1.0 | Position convergence threshold (mm) |
+| `damping` | 0.1 | Initial damping factor λ for pseudoinverse regularization |
+| `step_size` | 0.5 | Maximum joint angle change per iteration (rad, ~28°) |
+
+### How Damping Works
+
+The damping term `λ²·I` ensures the pseudoinverse is well-behaved near singularities. Higher damping = smaller, safer steps. Lower damping = faster convergence but risk of instability near singular configurations.
+
+### Step Size Clamping
+
+The solver limits each iteration's total joint change to `step_size` radians. If the raw DLS step exceeds this, the entire step vector is scaled down. This prevents wildly large joint movements when far from the target.
+
+## Error Handling
 
 | Error | Cause |
 |-------|-------|
-| `MismatchedLengths` | Joint count doesn't match DH table length |
-| `EmptyChain` | No joints provided |
-| `InvalidOptions` | Invalid damping or tolerance values |
-| `DidNotConverge` | Reached `max_iterations` without converging |
+| `IkError::DegenerateChain` | Robot has 0 DOF |
+| `IkError::MaxIterationsReached { error }` | Reached max iterations without converging; `error` is the final position error in mm |
 
-Even when `converged` is `false`, `joint_angles` contains the best attempt — useful for re-seeding with a different initial guess.
+Even when `MaxIterationsReached` is returned, the `q` values in the error represent the best attempt — useful for re-seeding with a different initial guess.
 
-## Task DOF: Free Z-Roll
+## Jacobian: How Twist Joints Work
 
-The solver includes a **Task DOF** model for the orientation error. By default, rotation about the end-effector's Z axis is treated as a **free DOF** — the solver does not penalize Z-roll errors.
+The solver builds a 3×n linear Jacobian. Each column is the linear velocity contribution of joint `i`:
 
-This matches how most serial robots work: the last joint typically controls Z rotation, and imposing a fixed Z orientation over-constrains the problem. You can disable this via `IkOptions` (not yet exposed — open an issue if you need it).
+```
+J[:, i] = axis_i × (p_ee − p_i)
+```
+
+The **axis** depends on joint type:
+- **Revolute/Prismatic**: `Z_{i-1}` (Z axis of the previous frame)
+- **Twist**: `X_{i-1}` (X axis of the previous frame)
+
+This correctly handles wrist roll (J4 in FABRI Creator) where rotation is about the forearm's X axis.
 
 ## Example: FABRI Creator at Home Pose
 
 ```rust
-let home = vec![0.0, 0.0, 0.0, 0.0, 0.0];
-let target = fk(&fabri_creator_robot, &home); // FK computes where home is
-let result = ik(&table, &kinds, &home, &target, &IkOptions::default())?;
-assert!(result.converged);
+let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+let robot = fabri_creator();
+let base = base_transform();
+let tool = tool_transform();
+
+// At home (q=0), the tool tip is at approximately (236, 0, 314)
+// Asking for that position should give q≈0
+let target = [236.0, 0.0, 314.0];
+let q_init = vec![0.0; 5];
+
+let result = solver.solve_position(&target, &q_init, &robot, &base, &tool);
+assert!(result.is_ok());
+let q = result.unwrap();
+for (i, &val) in q.iter().enumerate() {
+    assert!(val.abs() < 0.05, "J{} should be near 0", i + 1);
+}
 ```
 
 ## When It Fails
 
-- **Far from a reachable target:** the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better `initial_guess` or use a multi-start strategy.
+- **Far from a reachable target:** the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better `q_init` or use a multi-start strategy.
 - **Near singularities:** the solver handles this with damping, but extremely high joint speeds may still appear. Increase `damping` if the solver becomes unstable.
-- **Orientation-only targets are not supported yet** — `TaskDOF` still requires a position component.
+- **Unreachable target:** the solver will hit `max_iterations` and return the best attempt with `MaxIterationsReached`.
 
 ## References
 
