@@ -7,6 +7,3 @@ license = "MIT"
 
 [dependencies]
 bombolab-core = { path = "crates/bombolab-core" }
-bombolab-gui = { path = "crates/bombolab-gui" }
-egui = "0.34.3"
-eframe = "0.34.3"
