@@ -116,6 +116,19 @@ export class IkSolver {
     let bestQ = q.slice();
     let bestErr = Infinity;
 
+    // Evaluar q inicial antes de iterar
+    const fk0 = forwardKinematicsRaw(
+      robot.segments.map((seg, i) => ({ ...seg, q: q[i] ?? 0 })),
+      [1, 0, 0, robot.baseTransform[0], 0, 1, 0, robot.baseTransform[1], 0, 0, 1, robot.baseTransform[2], 0, 0, 0, 1],
+    );
+    const ee0 = fk0.frames[fk0.frames.length - 1];
+    const tp0 = mulMat4(ee0, [1, 0, 0, robot.toolTransform[0], 0, 1, 0, robot.toolTransform[1], 0, 0, 1, robot.toolTransform[2], 0, 0, 0, 1]);
+    const p0: [number, number, number] = [tp0[3], tp0[7], tp0[11]];
+    const e0 = Math.sqrt((target[0]-p0[0])**2 + (target[1]-p0[1])**2 + (target[2]-p0[2])**2);
+    if (e0 < this.tolerance) {
+      return { q, converged: true, error: e0 };
+    }
+
     for (let iter = 0; iter < this.maxIterations; iter++) {
       // FK con q actual
       const segments = robot.segments.map((seg, i) => ({ ...seg, q: q[i] ?? 0 }));
@@ -152,23 +165,16 @@ export class IkSolver {
         bestQ = q.slice();
       }
 
-      // Jacobiana 3×5: J_i = z_{i-1} × (p_ee - p_{i-1})
-      // J1 usa base (z=(0,0,1), p=baseTransform)
-      const j = new Float64Array(15); // 3×5 row-major
-      const baseP: [number, number, number] = [baseT[3], baseT[7], baseT[11]];
+      // Jacobiana: J_i = z_i × (p_ee - p_i)
+      // Z_i = Z axis de frames[i] (el frame del joint i+1)
+      // frames[0]=base, frames[1]=T_0_1, ...
+      const j = new Float64Array(15);
 
       for (let i = 0; i < n; i++) {
-        let z: [number, number, number];
-        let p: [number, number, number];
-        if (i === 0) {
-          z = [0, 0, 1];
-          p = baseP;
-        } else {
-          const prevFrame = fk.frames[i - 1];
-          // Z axis of frame i-1 = column 2 (indices 2, 6, 10)
-          z = [prevFrame[2], prevFrame[6], prevFrame[10]];
-          p = [prevFrame[3], prevFrame[7], prevFrame[11]];
-        }
+        const frame = fk.frames[i];
+        // Z axis = column 2 (indices 2, 6, 10 en row-major)
+        const z: [number, number, number] = [frame[2], frame[6], frame[10]];
+        const p: [number, number, number] = [frame[3], frame[7], frame[11]];
 
         // cross = z × (p_ee - p)
         const dx = pEe[0] - p[0];
