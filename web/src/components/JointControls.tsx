@@ -9,11 +9,13 @@ export default function JointControls({
   gripper,
   onGripperChange,
   onChange,
+  disabled = false,
 }: {
   segments: Segment[];
   gripper: number;
   onGripperChange: (v: number) => void;
   onChange: (index: number, qRad: number) => void;
+  disabled?: boolean;
 }) {
   return (
     <div style={{ padding: '12px 16px' }}>
@@ -36,15 +38,16 @@ export default function JointControls({
             min={-80}
             max={80}
             value={seg.q * DEG}
+            disabled={disabled}
             onChange={e => onChange(i, Number(e.target.value) / DEG)}
             style={{
               width: '100%',
               height: 4,
               appearance: 'none',
-              background: '#444',
+              background: disabled ? '#333' : '#444',
               borderRadius: 2,
               outline: 'none',
-              cursor: 'pointer',
+              cursor: disabled ? 'default' : 'pointer',
             }}
           />
         </div>
@@ -63,15 +66,16 @@ export default function JointControls({
           min={0}
           max={100}
           value={gripper}
+          disabled={disabled}
           onChange={e => onGripperChange(Number(e.target.value))}
           style={{
             width: '100%',
             height: 4,
             appearance: 'none',
-            background: '#444',
+            background: disabled ? '#333' : '#444',
             borderRadius: 2,
             outline: 'none',
-            cursor: 'pointer',
+            cursor: disabled ? 'default' : 'pointer',
           }}
         />
       </div>

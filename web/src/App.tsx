@@ -2,10 +2,13 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
 import { fabriCreator, fabriCreatorSegments } from './robot/fabri_creator';
 import { forwardKinematics } from './kinematics/forward';
+import { IkSolver } from './kinematics/ik';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
+
+const ikSolver = new IkSolver();
 
 function generateWorkspace(samples: number): [number, number, number][] {
   const points: [number, number, number][] = [];
@@ -46,6 +49,8 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
+  const [ikMode, setIkMode] = useState(false);
+  const [ikTarget, setIkTarget] = useState<[number, number, number] | null>(null);
   const portRef = useRef<SerialPort | null>(null);
 
   const workspacePoints = useMemo(
@@ -99,6 +104,18 @@ export default function App() {
     });
   }, []);
 
+  // IK: cuando el target cambia, resolver y actualizar q
+  useEffect(() => {
+    if (!ikMode || !ikTarget) return;
+    const result = ikSolver.solvePosition(ikTarget, robot.segments.map(s => s.q), robot);
+    if (result.converged || true) { // siempre actualizar aunque no converja
+      setRobot(prev => {
+        const segments = prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 }));
+        return { ...prev, segments };
+      });
+    }
+  }, [ikTarget, ikMode]);
+
   // Enviar q cada vez que cambia
   useEffect(() => {
     sendQ(robot.segments, gripper);
@@ -141,6 +158,7 @@ export default function App() {
             gripper={gripper}
             onGripperChange={setGripper}
             onChange={handleJointChange}
+            disabled={ikMode}
           />
         </div>
 
@@ -175,6 +193,53 @@ export default function App() {
             }}>
               Conectar robot físico
             </button>
+          )}
+        </div>
+
+        {/* IK mode */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <button
+            onClick={() => {
+              if (!ikMode) {
+                // Entrar en IK: target en posición actual del tool
+                const fk = forwardKinematics(robot.segments, robot.baseTransform);
+                const toolM = [
+                  1, 0, 0, robot.toolTransform[0],
+                  0, 1, 0, robot.toolTransform[1],
+                  0, 0, 1, robot.toolTransform[2],
+                  0, 0, 0, 1,
+                ];
+                const ee = fk.frames[fk.frames.length - 1];
+                const toolPose = (() => {
+                  const m = (r: number, c: number) =>
+                    ee[r*4+0]*toolM[0*4+c] + ee[r*4+1]*toolM[1*4+c] +
+                    ee[r*4+2]*toolM[2*4+c] + ee[r*4+3]*toolM[3*4+c];
+                  return [m(0,3), m(1,3), m(2,3)] as [number, number, number];
+                })();
+                setIkTarget(toolPose);
+                setIkMode(true);
+              } else {
+                setIkMode(false);
+                setIkTarget(null);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: ikMode ? '#553' : '#444',
+              border: 'none',
+              borderRadius: 4,
+              color: '#ccc',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {ikMode ? 'Desactivar IK' : 'IK Mode'}
+          </button>
+          {ikMode && ikTarget && (
+            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
+            </div>
           )}
         </div>
 
@@ -218,7 +283,7 @@ export default function App() {
       </div>
 
       {/* 3D Viewport */}
-      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} />
+      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} />
     </div>
   );
 }

@@ -70,30 +70,38 @@ export function dhMatrixRoll(dh: DHParams, q: number): Mat4 {
   ];
 }
 
-/** Retorna la pose de cada frame [base, J1, J2, ..., Jn]. */
-export function forwardKinematics(
+/** FK con base Mat4 explícita (para IK solver). */
+export function forwardKinematicsRaw(
   segments: Segment[],
-  base: [number, number, number] = [0, 0, 0],
-): { frames: Mat4[]; ee: Mat4; pose: Pose } {
-  // Base transform
-  const [bx, by, bz] = base;
-  let current: Mat4 = mul(id(), [
-    1, 0, 0, bx,
-    0, 1, 0, by,
-    0, 0, 1, bz,
-    0, 0, 0, 1,
-  ]);
+  baseMat: Mat4,
+): { frames: Mat4[]; ee: Mat4 } {
+  let current = mul(id(), baseMat);
   const frames: Mat4[] = [current];
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    // J4 (index 3) usa roll sobre X en vez de Z
     const mat = i === 3 ? dhMatrixRoll(seg, seg.q) : dhMatrix(seg, seg.q);
     current = mul(current, mat);
     frames.push(current);
   }
 
-  return { frames, ee: current, pose: mat4ToPose(current) };
+  return { frames, ee: current };
+}
+
+/** Retorna la pose de cada frame [base, J1, J2, ..., Jn]. */
+export function forwardKinematics(
+  segments: Segment[],
+  base: [number, number, number] = [0, 0, 0],
+): { frames: Mat4[]; ee: Mat4; pose: Pose } {
+  const [bx, by, bz] = base;
+  const baseMat: Mat4 = [
+    1, 0, 0, bx,
+    0, 1, 0, by,
+    0, 0, 1, bz,
+    0, 0, 0, 1,
+  ];
+  const { frames, ee } = forwardKinematicsRaw(segments, baseMat);
+  return { frames, ee, pose: mat4ToPose(ee) };
 }
 
 /** Pose from Mat4 (extrae traslación + rotación 3×3). */

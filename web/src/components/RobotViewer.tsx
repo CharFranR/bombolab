@@ -4,6 +4,7 @@ import { OrbitControls, Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RobotDef, Mat4 } from '../kinematics/types';
 import { forwardKinematics, dhMatrix } from '../kinematics/forward';
+import IkTarget from './IkTarget';
 
 // ─── Colores ───────────────────────────────────────────────────────────────
 
@@ -161,7 +162,13 @@ function framePose(f: Mat4): { pos: [number, number, number]; quat: [number, num
 
 // ─── Escena del robot ──────────────────────────────────────────────────────
 
-function RobotScene({ robot, gripper = 0, workspacePoints = [] }: { robot: RobotDef; gripper?: number; workspacePoints?: [number, number, number][] }) {
+function RobotScene({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange }: {
+  robot: RobotDef;
+  gripper?: number;
+  workspacePoints?: [number, number, number][];
+  ikTarget?: [number, number, number] | null;
+  onIkTargetChange?: (pos: [number, number, number]) => void;
+}) {
   const { frames } = useMemo(
     () => forwardKinematics(robot.segments, robot.baseTransform),
     [robot.segments, robot.baseTransform],
@@ -254,6 +261,11 @@ function RobotScene({ robot, gripper = 0, workspacePoints = [] }: { robot: Robot
         );
       })()}
 
+      {/* IK target */}
+      {ikTarget && onIkTargetChange && (
+        <IkTarget position={ikTarget} onChange={onIkTargetChange} />
+      )}
+
       {/* Workspace point cloud */}
       {workspacePoints.length > 0 && (
         <points>
@@ -288,7 +300,13 @@ function mulMat4(a: Mat4, b: Mat4): Mat4 {
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, gripper = 0, workspacePoints = [] }: { robot: RobotDef; gripper?: number; workspacePoints?: [number, number, number][] }) {
+export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange }: {
+  robot: RobotDef;
+  gripper?: number;
+  workspacePoints?: [number, number, number][];
+  ikTarget?: [number, number, number] | null;
+  onIkTargetChange?: (pos: [number, number, number]) => void;
+}) {
   return (
     <div style={{ flex: 1, height: '100%' }}>
       <Canvas
@@ -304,7 +322,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [] }
         <directionalLight position={[-200, 100, -200]} intensity={0.3} />
         <hemisphereLight args={['#8888ff', '#444422', 0.3]} />
 
-        <RobotScene robot={robot} gripper={gripper} workspacePoints={workspacePoints} />
+        <RobotScene robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={onIkTargetChange} />
 
         <OrbitControls
           enableDamping
