@@ -1,10 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
 /**
- * Esfera target IK — se arrastra haciendo click + drag sobre ella.
- * Proyecta el movimiento al plano horizontal en Z=target.z (DH Z = Three.js Y swap).
+ * Esfera target IK — click + drag sobre ella para moverla.
  */
 export default function IkTarget({
   position,
@@ -14,24 +13,25 @@ export default function IkTarget({
   onChange: (pos: [number, number, number]) => void;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const dragging = useRef(false);
+  const isDown = useRef(false);
   const plane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const intersect = useRef(new THREE.Vector3());
   const { camera, raycaster, pointer } = useThree();
 
-  useFrame(() => {
-    if (!dragging.current || !meshRef.current) return;
+  // Listener global para soltar el drag aunque el mouse salga del mesh
+  useEffect(() => {
+    const up = () => { isDown.current = false; };
+    window.addEventListener('pointerup', up);
+    return () => window.removeEventListener('pointerup', up);
+  }, []);
 
+  useFrame(() => {
+    if (!isDown.current || !meshRef.current) return;
     raycaster.setFromCamera(pointer, camera);
-    // DH Z → Three.js Y: plano horizontal a la altura del target
     plane.current.set(new THREE.Vector3(0, 1, 0), -position[2]);
     const hit = raycaster.ray.intersectPlane(plane.current, intersect.current);
     if (hit) {
-      onChange([
-        intersect.current.x,
-        intersect.current.z,
-        intersect.current.y,
-      ]);
+      onChange([intersect.current.x, intersect.current.z, intersect.current.y]);
     }
   });
 
@@ -41,12 +41,10 @@ export default function IkTarget({
       position={[position[0], position[2], position[1]]}
       onPointerDown={(e) => {
         e.stopPropagation();
-        dragging.current = true;
+        isDown.current = true;
       }}
-      onPointerUp={() => { dragging.current = false; }}
-      onPointerLeave={() => { dragging.current = false; }}
     >
-      <sphereGeometry args={[8, 16, 16]} />
+      <sphereGeometry args={[20, 24, 24]} />
       <meshStandardMaterial
         color="#ff6644"
         emissive="#ff4422"
@@ -54,6 +52,10 @@ export default function IkTarget({
         roughness={0.3}
         metalness={0.1}
       />
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[26, 2, 12, 24]} />
+        <meshStandardMaterial color="#ff8866" emissive="#ff4422" emissiveIntensity={0.2} />
+      </mesh>
     </mesh>
   );
 }
