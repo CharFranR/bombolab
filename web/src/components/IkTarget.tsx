@@ -8,9 +8,13 @@ import * as THREE from 'three';
 export default function IkTarget({
   position,
   onChange,
+  onDragStart,
+  onDragEnd,
 }: {
   position: [number, number, number];
   onChange: (pos: [number, number, number]) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const isDown = useRef(false);
@@ -18,12 +22,17 @@ export default function IkTarget({
   const intersect = useRef(new THREE.Vector3());
   const { camera, raycaster, pointer } = useThree();
 
-  // Listener global para soltar el drag aunque el mouse salga del mesh
+  // Listener global para soltar el drag
   useEffect(() => {
-    const up = () => { isDown.current = false; };
+    const up = () => {
+      if (isDown.current) {
+        isDown.current = false;
+        onDragEnd?.();
+      }
+    };
     window.addEventListener('pointerup', up);
     return () => window.removeEventListener('pointerup', up);
-  }, []);
+  }, [onDragEnd]);
 
   useFrame(() => {
     if (!isDown.current || !meshRef.current) return;
@@ -42,6 +51,7 @@ export default function IkTarget({
       onPointerDown={(e) => {
         e.stopPropagation();
         isDown.current = true;
+        onDragStart?.();
       }}
     >
       <sphereGeometry args={[20, 24, 24]} />

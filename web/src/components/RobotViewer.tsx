@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -162,12 +162,14 @@ function framePose(f: Mat4): { pos: [number, number, number]; quat: [number, num
 
 // ─── Escena del robot ──────────────────────────────────────────────────────
 
-function RobotScene({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange }: {
+function RobotScene({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const { frames } = useMemo(
     () => forwardKinematics(robot.segments, robot.baseTransform),
@@ -263,7 +265,7 @@ function RobotScene({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTa
 
       {/* IK target */}
       {ikTarget && onIkTargetChange && (
-        <IkTarget position={ikTarget} onChange={onIkTargetChange} />
+        <IkTarget position={ikTarget} onChange={onIkTargetChange} onDragStart={onDragStart} onDragEnd={onDragEnd} />
       )}
 
       {/* Workspace point cloud */}
@@ -307,6 +309,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
 }) {
+  const [ikDragging, setIkDragging] = useState(false);
   return (
     <div style={{ flex: 1, height: '100%' }}>
       <Canvas
@@ -322,7 +325,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
         <directionalLight position={[-200, 100, -200]} intensity={0.3} />
         <hemisphereLight args={['#8888ff', '#444422', 0.3]} />
 
-        <RobotScene robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={onIkTargetChange} />
+        <RobotScene robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={onIkTargetChange} onDragStart={() => setIkDragging(true)} onDragEnd={() => setIkDragging(false)} />
 
         <OrbitControls
           enableDamping
@@ -330,6 +333,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
           minDistance={100}
           maxDistance={1200}
           target={[0, 200, 0]}
+          enabled={!ikDragging}
         />
       </Canvas>
     </div>
