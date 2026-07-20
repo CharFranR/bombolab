@@ -51,6 +51,7 @@ export default function App() {
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [ikMode, setIkMode] = useState(false);
   const [ikTarget, setIkTarget] = useState<[number, number, number] | null>(null);
+  const [ikError, setIkError] = useState<number | null>(null);
   const portRef = useRef<SerialPort | null>(null);
 
   const workspacePoints = useMemo(
@@ -108,12 +109,11 @@ export default function App() {
   useEffect(() => {
     if (!ikMode || !ikTarget) return;
     const result = ikSolver.solvePosition(ikTarget, robot.segments.map(s => s.q), robot);
-    if (result.converged || true) { // siempre actualizar aunque no converja
-      setRobot(prev => {
-        const segments = prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 }));
-        return { ...prev, segments };
-      });
-    }
+    setIkError(result.error);
+    setRobot(prev => {
+      const segments = prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 }));
+      return { ...prev, segments };
+    });
   }, [ikTarget, ikMode]);
 
   // Enviar q cada vez que cambia
@@ -239,6 +239,11 @@ export default function App() {
           {ikMode && ikTarget && (
             <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
               Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
+              {ikError !== null && (
+                <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
+                  err: {ikError.toFixed(1)}mm
+                </span>
+              )}
             </div>
           )}
         </div>

@@ -110,6 +110,11 @@ export class IkSolver {
     const n = Math.min(robot.segments.length, 5);
     const q = qInit.slice();
     const dampingSq = this.damping * this.damping;
+    const limit = 80 * Math.PI / 180;
+
+    // Mejor q encontrada (para targets fuera del workspace)
+    let bestQ = q.slice();
+    let bestErr = Infinity;
 
     for (let iter = 0; iter < this.maxIterations; iter++) {
       // FK con q actual
@@ -141,6 +146,10 @@ export class IkSolver {
 
       if (errNorm < this.tolerance) {
         return { q, converged: true, error: errNorm };
+      }
+      if (errNorm < bestErr) {
+        bestErr = errNorm;
+        bestQ = q.slice();
       }
 
       // Jacobiana 3×5: J_i = z_{i-1} × (p_ee - p_{i-1})
@@ -216,29 +225,6 @@ export class IkSolver {
       }
     }
 
-    // Error final
-    const segments = robot.segments.map((seg, i) => ({ ...seg, q: q[i] ?? 0 }));
-    const baseT: Mat4 = [
-      1, 0, 0, robot.baseTransform[0],
-      0, 1, 0, robot.baseTransform[1],
-      0, 0, 1, robot.baseTransform[2],
-      0, 0, 0, 1,
-    ];
-    const fk = forwardKinematicsRaw(segments, baseT);
-    const ee = fk.frames[fk.frames.length - 1];
-    const toolT: Mat4 = [
-      1, 0, 0, robot.toolTransform[0],
-      0, 1, 0, robot.toolTransform[1],
-      0, 0, 1, robot.toolTransform[2],
-      0, 0, 0, 1,
-    ];
-    const toolPose = mulMat4(ee, toolT);
-    const finalErr = Math.sqrt(
-      (target[0] - toolPose[3]) ** 2 +
-      (target[1] - toolPose[7]) ** 2 +
-      (target[2] - toolPose[11]) ** 2
-    );
-
-    return { q, converged: false, error: finalErr };
+    return { q: bestQ, converged: false, error: bestErr };
   }
 }
