@@ -102,20 +102,11 @@ export default function StlRobotScene({
       new THREE.Vector3(1, 1, 1),
     );
 
-    // Expected world position from current calibration
-    const currentCal = overridesRef.current?.current.get(calibrationTarget) ?? new THREE.Matrix4().identity();
-    const expectedWorld = fkWorld.clone().multiply(currentCal);
-
-    // Actual mesh world matrix
+    // Actual mesh world matrix after TransformControls manipulation
     mesh.updateMatrixWorld();
     const meshWorld = mesh.matrixWorld.clone();
 
-    // Only save if the mesh actually moved (diff > 0.01)
-    const expectedPos = new THREE.Vector3(); expectedWorld.decompose(expectedPos, new THREE.Quaternion(), new THREE.Vector3());
-    const actualPos = new THREE.Vector3(); meshWorld.decompose(actualPos, new THREE.Quaternion(), new THREE.Vector3());
-    if (expectedPos.distanceToSquared(actualPos) < 0.0001) return;
-
-    // Calibration = FK⁻¹ × meshWorld
+    // Calibration = FK⁻¹ × meshWorld (offset from FK in FK local space)
     const cal = fkWorld.clone().invert().multiply(meshWorld);
     overridesRef.current?.current.set(calibrationTarget, cal);
   }, [targetEntry, calibrationTarget]);

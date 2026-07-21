@@ -171,7 +171,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
           minDistance={100}
           maxDistance={1200}
           target={[0, 200, 0]}
-          enabled={!ikDragging}
+          enabled={!ikDragging && !(calibrationMode && !!calibrationTarget)}
         />
       </Canvas>
     </div>
