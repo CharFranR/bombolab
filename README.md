@@ -7,10 +7,11 @@ Bombolab models robots as serial chains of revolute/prismatic/twist joints using
 ## Features
 
 - **Forward Kinematics** — Standard DH + Twist (wrist roll), validada por diferencias finitas
-- **Inverse Kinematics** — Damped Least Squares (Levenberg–Marquardt) position-only IK, 5 GDL máx
+- **Inverse Kinematics** — Pipeline completo: PositionSolver (DLS 3×n) + OrientationSolver (analítico, 2-DOF wrist)
+- **Drawing Mode** — PoseGenerator con orientación adaptativa (Modo 1: X₅ = -Z, Modo 2: Y₅ = -Z)
 - **Jacobian** — Geométrica 3×n (lineal), validada numéricamente
-- **Web 3D Visualizer** — React + Three.js con cámara orbital, IK target arrastrable
-- **WASM Core** — Rust compilado a WASM, FK e IK unificados
+- **Web 3D Visualizer** — React + Three.js, IK target arrastrable con rueda para Z, modo dibujo
+- **WASM Core** — Rust compilado a WASM, FK, IK, y PoseGenerator unificados
 - **Serial Control** — Arduino Nano via USB (115200 baud)
 - **Gripper** — Pinza paralela 75mm con control de apertura
 - **CLI Tools** — `dh-solve`, `quaternion-solve`, `serial-test`

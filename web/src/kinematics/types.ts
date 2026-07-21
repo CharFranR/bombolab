@@ -9,6 +9,8 @@ export interface DHParams {
 /** Parámetros DH + valor articular q. */
 export interface Segment extends DHParams {
   q: number; // rad — valor actual de la articulación
+  q_min?: number; // rad — límite inferior
+  q_max?: number; // rad — límite superior
   joint_type?: string; // "revolute", "twist", "prismatic"
 }
 

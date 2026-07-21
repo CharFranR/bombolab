@@ -1,12 +1,37 @@
 # Inverse Kinematics
 
-**The IK solver finds joint angles that place the end effector at a desired position.** You specify a 3D target, and the solver iteratively adjusts joint angles until the robot reaches it.
+**The IK solver finds joint angles that place the end effector at a desired position and orientation.** You specify a 3D target + rotation, and the solver returns joint angles.
 
-## The Core Idea
+## Architecture
 
-Forward kinematics answers: *given joint values, where is the end effector?* Inverse kinematics answers the opposite: *given a target position, what joint values get me there?*
+The IK is split into two independent solvers composed into a pipeline:
 
-For serial chains with more than a few joints, there's no closed-form solution. Bombolab uses a **damped pseudoinverse (Levenberg–Marquardt)** approach:
+```
+TargetPose (position + rotation)
+      │
+      ▼
+ PositionSolver (DLS 3×n, posición)
+      │
+    q₁,q₂,q₃
+      │
+      ▼
+ FK parcial → R₀₃
+      │
+      ▼
+ OrientationSolver (analítico, 2-DOF wrist)
+   R₃₅ = R₀₃ᵀ · R_target
+   q₄ = atan2(-R₃₅[2,2], -R₃₅[1,2])
+   q₅ = atan2(-R₃₅[0,1],  R₃₅[0,0])
+      │
+    q₄,q₅
+      │
+      ▼
+ Solución: [q₁, q₂, q₃, q₄, q₅]
+```
+
+## Position Solver (IkSolver)
+
+The position solver uses a **damped pseudoinverse (Levenberg–Marquardt)** approach:
 
 ```
 Δq = Jᵀ(J·Jᵀ + λ²·I)⁻¹ · Δx
@@ -123,11 +148,89 @@ for (i, &val) in q.iter().enumerate() {
 }
 ```
 
-## When It Fails
+## Orientation Solver
 
-- **Far from a reachable target:** the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better `q_init` or use a multi-start strategy.
-- **Near singularities:** the solver handles this with damping, but extremely high joint speeds may still appear. Increase `damping` if the solver becomes unstable.
-- **Unreachable target:** the solver will hit `max_iterations` and return the best attempt with `MaxIterationsReached`.
+The `OrientationSolver` handles the wrist analytically. Given R₀₃ (from the position solution) and R_target (desired tool orientation):
+
+```
+R₃₅ = R₀₃ᵀ · R_target
+
+q₄ = atan2(-R₃₅[2,2], -R₃₅[1,2])
+q₅ = atan2(-R₃₅[0,1],  R₃₅[0,0])
+```
+
+The FABRI Creator has a 2-DOF wrist (roll on X via Twist, pitch on Z via Revolute). There is **no yaw** — the condition `|R₃₅[0,2]| < ε` tests reachability. If violated, the orientation is physically impossible.
+
+```rust
+use bombolab_core::{OrientationSolver, OrientationError};
+
+let orient_solver = OrientationSolver::new(1e-6);
+match orient_solver.solve(&r03, &r_target, &robot) {
+    Ok([q4, q5]) => { /* wrist solution */ }
+    Err(OrientationError::UnreachableOrientation { .. }) => { /* not reachable */ }
+}
+```
+
+## Full IK Pipeline
+
+`solve_full_ik` composes position + orientation:
+
+```rust
+use bombolab_core::{solve_full_ik, IkSolver, OrientationSolver};
+
+let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+let orient_solver = OrientationSolver::new(1e-6);
+let target = [200.0, 0.0, 80.0];
+let target_rot = /* any Rot3 */;
+
+let result = solve_full_ik(
+    &pos_solver, &orient_solver,
+    &target, &target_rot, &[0.0; 5],
+    &robot, &base, &tool,
+);
+```
+
+## Drawing Mode
+
+The `PoseGenerator` layer generates target poses for specific tasks without modifying the IK.
+
+### Drawing Pose (Modo 1 — marker along X₅)
+
+Constant orientation, works for centered positions (q₁ ≈ 0):
+
+```rust
+use bombolab_core::PoseGenerator;
+
+let pose = PoseGenerator::drawing_pose([200.0, 0.0, 80.0]);
+// pose.rotation has X₅ = [0, 0, -1] (marker down)
+```
+
+### Adaptive Drawing Pose (Modo 2 — marker along Y₅)
+
+Orientation adapts to q₁: R_target(q₁) makes Y₅ = [0, 0, -1]. Works for **any** arm position where |q₂+q₃| < 80°:
+
+```rust
+let pose = PoseGenerator::drawing_pose_v2([200.0, 80.0, 80.0], q1);
+```
+
+### Convenience Functions
+
+`solve_drawing_ik` (modo 1) and `solve_drawing_ik_v2` (modo 2) run the full pipeline without manually composing:
+
+```rust
+use bombolab_core::{solve_drawing_ik_v2};
+
+let result = solve_drawing_ik_v2(
+    &pos_solver, &orient_solver,
+    &target, &[0.0; 5], &robot, &base, &tool,
+);
+// Returns [q1, q2, q3, q4, q5] with the marker vertical
+```
+
+### When It Fails
+
+- **Unreachable orientation:** `IkError::UnreachableOrientation` — the target orientation cannot be achieved within joint limits. Falls back to position-only IK.
+- **Unreachable position:** same as position solver — `MaxIterationsReached`.
 
 ## References
 

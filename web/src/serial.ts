@@ -4,7 +4,7 @@
 const DEG = 180 / Math.PI;
 
 // fabri_creator servo offsets (90° en rad) y direcciones
-const OFFSETS_DEG = [90, 90, 90, 90, 90];
+const OFFSETS_DEG = [90, 90, 81, 95, 60];
 const DIRECTIONS = [-1, -1, 1, -1, -1];
 
 /** Convierte q (rad) a servo angles (grados enteros [10°, 170°]). */

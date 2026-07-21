@@ -35,8 +35,8 @@ export default function JointControls({
           </div>
           <input
             type="range"
-            min={-80}
-            max={80}
+            min={seg.q_min != null ? Math.round(seg.q_min * DEG) : -80}
+            max={seg.q_max != null ? Math.round(seg.q_max * DEG) : 80}
             value={seg.q * DEG}
             disabled={disabled}
             onChange={e => onChange(i, Number(e.target.value) / DEG)}
