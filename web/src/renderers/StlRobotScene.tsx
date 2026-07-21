@@ -109,9 +109,16 @@ export default function StlRobotScene({
     mesh.updateMatrixWorld();
     const meshWorld = mesh.matrixWorld.clone();
 
-    // Calibration = FK⁻¹ × meshWorld (offset from FK in FK local space)
-    const cal = fkWorld.clone().invert().multiply(meshWorld);
-    overridesRef.current?.current.set(calibrationTarget, cal);
+    // Calibration = (FK × scale)⁻¹ × meshWorld  (exclude scale from cal)
+    const s = scaleRef.current?.current ?? 1;
+    const fkScaled = fkWorld.clone().multiply(new THREE.Matrix4().makeScale(s, s, s));
+    const cal = fkScaled.clone().invert().multiply(meshWorld);
+    // Remove scale component from calibration (scale is applied separately)
+    const calPos = new THREE.Vector3();
+    const calQuat = new THREE.Quaternion();
+    cal.decompose(calPos, calQuat, new THREE.Vector3());
+    const calClean = new THREE.Matrix4().compose(calPos, calQuat, new THREE.Vector3(1, 1, 1));
+    overridesRef.current?.current.set(calibrationTarget, calClean);
   }, [targetEntry, calibrationTarget]);
 
   // ─── Per-frame mesh positioning ─────────────────────────────────────────
