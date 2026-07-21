@@ -32,9 +32,8 @@ impl Segment {
                 self.dh.alpha,
             ),
             JointType::Prismatic => (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha),
-            // Twist joints use Rot_x(alpha + q) · Trans_x(a).
-            // matrix_from_segment reads (_, _, a, alpha) from this tuple.
-            JointType::Twist => (0.0, 0.0, self.dh.a, self.joint.value + self.dh.alpha),
+            // Twist joints use Rot_x(alpha + q) · Trans_x(a) · Trans_z(d).
+            JointType::Twist => (0.0, self.dh.d, self.dh.a, self.joint.value + self.dh.alpha),
         }
     }
 }
