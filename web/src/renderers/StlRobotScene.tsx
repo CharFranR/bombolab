@@ -3,24 +3,12 @@ import { useFrame, useLoader } from '@react-three/fiber';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
-import { ALL_STL_FILES } from './stlMapping';
+import { ALL_STL_FILES, STL_META } from './stlMapping';
 
 // ─── STL paths ──────────────────────────────────────────────────────────────
 
 const STL_BASE = '/stl/';
 const STL_URLS = ALL_STL_FILES.map((f) => `${STL_BASE}${f}`);
-
-// Per-STL metadata (index-matched to ALL_STL_FILES order):
-//   parentJoint: joint index in frames[] (-1 = tool-tip / last frame)
-//   jawDirection: 0 = not a gripper, -1 / +1 = Y-axis direction when opening
-const STL_META: { parentJoint: number; jawDirection: number }[] = [
-  { parentJoint: 0, jawDirection: 0 },  // Base.stl
-  { parentJoint: 1, jawDirection: 0 },  // Brazo.stl
-  { parentJoint: 2, jawDirection: 0 },  // Antebrazo.stl
-  { parentJoint: 4, jawDirection: 0 },  // Muñeca.stl
-  { parentJoint: -1, jawDirection: -1 }, // Pinza1.stl
-  { parentJoint: -1, jawDirection:  1 }, // Pinza2.stl
-];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

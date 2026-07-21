@@ -1,22 +1,48 @@
-/** Maps joint index → STL file name (joint 3 has no STL — skipped). */
-export const JOINT_TO_STL: Record<number, { file: string }> = {
-  0: { file: 'Base.stl' },
-  1: { file: 'Brazo.stl' },
-  2: { file: 'Antebrazo.stl' },
-  4: { file: 'Muñeca.stl' },
-};
+/**
+ * STL load order and per-mesh metadata.
+ *
+ * Joint mapping (from user):
+ *   0 = base rotation    → Base.stl, Tapa Base.stl
+ *   1 = shoulder         → Eje Central.stl    (base → shoulder, 95mm)
+ *   2 = elbow            → Antebrazo.stl      (shoulder → elbow, 162mm)
+ *   3 = wrist roll       → Brazo.stl          (elbow → wrist, 111mm)
+ *   4 = wrist tilt       → Muñeca.stl         (wrist, 41mm)
+ *  -1 = tool-tip frame   → Base de la garra, Engranajes, Pinzas
+ *
+ * jawDirection: 0 = rigid part, -1/+1 = gripper jaw opening axis (±Y).
+ */
 
-/** Gripper jaw STLs attached to the tool-tip frame. */
-export const GRIPPER_STLS: { file: string; jawDirection: number }[] = [
-  { file: 'Pinza1.stl', jawDirection: -1 }, // opens in -Y
-  { file: 'Pinza2.stl', jawDirection:  1 }, // opens in +Y
+export interface StlMeta {
+  file: string;
+  parentJoint: number; // index into FK frames[] (-1 = tool-tip / last frame)
+  jawDirection: number; // 0, -1, or +1
+}
+
+/** All STLs in load order — MUST match STL_META index-for-index. */
+export const ALL_STL_FILES: string[] = [
+  'Base.stl',
+  'Tapa Base.stl',
+  'Eje Central.stl',
+  'Antebrazo.stl',
+  'Brazo.stl',
+  'Muñeca.stl',
+  'Base de la garra.stl',
+  'Engranaje1.stl',
+  'Engranaje2.stl',
+  'Pinza1.stl',
+  'Pinza2.stl',
 ];
 
-/** All STL filenames in load order (joint STLs first, then gripper STLs). */
-export const ALL_STL_FILES: string[] = [
-  JOINT_TO_STL[0].file,
-  JOINT_TO_STL[1].file,
-  JOINT_TO_STL[2].file,
-  JOINT_TO_STL[4].file,
-  ...GRIPPER_STLS.map((g) => g.file),
+export const STL_META: StlMeta[] = [
+  { file: 'Base.stl',              parentJoint:  0, jawDirection:  0 },
+  { file: 'Tapa Base.stl',         parentJoint:  0, jawDirection:  0 },
+  { file: 'Eje Central.stl',       parentJoint:  1, jawDirection:  0 },
+  { file: 'Antebrazo.stl',         parentJoint:  2, jawDirection:  0 },
+  { file: 'Brazo.stl',             parentJoint:  3, jawDirection:  0 },
+  { file: 'Muñeca.stl',            parentJoint:  4, jawDirection:  0 },
+  { file: 'Base de la garra.stl',  parentJoint: -1, jawDirection:  0 },
+  { file: 'Engranaje1.stl',        parentJoint: -1, jawDirection:  0 },
+  { file: 'Engranaje2.stl',        parentJoint: -1, jawDirection:  0 },
+  { file: 'Pinza1.stl',            parentJoint: -1, jawDirection: -1 },
+  { file: 'Pinza2.stl',            parentJoint: -1, jawDirection:  1 },
 ];
