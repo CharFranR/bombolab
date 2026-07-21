@@ -16,22 +16,22 @@ pub fn fabri_creator() -> Robot {
 
     let segments = vec![
         // Joint 1 — Base (Yaw)
-        // θ=0,  d=95,  a=15,  α=-π/2
+        // θ=0,  d=85,  a=15,  α=-π/2  (d corregido: 7cm + 15mm = 85mm)
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(0.0, 95.0, 15.0, -FRAC_PI_2),
+            DHParams::new(0.0, 85.0, 15.0, -FRAC_PI_2),
         ),
         // Joint 2 — Shoulder (eleva el brazo)
-        // θ=-π/2,  d=0,  a=162,  α=0
+        // θ=-π/2,  d=0,  a=111.7,  α=0  (a corregido: 11.17cm)
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(-FRAC_PI_2, 0.0, 162.0, 0.0),
+            DHParams::new(-FRAC_PI_2, 0.0, 111.7, 0.0),
         ),
         // Joint 3 — Elbow (extiende el antebrazo)
-        // θ=+π/2,  d=0,  a=111,  α=-π/2
+        // θ=+π/2,  d=0,  a=90,  α=-π/2  (a corregido: 9cm)
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(FRAC_PI_2, 0.0, 111.0, -FRAC_PI_2),
+            DHParams::new(FRAC_PI_2, 0.0, 90.0, -FRAC_PI_2),
         ),
         // Joint 4 — Wrist Roll (twist: rota sobre eje X)
         // θ=0,  d=0,  a=35,  α=+π/2

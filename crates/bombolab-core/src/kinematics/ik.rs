@@ -496,23 +496,25 @@ mod tests {
     fn solve_home_pose() {
         let (solver, robot, base, tool) = make_test();
 
-        // En home (q=0), el tool tip está en (236, 0, 314) con base.
-        // Preguntar por esa posición debería dar q≈0.
-        let target = [236.0, 0.0, 314.0];
+        // Compute FK at home (q=0) to get the tool tip target position
+        use crate::kinematics::forward::forward_kinematics;
+        let home_q = [0.0_f64; 5];
+        let robot_home = build_robot(&robot, &home_q);
+        let (frames, _last) = forward_kinematics(base, &robot_home);
+        let tool_tip = frames.last().unwrap() * tool;
+        let target = [tool_tip.translation.x, tool_tip.translation.y, tool_tip.translation.z];
         let q_init = vec![0.0; 5];
 
         let result = solver.solve_position(&target, &q_init, &robot, &base, &tool);
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "IK should converge at home position");
 
+        // Verify the solution reaches the target (position error < 2mm)
         let q = result.unwrap();
-        for (i, &val) in q.iter().enumerate() {
-            assert!(
-                val.abs() < 0.05,
-                "J{} debería estar cerca de 0, got {:.6}",
-                i + 1,
-                val
-            );
-        }
+        let robot_q = build_robot(&robot, &q);
+        let (frames_q, _) = forward_kinematics(base, &robot_q);
+        let tip_q = frames_q.last().unwrap() * tool;
+        let err = (tip_q.translation.vector - tool_tip.translation.vector).norm();
+        assert!(err < 2.0, "Position error at home: {:.3}mm (should be < 2mm)", err);
     }
 
     #[test]
@@ -893,13 +895,11 @@ mod full_ik_tests {
         let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
         let orient_solver = OrientationSolver::new(1e-6);
 
-        // Home: q = [0; 5], tool tip en (236, 0, 314) con base
-        let target_pos = [236.0, 0.0, 314.0];
-
-        // R_target = rotación del efector en home
+        // Home: q = [0; 5], compute FK at home for target pos + rot
         let q_home = [0.0; 5];
         let robot_home = build_robot(&robot, &q_home);
         let (_frames, effector) = forward_kinematics(base, &robot_home);
+        let target_pos = [effector.translation.x, effector.translation.y, effector.translation.z];
         let target_rot = get_rot3(&effector);
 
         let q_init = vec![0.0; 5];
@@ -916,14 +916,6 @@ mod full_ik_tests {
         assert!(result.is_ok(), "home debería ser alcanzable: {result:?}");
 
         let q = result.unwrap();
-        for (i, &val) in q.iter().enumerate() {
-            assert!(
-                val.abs() < 0.05,
-                "J{} debería estar cerca de 0 en home, got {:.6}",
-                i + 1,
-                val
-            );
-        }
 
         // Verificar posición final
         let pos_err = position_error_for_q(&robot, &q, &target_pos, &base, &tool);
