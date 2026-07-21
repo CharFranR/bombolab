@@ -8,7 +8,7 @@ pub fn matrix_from_segment(segment: &Segment) -> Iso3 {
             let (_, d, a, alpha) = segment.dh_params();
             let rot_x = Rot3::from_axis_angle(&Vec3::x_axis(), alpha);
             let rotation = Quat::from_rotation_matrix(&rot_x);
-            let translation = Tras::new(a, 0.0, d);
+            let translation = Tras::new(a, d, 0.0);
             Iso3::from_parts(translation, rotation)
         }
         JointType::Revolute | JointType::Prismatic => {
