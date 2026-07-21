@@ -35,7 +35,7 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles }: {
+function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
@@ -45,6 +45,10 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
   onDragEnd?: () => void;
   fidelityMode: FidelityMode;
   debugToggles?: DebugToggles;
+  calibrationConfigRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
+  calibrationOverridesRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
+  calibrationTarget?: string | null;
+  calibrationMode?: boolean;
 }) {
   // 1. Forward kinematics → raw Mat4 frames
   const { frames: rawFrames } = useMemo(
@@ -81,23 +85,29 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
     onDragStart,
     onDragEnd,
     debugToggles,
+    calibrationConfigRef,
+    calibrationOverridesRef,
+    calibrationTarget,
+    calibrationMode,
   };
 
   // 4. Branch on fidelity mode (React-conditional → unmount/remount)
-  return fidelityMode === 'high' ? (
-    <Suspense fallback={null}>
-      <StlErrorBoundary>
-        <StlRobotScene {...commonProps} />
-      </StlErrorBoundary>
-    </Suspense>
-  ) : (
-    <SimpleRobotScene {...commonProps} />
-  );
+  if (fidelityMode === 'high') {
+    return (
+      <Suspense fallback={null}>
+        <StlErrorBoundary>
+          {calibrationMode && <SimpleRobotScene {...commonProps} />}
+          <StlRobotScene {...commonProps} />
+        </StlErrorBoundary>
+      </Suspense>
+    );
+  }
+  return <SimpleRobotScene {...commonProps} />;
 }
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles }: {
+export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
@@ -105,6 +115,10 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
   onIkTargetChange?: (pos: [number, number, number]) => void;
   fidelityMode: FidelityMode;
   debugToggles?: DebugToggles;
+  calibrationConfigRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
+  calibrationOverridesRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
+  calibrationTarget?: string | null;
+  calibrationMode?: boolean;
 }) {
   const [ikDragging, setIkDragging] = useState(false);
   return (
@@ -132,6 +146,10 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
           onDragEnd={() => setIkDragging(false)}
           fidelityMode={fidelityMode}
           debugToggles={debugToggles}
+          calibrationConfigRef={calibrationConfigRef}
+          calibrationOverridesRef={calibrationOverridesRef}
+          calibrationTarget={calibrationTarget}
+          calibrationMode={calibrationMode}
         />
 
         <OrbitControls
