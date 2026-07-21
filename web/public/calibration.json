@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": [
+    { "filename": "Base.stl",             "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Tapa Base.stl",        "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Eje Central.stl",      "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Antebrazo.stl",        "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Brazo.stl",            "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Muñeca.stl",           "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Base de la garra.stl", "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Engranaje1.stl",       "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Engranaje2.stl",       "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Pinza1.stl",           "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] },
+    { "filename": "Pinza2.stl",           "translation": [0, 0, 0], "rotation": [0, 0, 0, 1] }
+  ]
+}

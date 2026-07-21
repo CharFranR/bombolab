@@ -12,6 +12,14 @@ export interface FramePose {
   quat: [number, number, number, number];
 }
 
+// ─── Debug visualization toggles ────────────────────────────────────────────
+
+export interface DebugToggles {
+  showJointFrames: boolean;
+  showStlOrigins: boolean;
+  showCalibrationAxes: boolean;
+}
+
 // ─── Props every robot renderer receives ────────────────────────────────────
 
 export interface RobotRendererProps {
@@ -22,6 +30,7 @@ export interface RobotRendererProps {
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  debugToggles?: DebugToggles;
 }
 
 // ─── Loaded STL mesh + FK binding ───────────────────────────────────────────
