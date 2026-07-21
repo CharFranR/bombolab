@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
-import type { RobotRendererProps, VisualLink } from './types';
+import type { DebugToggles, RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES, STL_META } from './stlMapping';
+import DebugAxes from './debugAxes';
 
 // ─── Calibration config shape ────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function buildEntries(geometries: THREE.BufferGeometry[]): MeshEntry[] {
 
 // ─── Renderer ───────────────────────────────────────────────────────────────
 
-export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
+export default function StlRobotScene({ frames, gripper, debugToggles }: RobotRendererProps) {
   const geometries = useLoader(STLLoader, STL_URLS);
 
   // Build meshes once after geometries load
@@ -164,11 +165,24 @@ export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
     });
   });
 
+  // Default toggles (all off) when none provided
+  const toggles: DebugToggles = debugToggles ?? {
+    showJointFrames: false,
+    showStlOrigins: false,
+    showCalibrationAxes: false,
+  };
+
   return (
     <group>
       {entries.map((entry, i) => (
         <primitive key={i} object={entry.mesh} />
       ))}
+      <DebugAxes
+        framesRef={framesRef}
+        stlMeta={STL_META}
+        calibrationRef={calibrationRef}
+        toggles={toggles}
+      />
     </group>
   );
 }

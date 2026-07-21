@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2 } from './wasm';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
-import type { FidelityMode } from './renderers/types';
+import type { DebugToggles, FidelityMode } from './renderers/types';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
@@ -36,6 +36,11 @@ export default function App() {
   const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const portRef = useRef<SerialPort | null>(null);
   const [fidelityMode, setFidelityMode] = useState<FidelityMode>('low');
+  const [debugToggles, setDebugToggles] = useState<DebugToggles>({
+    showJointFrames: false,
+    showStlOrigins: false,
+    showCalibrationAxes: false,
+  });
 
   useEffect(() => {
     initWasm()
@@ -210,6 +215,37 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Debug visualization toggles — visible only in high fidelity */}
+        {fidelityMode === 'high' && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Debug:</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={debugToggles.showJointFrames}
+                onChange={(e) => setDebugToggles(prev => ({ ...prev, showJointFrames: e.target.checked }))}
+              />
+              Show Joint Frames
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={debugToggles.showStlOrigins}
+                onChange={(e) => setDebugToggles(prev => ({ ...prev, showStlOrigins: e.target.checked }))}
+              />
+              Show STL Origins
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={debugToggles.showCalibrationAxes}
+                onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
+              />
+              Show Calibration Axes
+            </label>
+          </div>
+        )}
 
         {/* Conexión robot físico (WebSerial) */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
@@ -423,7 +459,7 @@ export default function App() {
       </div>
 
       {/* 3D Viewport */}
-      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} fidelityMode={fidelityMode} />
+      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} fidelityMode={fidelityMode} debugToggles={debugToggles} />
     </div>
   );
 }

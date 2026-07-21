@@ -4,7 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RobotDef, Mat4 } from '../kinematics/types';
 import { forwardKinematics } from '../wasm';
-import type { FidelityMode, RobotRendererProps } from '../renderers/types';
+import type { DebugToggles, FidelityMode, RobotRendererProps } from '../renderers/types';
 import { framePose, mulMat4 } from '../renderers/types';
 import SimpleRobotScene from '../renderers/SimpleRobotScene';
 import StlRobotScene from '../renderers/StlRobotScene';
@@ -35,7 +35,7 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode }: {
+function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
@@ -44,6 +44,7 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
   onDragStart?: () => void;
   onDragEnd?: () => void;
   fidelityMode: FidelityMode;
+  debugToggles?: DebugToggles;
 }) {
   // 1. Forward kinematics → raw Mat4 frames
   const { frames: rawFrames } = useMemo(
@@ -79,6 +80,7 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
     onIkTargetChange,
     onDragStart,
     onDragEnd,
+    debugToggles,
   };
 
   // 4. Branch on fidelity mode (React-conditional → unmount/remount)
@@ -95,13 +97,14 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low' }: {
+export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   fidelityMode: FidelityMode;
+  debugToggles?: DebugToggles;
 }) {
   const [ikDragging, setIkDragging] = useState(false);
   return (
@@ -128,6 +131,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
           onDragStart={() => setIkDragging(true)}
           onDragEnd={() => setIkDragging(false)}
           fidelityMode={fidelityMode}
+          debugToggles={debugToggles}
         />
 
         <OrbitControls
