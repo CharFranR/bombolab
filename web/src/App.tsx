@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
-import { initWasm, fabriCreator, forwardKinematics, solveIk } from './wasm';
+import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2 } from './wasm';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
@@ -27,8 +27,12 @@ export default function App() {
   const [serialError, setSerialError] = useState<string | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [ikMode, setIkMode] = useState(false);
+  const [drawingMode, setDrawingMode] = useState(0); // 0=off, 1=modo1, 2=modo2
+  const [drawingActive, setDrawingActive] = useState(false);
   const [ikTarget, setIkTarget] = useState<[number, number, number] | null>(null);
   const [ikError, setIkError] = useState<number | null>(null);
+  const [demoRunning, setDemoRunning] = useState(false);
+  const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const portRef = useRef<SerialPort | null>(null);
 
   useEffect(() => {
@@ -38,7 +42,10 @@ export default function App() {
         setReady(true);
       })
       .catch((e) => setLoadError(e.message ?? String(e)));
-  }, []);
+  return () => {
+    if (demoTimerRef.current) clearInterval(demoTimerRef.current);
+  };
+}, []);
 
   const sendQ = useCallback((segments: Segment[], g: number) => {
     const port = portRef.current;
@@ -84,13 +91,29 @@ export default function App() {
 
   useEffect(() => {
     if (!ikMode || !ikTarget || !robot) return;
-    const result = solveIk(robot, ikTarget, robot.segments.map(s => s.q));
+    const solver = drawingMode === 2 ? solveDrawingIkV2
+                 : drawingMode === 1 ? solveDrawingIk
+                 : solveIk;
+    const qInit = robot.segments.map(s => s.q);
+    const result = solver(robot, ikTarget, qInit);
     setIkError(result.error);
+    setDrawingActive(result.converged && result.error < 10);
     setRobot(prev => {
       if (!prev) return prev;
       return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
     });
-  }, [ikTarget, ikMode]);
+  }, [ikTarget, ikMode, drawingMode]);
+
+  // Scroll wheel → ajustar Z del target IK
+  useEffect(() => {
+    if (!ikMode || !ikTarget) return;
+    const onWheel = (e: WheelEvent) => {
+      const step = e.deltaY > 0 ? -5 : 5;
+      setIkTarget(prev => prev ? [prev[0], prev[1], prev[2] + step] : null);
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    return () => window.removeEventListener('wheel', onWheel);
+  }, [ikMode, ikTarget]);
 
   useEffect(() => {
     if (!robot) return;
@@ -178,8 +201,47 @@ export default function App() {
           )}
         </div>
 
+        {/* Drawing mode selector */}
+        {ikMode && (
+          <>
+            <div style={{ padding: '4px 16px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>Dibujo:</span>
+              {[0, 1, 2].map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setDrawingMode(mode)}
+                  style={{
+                    flex: 1,
+                    padding: '3px 0',
+                    fontSize: 11,
+                    background: drawingMode === mode ? '#553' : '#3a3a3a',
+                    border: '1px solid ' + (drawingMode === mode ? '#885' : '#444'),
+                    borderRadius: 3,
+                    color: drawingMode === mode ? '#ddc' : '#888',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mode === 0 ? 'Off' : `Modo ${mode}`}
+                </button>
+              ))}
+              {drawingMode > 0 && (
+                <span style={{
+                  fontSize: 10,
+                  color: drawingActive ? '#4c4' : '#a84',
+                  marginLeft: 6,
+                }}>
+                  {drawingActive ? '✓' : '⏎'}
+                </span>
+              )}
+            </div>
+            <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
+              Rueda mouse: sube/baja Z
+            </div>
+          </>
+        )}
+
         {/* IK mode */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+        <div style={{ padding: '8px 16px', borderTop: ikMode ? 'none' : '1px solid #333' }}>
           <button
             onClick={() => {
               if (!ikMode) {
@@ -248,6 +310,57 @@ export default function App() {
           </button>
         </div>
 
+        {/* Demo cuadrado */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <button
+            onClick={() => {
+              if (demoRunning) {
+                setDemoRunning(false);
+                if (demoTimerRef.current) clearInterval(demoTimerRef.current);
+                return;
+              }
+              // Cerrar gripper completamente
+              setGripper(100);
+
+              // Preguntar antes de empezar
+              if (!window.confirm('¿El marcador ya está en el gripper? Apretá OK para empezar a dibujar.')) {
+                return;
+              }
+
+              setIkMode(true);
+              setDrawingMode(2); // modo 2: marcador vertical
+
+              // Cuadrado 50x50mm centrado en (200, 0), z=80mm
+              const cx = 200, cy = 0, z = 80, half = 25;
+              const pts: [number, number, number][] = [
+                [cx - half, cy - half, z],
+                [cx + half, cy - half, z],
+                [cx + half, cy + half, z],
+                [cx - half, cy + half, z],
+              ];
+              let idx = 0;
+              setIkTarget(pts[0]);
+              setDemoRunning(true);
+              demoTimerRef.current = setInterval(() => {
+                idx = (idx + 1) % pts.length;
+                setIkTarget(pts[idx]);
+              }, 2000);
+            }}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: demoRunning ? '#533' : '#444',
+              border: 'none',
+              borderRadius: 4,
+              color: '#ccc',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {demoRunning ? 'Detener demo' : 'Demo: cuadrado 5×5cm'}
+          </button>
+        </div>
+
         {/* Reset */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
           <button
@@ -279,7 +392,11 @@ function generateWorkspace(samples: number): [number, number, number][] {
   const robot = fabriCreator();
   const DEG = Math.PI / 180;
   for (let i = 0; i < samples; i++) {
-    const q = robot.segments.map(() => (Math.random() * 160 - 80) * DEG);
+    const q = robot.segments.map((s) => {
+      const lo = s.q_min ?? -80 * DEG;
+      const hi = s.q_max ?? 80 * DEG;
+      return Math.random() * (hi - lo) + lo;
+    });
     const segs = robot.segments.map((s, j) => ({ ...s, q: q[j] }));
     const fk = forwardKinematics(segs, robot.baseTransform);
     points.push([fk.ee[3], fk.ee[11], fk.ee[7]]);

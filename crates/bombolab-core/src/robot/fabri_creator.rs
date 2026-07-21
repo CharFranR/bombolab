@@ -11,8 +11,8 @@ use super::segment::{Robot, Segment};
 /// Robot de 5 GDL con servos SG90, Arduino Nano y PCA9685.
 /// Basado en la tabla de `docs/fabri-creator/table-definition.md`.
 pub fn fabri_creator() -> Robot {
-    let q_max = 80.0_f64.to_radians();
-    let q_min = (-80.0_f64).to_radians();
+    let q_max = 85.0_f64.to_radians();
+    let q_min = (-85.0_f64).to_radians();
 
     let segments = vec![
         // Joint 1 — Base (Yaw)
@@ -41,14 +41,25 @@ pub fn fabri_creator() -> Robot {
         ),
         // Joint 5 — Wrist Pitch
         // θ=0,  d=0,  a=0,  α=0
+        // Límites asimétricos: offset 60°, dir=-1 → servo min 10°→ q=55°, servo max 170°→ q=-115°
         Segment::new(
-            Joint::new(JointType::Revolute, 0.0, q_max, q_min),
+            Joint::new(JointType::Revolute, 0.0, 55.0_f64.to_radians(), (-115.0_f64).to_radians()),
             DHParams::new(0.0, 0.0, 0.0, 0.0),
         ),
     ];
 
-    // Home pose: servo = 90° en todos los joints en q = [0; 5]
-    let home_pose = vec![90.0_f64.to_radians(); 5];
+    // Home pose: servo angles en q = [0; 5]
+    // Ajustes para el robot físico:
+    // J3 (Codo): dir=+1 → offset = 90° - 9° = 81°
+    // J4 (Roll): dir=-1 → offset = 90° + 5° = 95°
+    // J5 (Pitch): dir=-1 → offset = 90° + 8° = 98°
+    let home_pose = vec![
+        90.0_f64.to_radians(),
+        90.0_f64.to_radians(),
+        81.0_f64.to_radians(),
+        95.0_f64.to_radians(),
+        60.0_f64.to_radians(),
+    ];
 
     // Offset = home_pose, así q_to_servo(&[0; 5]) = home_pose
     let servo_offsets = home_pose.clone();

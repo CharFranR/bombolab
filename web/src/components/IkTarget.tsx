@@ -53,6 +53,11 @@ export default function IkTarget({
         isDown.current = true;
         onDragStart?.();
       }}
+      onWheel={(e) => {
+        e.stopPropagation();
+        const step = (e as any).deltaY > 0 ? -5 : 5;
+        onChange([position[0], position[1], position[2] + step]);
+      }}
     >
       <sphereGeometry args={[20, 24, 24]} />
       <meshStandardMaterial

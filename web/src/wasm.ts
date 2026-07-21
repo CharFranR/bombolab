@@ -1,4 +1,4 @@
-import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk } from './pkg/bombolab_wasm';
+import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2 } from './pkg/bombolab_wasm';
 import type { RobotDef, Segment, Mat4 } from './kinematics/types';
 
 let initialized = false;
@@ -48,6 +48,8 @@ function toRobotDef(wasm: WasmRobotDef): RobotDef {
       d: s.d,
       a: s.a,
       alpha: s.alpha,
+      q_min: s.q_min,
+      q_max: s.q_max,
       joint_type: s.joint_type,
     })),
     baseTransform: [wasm.base_transform[3], wasm.base_transform[7], wasm.base_transform[11]],
@@ -63,8 +65,8 @@ function robotToWasm(robot: RobotDef): WasmRobotDef {
       d: s.d,
       a: s.a,
       alpha: s.alpha,
-      q_min: -80 * Math.PI / 180,
-      q_max: 80 * Math.PI / 180,
+      q_min: s.q_min ?? -80 * Math.PI / 180,
+      q_max: s.q_max ?? 80 * Math.PI / 180,
       joint_type: s.joint_type ?? 'revolute',
     })),
     base_transform: [
@@ -122,5 +124,25 @@ export function solveIk(
 ): { q: number[]; converged: boolean; error: number } {
   const wasmRobot = robotToWasm(robot);
   const result = wasmSolveIk(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
+  return result;
+}
+
+export function solveDrawingIk(
+  robot: RobotDef,
+  target: [number, number, number],
+  qInit: number[],
+): { q: number[]; converged: boolean; error: number } {
+  const wasmRobot = robotToWasm(robot);
+  const result = wasmSolveDrawingIk(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
+  return result;
+}
+
+export function solveDrawingIkV2(
+  robot: RobotDef,
+  target: [number, number, number],
+  qInit: number[],
+): { q: number[]; converged: boolean; error: number } {
+  const wasmRobot = robotToWasm(robot);
+  const result = wasmSolveDrawingIkV2(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
   return result;
 }

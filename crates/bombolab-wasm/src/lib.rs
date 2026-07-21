@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 
 use bombolab_core::math::Iso3;
 use bombolab_core::robot::{fabri_creator as make_fabri_creator, base_transform as make_base_transform, tool_transform as make_tool_transform, DHParams, Joint, JointType, Robot, Segment};
-use bombolab_core::kinematics::{forward_kinematics as fk, IkSolver};
+use bombolab_core::kinematics::{forward_kinematics as fk, OrientationSolver, solve_drawing_ik as solve_drawing, solve_drawing_ik_v2 as solve_drawing_v2, IkSolver};
 
 // ─── Serializable types for JS interop ──────────────────────────────────────
 
@@ -185,6 +185,121 @@ pub fn solve_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> JsValue {
             serde_wasm_bindgen::to_value(&result).unwrap()
         }
     }
+}
+
+/// Inverse kinematics with drawing mode: solve position + orientation for drawing.
+///
+/// Uses `solve_drawing_ik` which generates an adaptive orientation target
+/// (R_target with θ = q₁ + π) so the marker stays perpendicular to the XY plane.
+///
+/// Si la orientación no es alcanzable, cae suavemente a solo posición
+/// (el robot se mueve al target aunque el marcador no esté perfectamente vertical).
+#[wasm_bindgen]
+pub fn solve_drawing_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> JsValue {
+    let js_robot: JsRobotDef = serde_wasm_bindgen::from_value(js_robot.clone()).unwrap();
+    let robot = robot_from_js(&js_robot);
+    let base = array_to_iso3(&js_robot.base_transform);
+    let tool = array_to_iso3(&js_robot.tool_transform);
+
+    let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+    let orient_solver = OrientationSolver::new(1e-6);
+    let target_arr = [target[0], target[1], target[2]];
+
+    // 1. Intentar IK completa con orientación adaptativa
+    match solve_drawing(&pos_solver, &orient_solver, &target_arr, q_init, &robot, &base, &tool) {
+        Ok(q) => {
+            // Éxito: devolver solución completa
+            let error = compute_position_error(&robot, &q, &target_arr, &base, &tool);
+            let result = JsIkResult { q, converged: true, error };
+            return serde_wasm_bindgen::to_value(&result).unwrap();
+        }
+        Err(_) => {
+            // 2. Fallback: solo posición (sin orientación)
+            match pos_solver.solve_position(&target_arr, q_init, &robot, &base, &tool) {
+                Ok(q) => {
+                    let error = compute_position_error(&robot, &q, &target_arr, &base, &tool);
+                    let result = JsIkResult { q, converged: true, error };
+                    return serde_wasm_bindgen::to_value(&result).unwrap();
+                }
+                Err(e) => {
+                    let error = match e {
+                        bombolab_core::kinematics::IkError::MaxIterationsReached { error } => error,
+                        _ => f64::MAX,
+                    };
+                    let result = JsIkResult {
+                        q: q_init.to_vec(),
+                        converged: false,
+                        error,
+                    };
+                    return serde_wasm_bindgen::to_value(&result).unwrap();
+                }
+            }
+        }
+    }
+}
+
+/// Inverse kinematics drawing mode 2: marker along Y₅ axis.
+///
+/// El marcador está montado perpendicular al gripper, apuntando en Y₅.
+/// Usa `drawing_pose_v2` con R_target que mantiene Y₅ = -Z (vertical).
+///
+/// Fallback a solo posición si la orientación no es alcanzable.
+#[wasm_bindgen]
+pub fn solve_drawing_ik_v2(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> JsValue {
+    let js_robot: JsRobotDef = serde_wasm_bindgen::from_value(js_robot.clone()).unwrap();
+    let robot = robot_from_js(&js_robot);
+    let base = array_to_iso3(&js_robot.base_transform);
+    let tool = array_to_iso3(&js_robot.tool_transform);
+
+    let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+    let orient_solver = OrientationSolver::new(1e-6);
+    let target_arr = [target[0], target[1], target[2]];
+
+    match solve_drawing_v2(&pos_solver, &orient_solver, &target_arr, q_init, &robot, &base, &tool) {
+        Ok(q) => {
+            let error = compute_position_error(&robot, &q, &target_arr, &base, &tool);
+            let result = JsIkResult { q, converged: true, error };
+            return serde_wasm_bindgen::to_value(&result).unwrap();
+        }
+        Err(_) => {
+            match pos_solver.solve_position(&target_arr, q_init, &robot, &base, &tool) {
+                Ok(q) => {
+                    let error = compute_position_error(&robot, &q, &target_arr, &base, &tool);
+                    let result = JsIkResult { q, converged: true, error };
+                    return serde_wasm_bindgen::to_value(&result).unwrap();
+                }
+                Err(e) => {
+                    let error = match e {
+                        bombolab_core::kinematics::IkError::MaxIterationsReached { error } => error,
+                        _ => f64::MAX,
+                    };
+                    let result = JsIkResult {
+                        q: q_init.to_vec(),
+                        converged: false,
+                        error,
+                    };
+                    return serde_wasm_bindgen::to_value(&result).unwrap();
+                }
+            }
+        }
+    }
+}
+
+/// Helper: compute FK position error for solved q values.
+fn compute_position_error(robot: &Robot, q: &[f64], target: &[f64; 3], base: &Iso3, tool: &Iso3) -> f64 {
+    use bombolab_core::robot::{Joint, DHParams, Segment, Robot};
+    let solved = {
+        let segments: Vec<_> = robot.segments.iter().zip(q.iter()).map(|(seg, &val)| {
+            let joint = Joint::new(seg.joint.joint_type, val, seg.joint.value_max, seg.joint.value_min);
+            Segment::new(joint, DHParams::new(seg.dh.theta, seg.dh.d, seg.dh.a, seg.dh.alpha))
+        }).collect();
+        Robot::new(segments)
+    };
+    let (frames, _) = fk(*base, &solved);
+    let tool_pose = frames.last().unwrap() * tool;
+    let p_ee = tool_pose.translation.vector;
+    let target_v = nalgebra::Vector3::new(target[0], target[1], target[2]);
+    (target_v - p_ee).norm()
 }
 
 /// Get base transform as 4x3 matrix (row-major, 12 floats).
