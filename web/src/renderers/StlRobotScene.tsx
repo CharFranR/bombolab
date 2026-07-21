@@ -1,23 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
-import type { DebugToggles, RobotRendererProps, VisualLink } from './types';
+import type { RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES, STL_META } from './stlMapping';
 import DebugAxes from './debugAxes';
-
-// ─── Calibration config shape ────────────────────────────────────────────────
-
-interface CalibrationEntry {
-  filename: string;
-  translation: [number, number, number];
-  rotation: [number, number, number, number];
-}
-
-interface CalibrationConfig {
-  version: number;
-  entries: CalibrationEntry[];
-}
 
 // ─── STL paths ──────────────────────────────────────────────────────────────
 
@@ -55,7 +42,15 @@ function buildEntries(geometries: THREE.BufferGeometry[]): MeshEntry[] {
 
 // ─── Renderer ───────────────────────────────────────────────────────────────
 
-export default function StlRobotScene({ frames, gripper, debugToggles }: RobotRendererProps) {
+export default function StlRobotScene({
+  frames,
+  gripper,
+  debugToggles,
+  calibrationConfigRef,
+  calibrationOverridesRef,
+  calibrationTarget,
+  calibrationMode,
+}: RobotRendererProps) {
   const geometries = useLoader(STLLoader, STL_URLS);
 
   // Build meshes once after geometries load
@@ -69,49 +64,14 @@ export default function StlRobotScene({ frames, gripper, debugToggles }: RobotRe
   const gripperRef = useRef(gripper);
   gripperRef.current = gripper;
   const firstFrameRef = useRef(true);
-
-  // ─── Calibration config loader ───────────────────────────────────────────
-  const calibrationRef = useRef<Map<string, THREE.Matrix4>>(new Map());
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/calibration.json')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then((config: CalibrationConfig) => {
-        if (cancelled) return;
-
-        if (!config || config.version !== 1) {
-          console.warn('[StlRobotScene] calibration.json: invalid or missing version field — using identity');
-          return;
-        }
-
-        const map = new Map<string, THREE.Matrix4>();
-        for (const entry of config.entries) {
-          const [tx, ty, tz] = entry.translation;
-          const [rx, ry, rz, rw] = entry.rotation;
-          const m = new THREE.Matrix4().compose(
-            new THREE.Vector3(tx, ty, tz),
-            new THREE.Quaternion(rx, ry, rz, rw),
-            new THREE.Vector3(1, 1, 1),
-          );
-          map.set(entry.filename, m);
-        }
-
-        calibrationRef.current = map;
-        console.log(`[StlRobotScene] Loaded calibration.json — ${map.size} entries`);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn('[StlRobotScene] Failed to load calibration.json:', err.message);
-        // calibrationRef stays as empty map → identity fallback
-      });
-    return () => { cancelled = true; };
-  }, []);
+  const configRef = useRef(calibrationConfigRef);
+  configRef.current = calibrationConfigRef;
+  const overridesRef = useRef(calibrationOverridesRef);
+  overridesRef.current = calibrationOverridesRef;
+  const targetRef = useRef(calibrationTarget);
+  targetRef.current = calibrationTarget;
+  const modeRef = useRef(calibrationMode);
+  modeRef.current = calibrationMode;
 
   // ─── Per-frame mesh positioning ─────────────────────────────────────────
   useFrame(() => {
@@ -146,8 +106,10 @@ export default function StlRobotScene({ frames, gripper, debugToggles }: RobotRe
       tempQuat.set(...pose.quat);
       world.compose(tempPos, tempQuat, tempScale);
 
-      // Apply calibration transform from loaded config (identity if missing)
-      const cal = calibrationRef.current.get(STL_META[i].file) ?? new THREE.Matrix4().identity();
+      // Apply calibration transform: overrides first, then config, fallback to identity
+      const calConfig = configRef.current?.current.get(STL_META[i].file);
+      const calOverride = overridesRef.current?.current.get(STL_META[i].file);
+      const cal = calOverride ?? calConfig ?? new THREE.Matrix4().identity();
       entry.calibrationTransform.copy(cal);
       world.multiply(entry.calibrationTransform);
 
@@ -162,11 +124,14 @@ export default function StlRobotScene({ frames, gripper, debugToggles }: RobotRe
       entry.mesh.matrix.copy(world);
       entry.mesh.matrixAutoUpdate = false;
       entry.mesh.matrixWorldNeedsUpdate = true;
+
+      // Per-mesh visibility for calibration mode
+      entry.mesh.visible = !modeRef.current || STL_META[i].file === targetRef.current;
     });
   });
 
   // Default toggles (all off) when none provided
-  const toggles: DebugToggles = debugToggles ?? {
+  const toggles = debugToggles ?? {
     showJointFrames: false,
     showStlOrigins: false,
     showCalibrationAxes: false,
@@ -180,7 +145,7 @@ export default function StlRobotScene({ frames, gripper, debugToggles }: RobotRe
       <DebugAxes
         framesRef={framesRef}
         stlMeta={STL_META}
-        calibrationRef={calibrationRef}
+        calibrationRef={(calibrationConfigRef ?? { current: new Map() }) as React.MutableRefObject<Map<string, THREE.Matrix4>>}
         toggles={toggles}
       />
     </group>
