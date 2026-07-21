@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2 } from './wasm';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
+import type { FidelityMode } from './renderers/types';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
@@ -34,6 +35,7 @@ export default function App() {
   const [demoRunning, setDemoRunning] = useState(false);
   const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const portRef = useRef<SerialPort | null>(null);
+  const [fidelityMode, setFidelityMode] = useState<FidelityMode>('low');
 
   useEffect(() => {
     initWasm()
@@ -169,6 +171,45 @@ export default function App() {
 
         {/* Info panel */}
         <InfoPanel robot={robot} />
+
+        {/* Fidelity toggle */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+            <span style={{ fontSize: 11, color: '#888' }}>Fidelidad:</span>
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              onClick={() => setFidelityMode('low')}
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                fontSize: 12,
+                background: fidelityMode === 'low' ? '#553' : '#3a3a3a',
+                border: '1px solid ' + (fidelityMode === 'low' ? '#885' : '#444'),
+                borderRadius: 3,
+                color: fidelityMode === 'low' ? '#ddc' : '#888',
+                cursor: 'pointer',
+              }}
+            >
+              Low
+            </button>
+            <button
+              onClick={() => setFidelityMode('high')}
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                fontSize: 12,
+                background: fidelityMode === 'high' ? '#553' : '#3a3a3a',
+                border: '1px solid ' + (fidelityMode === 'high' ? '#885' : '#444'),
+                borderRadius: 3,
+                color: fidelityMode === 'high' ? '#ddc' : '#888',
+                cursor: 'pointer',
+              }}
+            >
+              High
+            </button>
+          </div>
+        </div>
 
         {/* Conexión robot físico (WebSerial) */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
@@ -382,7 +423,7 @@ export default function App() {
       </div>
 
       {/* 3D Viewport */}
-      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} />
+      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} fidelityMode={fidelityMode} />
     </div>
   );
 }
