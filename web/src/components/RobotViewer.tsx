@@ -1,4 +1,4 @@
-import { useMemo, useState, Suspense } from 'react';
+import { useMemo, useState, Suspense, Component } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,6 +8,30 @@ import type { FidelityMode, RobotRendererProps } from '../renderers/types';
 import { framePose, mulMat4 } from '../renderers/types';
 import SimpleRobotScene from '../renderers/SimpleRobotScene';
 import StlRobotScene from '../renderers/StlRobotScene';
+
+// ─── Error boundary for STL load failures ────────────────────────────────────
+
+class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error('[StlRobotScene] STL load failed:', error.message, info.componentStack);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) {
+      return null; // graceful degradation — fall back to empty scene
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
@@ -60,7 +84,9 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
   // 4. Branch on fidelity mode (React-conditional → unmount/remount)
   return fidelityMode === 'high' ? (
     <Suspense fallback={null}>
-      <StlRobotScene {...commonProps} />
+      <StlErrorBoundary>
+        <StlRobotScene {...commonProps} />
+      </StlErrorBoundary>
     </Suspense>
   ) : (
     <SimpleRobotScene {...commonProps} />

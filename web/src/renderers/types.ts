@@ -26,9 +26,12 @@ export interface RobotRendererProps {
 
 // ─── Loaded STL mesh + FK binding ───────────────────────────────────────────
 
+/** Base calibration-ready link between a mesh and its parent FK frame.
+ *  Extended by renderer-internal types (e.g. MeshEntry) that add
+ *  gripper animation metadata. */
 export interface VisualLink {
   mesh: THREE.Mesh;
-  parentJoint: number; // index into frames[]
+  parentJoint: number; // index into frames[] (-1 = tool-tip)
   calibrationTransform: THREE.Matrix4;
 }
 

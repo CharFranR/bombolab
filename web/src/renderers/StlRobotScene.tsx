@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
-import type { RobotRendererProps } from './types';
+import type { RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES } from './stlMapping';
 
 // ─── STL paths ──────────────────────────────────────────────────────────────
@@ -24,10 +24,7 @@ const STL_META: { parentJoint: number; jawDirection: number }[] = [
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-interface MeshEntry {
-  mesh: THREE.Mesh;
-  parentJoint: number;
-  calibrationTransform: THREE.Matrix4;
+interface MeshEntry extends VisualLink {
   isGripper: boolean;
   jawDirection: number;
 }
