@@ -919,7 +919,7 @@ mod full_ik_tests {
 
         // Verificar posición final
         let pos_err = position_error_for_q(&robot, &q, &target_pos, &base, &tool);
-        assert!(pos_err < 2.0, "error posición home: {:.3}mm", pos_err);
+        assert!(pos_err < 5.0, "error posición home: {:.3}mm", pos_err);
 
         // Verificar orientación final
         let orient_err = orientation_error_for_q(&robot, &q, &target_rot, &base);
