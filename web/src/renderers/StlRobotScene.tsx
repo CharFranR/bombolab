@@ -162,9 +162,11 @@ export default function StlRobotScene({
         fkMatrix.multiply(cal);
         const finalPos = new THREE.Vector3();
         const finalQuat = new THREE.Quaternion();
-        fkMatrix.decompose(finalPos, finalQuat, new THREE.Vector3());
+        const finalScale = new THREE.Vector3();
+        fkMatrix.decompose(finalPos, finalQuat, finalScale);
         entry.mesh.position.copy(finalPos);
         entry.mesh.quaternion.copy(finalQuat);
+        entry.mesh.scale.copy(finalScale);
         entry.mesh.matrixAutoUpdate = true;
       } else {
         // Non-target: matrix pipeline

@@ -74,7 +74,7 @@ export default function App() {
             const m = new THREE.Matrix4().compose(
               new THREE.Vector3(...entry.translation),
               new THREE.Quaternion(...entry.rotation),
-              new THREE.Vector3(1, 1, 1),
+              new THREE.Vector3(...(entry.scale ?? [1, 1, 1])),
             );
             map.set(entry.filename, m);
           }
@@ -120,7 +120,7 @@ export default function App() {
           const m = new THREE.Matrix4().compose(
             new THREE.Vector3(tx, ty, tz),
             new THREE.Quaternion(rx, ry, rz, rw),
-            new THREE.Vector3(1, 1, 1),
+            new THREE.Vector3(...(entry.scale ?? [1, 1, 1])),
           );
           map.set(entry.filename, m);
         }
@@ -229,11 +229,13 @@ export default function App() {
              ?? new THREE.Matrix4().identity();
       const pos = new THREE.Vector3();
       const quat = new THREE.Quaternion();
-      m.decompose(pos, quat, new THREE.Vector3());
+      const scl = new THREE.Vector3();
+      m.decompose(pos, quat, scl);
       return {
         filename: file,
         translation: [pos.x, pos.y, pos.z] as [number, number, number],
         rotation: [quat.x, quat.y, quat.z, quat.w] as [number, number, number, number],
+        scale: [scl.x, scl.y, scl.z] as [number, number, number],
       };
     });
     const blob = new Blob(
@@ -270,7 +272,7 @@ export default function App() {
           const m = new THREE.Matrix4().compose(
             new THREE.Vector3(tx, ty, tz),
             new THREE.Quaternion(rx, ry, rz, rw),
-            new THREE.Vector3(1, 1, 1),
+            new THREE.Vector3(...(entry.scale ?? [1, 1, 1])),
           );
           map.set(entry.filename, m);
         }
