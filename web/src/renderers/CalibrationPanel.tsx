@@ -11,15 +11,40 @@ interface CalibrationPanelProps {
   configRef: React.MutableRefObject<Map<string, THREE.Matrix4>>;
   onSave: () => void;
   onReload: () => void;
+  version: number;
 }
 
-// ─── Helper: read translation from matrix ────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getTranslation(m: THREE.Matrix4): [number, number, number] {
   const pos = new THREE.Vector3();
   m.decompose(pos, new THREE.Quaternion(), new THREE.Vector3());
   return [pos.x, pos.y, pos.z];
 }
+
+const stepBtnStyle: React.CSSProperties = {
+  padding: '1px 3px',
+  fontSize: 9,
+  background: '#2a2a2a',
+  border: '1px solid #444',
+  borderRadius: 3,
+  color: '#aaa',
+  cursor: 'pointer',
+  fontFamily: 'monospace',
+};
+
+const STEPS = [-50, -10, -1, 1, 10, 50] as const;
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '4px 6px',
+  fontSize: 12,
+  background: '#3a3a3a',
+  border: '1px solid #555',
+  borderRadius: 4,
+  color: '#ddd',
+  boxSizing: 'border-box',
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -30,6 +55,7 @@ export default function CalibrationPanel({
   configRef,
   onSave,
   onReload,
+  version,
 }: CalibrationPanelProps) {
   const [x, setX] = useState(0);
   const [y, setY] = useState(0);
@@ -48,7 +74,7 @@ export default function CalibrationPanel({
     } else {
       setX(0); setY(0); setZ(0);
     }
-  }, [target, overridesRef, configRef]);
+  }, [target, version, overridesRef, configRef]);
 
   // Update matrix translation in overridesRef for the current target
   const updateTranslation = useCallback((tx: number, ty: number, tz: number) => {
@@ -175,64 +201,49 @@ export default function CalibrationPanel({
       </select>
 
       {/* Translation inputs */}
-      <label style={{ fontSize: 11, color: '#888' }}>Translation (mm)</label>
+      <label style={{ fontSize: 11, color: '#888' }}>Translation (mm) — drag gizmo or type/step</label>
       <div style={{ display: 'flex', gap: 4 }}>
+        {/* X */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#ff6666', textAlign: 'center' }}>X</span>
-          <input
-            type="number"
-            step={0.1}
-            value={x}
-            onChange={handleXChange}
-            style={{
-              width: '100%',
-              padding: '4px 6px',
-              fontSize: 12,
-              background: '#3a3a3a',
-              border: '1px solid #555',
-              borderRadius: 4,
-              color: '#ddd',
-              boxSizing: 'border-box',
-            }}
-          />
+          <input type="number" step={0.1} value={x} onChange={handleXChange} style={inputStyle} />
+          <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+            {STEPS.map((s) => (
+              <button key={s} style={stepBtnStyle}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { const nx = x + s; setX(nx); updateTranslation(nx, y, z); }}>
+                {s > 0 ? `+${s}` : s}
+              </button>
+            ))}
+          </div>
         </div>
+        {/* Y */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#66ff66', textAlign: 'center' }}>Y</span>
-          <input
-            type="number"
-            step={0.1}
-            value={y}
-            onChange={handleYChange}
-            style={{
-              width: '100%',
-              padding: '4px 6px',
-              fontSize: 12,
-              background: '#3a3a3a',
-              border: '1px solid #555',
-              borderRadius: 4,
-              color: '#ddd',
-              boxSizing: 'border-box',
-            }}
-          />
+          <input type="number" step={0.1} value={y} onChange={handleYChange} style={inputStyle} />
+          <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+            {STEPS.map((s) => (
+              <button key={s} style={stepBtnStyle}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { const ny = y + s; setY(ny); updateTranslation(x, ny, z); }}>
+                {s > 0 ? `+${s}` : s}
+              </button>
+            ))}
+          </div>
         </div>
+        {/* Z */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#4488ff', textAlign: 'center' }}>Z</span>
-          <input
-            type="number"
-            step={0.1}
-            value={z}
-            onChange={handleZChange}
-            style={{
-              width: '100%',
-              padding: '4px 6px',
-              fontSize: 12,
-              background: '#3a3a3a',
-              border: '1px solid #555',
-              borderRadius: 4,
-              color: '#ddd',
-              boxSizing: 'border-box',
-            }}
-          />
+          <input type="number" step={0.1} value={z} onChange={handleZChange} style={inputStyle} />
+          <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+            {STEPS.map((s) => (
+              <button key={s} style={stepBtnStyle}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { const nz = z + s; setZ(nz); updateTranslation(x, y, nz); }}>
+                {s > 0 ? `+${s}` : s}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -48,8 +48,12 @@ export default function App() {
   // ─── Calibration state ──────────────────────────────────────────────────
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationTarget, setCalibrationTarget] = useState<string | null>(null);
+  const [calibrationVersion, setCalibrationVersion] = useState(0);
   const calibrationConfigRef = useRef<Map<string, THREE.Matrix4>>(new Map());
   const calibrationOverridesRef = useRef<Map<string, THREE.Matrix4>>(new Map());
+  const handleCalibrationChange = useCallback(() => {
+    setCalibrationVersion((v) => v + 1);
+  }, []);
 
   useEffect(() => {
     initWasm()
@@ -598,6 +602,8 @@ export default function App() {
           calibrationOverridesRef={calibrationOverridesRef}
           calibrationTarget={calibrationTarget}
           calibrationMode={calibrationMode}
+          calibrationVersion={calibrationVersion}
+          onCalibrationChange={handleCalibrationChange}
         />
         {calibrationMode && fidelityMode === 'high' && (
           <CalibrationPanel
@@ -607,6 +613,7 @@ export default function App() {
             configRef={calibrationConfigRef}
             onSave={handleSaveCalibration}
             onReload={handleReloadCalibration}
+            version={calibrationVersion}
           />
         )}
       </div>

@@ -48,6 +48,8 @@ export interface RobotRendererProps {
   calibrationOverridesRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
   calibrationTarget?: string | null;
   calibrationMode?: boolean;
+  calibrationVersion?: number;
+  onCalibrationChange?: () => void;
 }
 
 // ─── Loaded STL mesh + FK binding ───────────────────────────────────────────
