@@ -102,11 +102,20 @@ export default function StlRobotScene({
       new THREE.Vector3(1, 1, 1),
     );
 
-    // Mesh world matrix
+    // Expected world position from current calibration
+    const currentCal = overridesRef.current?.current.get(calibrationTarget) ?? new THREE.Matrix4().identity();
+    const expectedWorld = fkWorld.clone().multiply(currentCal);
+
+    // Actual mesh world matrix
     mesh.updateMatrixWorld();
     const meshWorld = mesh.matrixWorld.clone();
 
-    // Calibration = FK⁻¹ × meshWorld (local offset from FK frame)
+    // Only save if the mesh actually moved (diff > 0.01)
+    const expectedPos = new THREE.Vector3(); expectedWorld.decompose(expectedPos, new THREE.Quaternion(), new THREE.Vector3());
+    const actualPos = new THREE.Vector3(); meshWorld.decompose(actualPos, new THREE.Quaternion(), new THREE.Vector3());
+    if (expectedPos.distanceToSquared(actualPos) < 0.0001) return;
+
+    // Calibration = FK⁻¹ × meshWorld
     const cal = fkWorld.clone().invert().multiply(meshWorld);
     overridesRef.current?.current.set(calibrationTarget, cal);
   }, [targetEntry, calibrationTarget]);
@@ -153,12 +162,18 @@ export default function StlRobotScene({
       entry.calibrationTransform.copy(cal);
 
       const calPos = new THREE.Vector3();
-      cal.decompose(calPos, new THREE.Quaternion(), new THREE.Vector3());
+      const calQuat = new THREE.Quaternion();
+      cal.decompose(calPos, calQuat, new THREE.Vector3());
 
       if (isTarget) {
-        // Target: position+quaternion so TransformControls can manipulate it
-        entry.mesh.position.copy(tempPos).add(calPos);
-        entry.mesh.quaternion.copy(tempQuat);
+        // Target: FK × calibration as position+quaternion for TransformControls
+        const fkMatrix = new THREE.Matrix4().compose(tempPos.clone(), tempQuat.clone(), new THREE.Vector3(1, 1, 1));
+        fkMatrix.multiply(cal);
+        const finalPos = new THREE.Vector3();
+        const finalQuat = new THREE.Quaternion();
+        fkMatrix.decompose(finalPos, finalQuat, new THREE.Vector3());
+        entry.mesh.position.copy(finalPos);
+        entry.mesh.quaternion.copy(finalQuat);
         entry.mesh.matrixAutoUpdate = true;
       } else {
         // Non-target: matrix pipeline
