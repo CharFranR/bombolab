@@ -22,10 +22,10 @@ pub fn fabri_creator() -> Robot {
             DHParams::new(0.0, 85.0, 15.0, -FRAC_PI_2),
         ),
         // Joint 2 — Shoulder (eleva el brazo)
-        // θ=-π/2,  d=0,  a=125,  α=0  (a corregido: 12.5cm)
+        // θ=-π/2,  d=0,  a=120,  α=0  (a corregido: 12cm)
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_max, q_min),
-            DHParams::new(-FRAC_PI_2, 0.0, 125.0, 0.0),
+            DHParams::new(-FRAC_PI_2, 0.0, 120.0, 0.0),
         ),
         // Joint 3 — Elbow (extiende el antebrazo)
         // θ=+π/2,  d=0,  a=90,  α=-π/2  (a corregido: 9cm)
