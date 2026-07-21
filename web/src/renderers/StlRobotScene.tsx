@@ -126,7 +126,7 @@ export default function StlRobotScene({
       entry.mesh.matrixWorldNeedsUpdate = true;
 
       // Per-mesh visibility for calibration mode
-      entry.mesh.visible = !modeRef.current || STL_META[i].file === targetRef.current;
+      entry.mesh.visible = !modeRef.current || !targetRef.current || STL_META[i].file === targetRef.current;
     });
   });
 
