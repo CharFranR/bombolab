@@ -1,5 +1,6 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useCallback } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
+import { TransformControls } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
@@ -73,6 +74,30 @@ export default function StlRobotScene({
   const modeRef = useRef(calibrationMode);
   modeRef.current = calibrationMode;
 
+  // Find target entry for TransformControls
+  const targetEntry = useMemo(() => {
+    if (!calibrationMode || !calibrationTarget) return null;
+    const idx = entries.findIndex((_, i) => STL_META[i].file === calibrationTarget);
+    return idx >= 0 ? { entry: entries[idx], index: idx } : null;
+  }, [calibrationMode, calibrationTarget, entries]);
+
+  // TransformControls moved the mesh → save calibration offset
+  const handleObjectChange = useCallback(() => {
+    if (!targetEntry || !calibrationTarget) return;
+    const mesh = targetEntry.entry.mesh;
+    const curFrames = framesRef.current;
+    const jointIdx = targetEntry.entry.parentJoint >= 0
+      ? targetEntry.entry.parentJoint
+      : curFrames.length - 1;
+    const fkPos = new THREE.Vector3(...curFrames[jointIdx].pos);
+
+    const meshPos = new THREE.Vector3();
+    mesh.getWorldPosition(meshPos);
+    const offset = meshPos.clone().sub(fkPos);
+    const cal = new THREE.Matrix4().makeTranslation(offset.x, offset.y, offset.z);
+    overridesRef.current?.current.set(calibrationTarget, cal);
+  }, [targetEntry, calibrationTarget]);
+
   // ─── Per-frame mesh positioning ─────────────────────────────────────────
   useFrame(() => {
     const curFrames = framesRef.current;
@@ -88,6 +113,9 @@ export default function StlRobotScene({
     const jawM = new THREE.Matrix4();
 
     entriesRef.current.forEach((entry, i) => {
+      const file = STL_META[i].file;
+      const isTarget = targetEntry && targetEntry.index === i;
+
       // Determine parent frame index (-1 → tool-tip = last frame)
       const jointIdx = entry.parentJoint >= 0
         ? entry.parentJoint
@@ -98,35 +126,41 @@ export default function StlRobotScene({
       // Diagnostic: log first-frame transform application
       if (isFirst) {
         const label = entry.parentJoint >= 0 ? `Joint ${entry.parentJoint}` : 'Tool-tip';
-        console.log(`[StlRobotScene] Applying transform: ${label} -> ${STL_META[i].file}`);
+        console.log(`[StlRobotScene] Applying transform: ${label} -> ${file}`);
       }
 
-      // Build world transform from FK frame pose
+      // Build FK world position
       tempPos.set(...pose.pos);
       tempQuat.set(...pose.quat);
-      world.compose(tempPos, tempQuat, tempScale);
 
-      // Apply calibration transform: overrides first, then config, fallback to identity
-      const calConfig = configRef.current?.current.get(STL_META[i].file);
-      const calOverride = overridesRef.current?.current.get(STL_META[i].file);
+      // Get calibration: override > config > identity
+      const calConfig = configRef.current?.current.get(file);
+      const calOverride = overridesRef.current?.current.get(file);
       const cal = calOverride ?? calConfig ?? new THREE.Matrix4().identity();
       entry.calibrationTransform.copy(cal);
-      world.multiply(entry.calibrationTransform);
 
-      // Animate gripper jaws: translate along local Y
-      if (entry.isGripper) {
-        const jawOpen = (1 - curGripper / 100) * 10;
-        jawM.makeTranslation(0, entry.jawDirection * jawOpen, 0);
-        world.multiply(jawM);
+      const calPos = new THREE.Vector3();
+      cal.decompose(calPos, new THREE.Quaternion(), new THREE.Vector3());
+
+      if (isTarget) {
+        // Target: position+quaternion so TransformControls can manipulate it
+        entry.mesh.position.copy(tempPos).add(calPos);
+        entry.mesh.quaternion.copy(tempQuat);
+        entry.mesh.matrixAutoUpdate = true;
+      } else {
+        // Non-target: matrix pipeline
+        world.compose(tempPos, tempQuat, tempScale);
+        world.multiply(cal);
+        // Animate gripper jaws
+        if (entry.isGripper) {
+          const jawOpen = (1 - curGripper / 100) * 10;
+          jawM.makeTranslation(0, entry.jawDirection * jawOpen, 0);
+          world.multiply(jawM);
+        }
+        entry.mesh.matrix.copy(world);
+        entry.mesh.matrixAutoUpdate = false;
+        entry.mesh.matrixWorldNeedsUpdate = true;
       }
-
-      // Push to mesh (matrixAutoUpdate = false → Three.js uses matrix directly)
-      entry.mesh.matrix.copy(world);
-      entry.mesh.matrixAutoUpdate = false;
-      entry.mesh.matrixWorldNeedsUpdate = true;
-
-      // Per-mesh visibility for calibration mode
-      // All meshes remain visible during calibration for assembly context
       entry.mesh.visible = true;
     });
   });
@@ -140,9 +174,23 @@ export default function StlRobotScene({
 
   return (
     <group>
-      {entries.map((entry, i) => (
-        <primitive key={i} object={entry.mesh} />
-      ))}
+      {entries.map((entry, i) => {
+        const isTarget = targetEntry && targetEntry.index === i;
+        const el = <primitive key={i} object={entry.mesh} />;
+        if (isTarget) {
+          return (
+            <TransformControls
+              key={i}
+              object={entry.mesh}
+              mode="translate"
+              onObjectChange={handleObjectChange}
+            >
+              {el}
+            </TransformControls>
+          );
+        }
+        return el;
+      })}
       <DebugAxes
         framesRef={framesRef}
         stlMeta={STL_META}

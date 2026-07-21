@@ -161,6 +161,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
         />
 
         <OrbitControls
+          makeDefault
           enableDamping
           dampingFactor={0.1}
           minDistance={100}
