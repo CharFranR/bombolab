@@ -1,9 +1,22 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES, STL_META } from './stlMapping';
+
+// ─── Calibration config shape ────────────────────────────────────────────────
+
+interface CalibrationEntry {
+  filename: string;
+  translation: [number, number, number];
+  rotation: [number, number, number, number];
+}
+
+interface CalibrationConfig {
+  version: number;
+  entries: CalibrationEntry[];
+}
 
 // ─── STL paths ──────────────────────────────────────────────────────────────
 
@@ -56,6 +69,49 @@ export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
   gripperRef.current = gripper;
   const firstFrameRef = useRef(true);
 
+  // ─── Calibration config loader ───────────────────────────────────────────
+  const calibrationRef = useRef<Map<string, THREE.Matrix4>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/calibration.json')
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then((config: CalibrationConfig) => {
+        if (cancelled) return;
+
+        if (!config || config.version !== 1) {
+          console.warn('[StlRobotScene] calibration.json: invalid or missing version field — using identity');
+          return;
+        }
+
+        const map = new Map<string, THREE.Matrix4>();
+        for (const entry of config.entries) {
+          const [tx, ty, tz] = entry.translation;
+          const [rx, ry, rz, rw] = entry.rotation;
+          const m = new THREE.Matrix4().compose(
+            new THREE.Vector3(tx, ty, tz),
+            new THREE.Quaternion(rx, ry, rz, rw),
+            new THREE.Vector3(1, 1, 1),
+          );
+          map.set(entry.filename, m);
+        }
+
+        calibrationRef.current = map;
+        console.log(`[StlRobotScene] Loaded calibration.json — ${map.size} entries`);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[StlRobotScene] Failed to load calibration.json:', err.message);
+        // calibrationRef stays as empty map → identity fallback
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // ─── Per-frame mesh positioning ─────────────────────────────────────────
   useFrame(() => {
     const curFrames = framesRef.current;
@@ -89,7 +145,9 @@ export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
       tempQuat.set(...pose.quat);
       world.compose(tempPos, tempQuat, tempScale);
 
-      // Apply calibration transform (identity for now)
+      // Apply calibration transform from loaded config (identity if missing)
+      const cal = calibrationRef.current.get(STL_META[i].file) ?? new THREE.Matrix4().identity();
+      entry.calibrationTransform.copy(cal);
       world.multiply(entry.calibrationTransform);
 
       // Animate gripper jaws: translate along local Y
