@@ -91,7 +91,48 @@ export default function CalibrationPanel({
     onTargetChange(val || null);
   }, [onTargetChange]);
 
-  if (!target) return null;
+  if (!target) return (
+    <div style={{
+      position: 'absolute',
+      top: 16,
+      right: 16,
+      zIndex: 10,
+      background: 'rgba(30, 30, 35, 0.92)',
+      padding: 16,
+      borderRadius: 8,
+      border: '1px solid #444',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      minWidth: 200,
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
+        Calibration
+      </div>
+      <label style={{ fontSize: 11, color: '#888' }}>STL File</label>
+      <select
+        value=""
+        onChange={handleTargetChange}
+        style={{
+          width: '100%',
+          padding: '6px 8px',
+          fontSize: 12,
+          background: '#3a3a3a',
+          border: '1px solid #555',
+          borderRadius: 4,
+          color: '#ddd',
+        }}
+      >
+        <option value="">-- Select a piece --</option>
+        {ALL_STL_FILES.map((file) => (
+          <option key={file} value={file}>{file}</option>
+        ))}
+      </select>
+      <span style={{ fontSize: 10, color: '#666' }}>
+        Pick a piece above to start calibrating
+      </span>
+    </div>
+  );
 
   return (
     <div style={{
