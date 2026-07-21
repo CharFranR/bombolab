@@ -50,6 +50,7 @@ export interface RobotRendererProps {
   calibrationMode?: boolean;
   calibrationVersion?: number;
   onCalibrationChange?: () => void;
+  gizmoMode?: 'translate' | 'rotate';
 }
 
 // ─── Loaded STL mesh + FK binding ───────────────────────────────────────────

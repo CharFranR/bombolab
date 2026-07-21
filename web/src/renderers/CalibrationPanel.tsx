@@ -11,6 +11,9 @@ interface CalibrationPanelProps {
   configRef: React.MutableRefObject<Map<string, THREE.Matrix4>>;
   onSave: () => void;
   onReload: () => void;
+  onUpload: () => void;
+  gizmoMode: 'translate' | 'rotate';
+  onGizmoModeChange: (mode: 'translate' | 'rotate') => void;
   version: number;
 }
 
@@ -55,6 +58,9 @@ export default function CalibrationPanel({
   configRef,
   onSave,
   onReload,
+  onUpload,
+  gizmoMode,
+  onGizmoModeChange,
   version,
 }: CalibrationPanelProps) {
   const [x, setX] = useState(0);
@@ -247,37 +253,40 @@ export default function CalibrationPanel({
         </div>
       </div>
 
+      {/* Gizmo mode toggle */}
+      <label style={{ fontSize: 11, color: '#888' }}>Gizmo</label>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button onClick={() => onGizmoModeChange('translate')}
+          style={{
+            flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
+            background: gizmoMode === 'translate' ? '#364' : '#3a3a3a',
+            border: `1px solid ${gizmoMode === 'translate' ? '#6a6' : '#555'}`,
+            borderRadius: 4, color: '#ccc',
+          }}>↕ Translate</button>
+        <button onClick={() => onGizmoModeChange('rotate')}
+          style={{
+            flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
+            background: gizmoMode === 'rotate' ? '#346' : '#3a3a3a',
+            border: `1px solid ${gizmoMode === 'rotate' ? '#66a' : '#555'}`,
+            borderRadius: 4, color: '#ccc',
+          }}>↻ Rotate</button>
+      </div>
+
       {/* Buttons */}
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-        <button
-          onClick={onSave}
-          style={{
-            flex: 1,
-            padding: '6px 0',
-            fontSize: 11,
-            background: '#364',
-            border: 'none',
-            borderRadius: 4,
-            color: '#ccc',
-            cursor: 'pointer',
-          }}
-        >
-          Save Calibration
+        <button onClick={onSave}
+          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#364', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          💾 Save
         </button>
-        <button
-          onClick={onReload}
-          style={{
-            flex: 1,
-            padding: '6px 0',
-            fontSize: 11,
-            background: '#633',
-            border: 'none',
-            borderRadius: 4,
-            color: '#ccc',
-            cursor: 'pointer',
-          }}
-        >
-          Reload
+        <button onClick={onUpload}
+          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#346', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          📂 Upload
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button onClick={onReload}
+          style={{ flex: 1, padding: '4px 0', fontSize: 10, background: '#633', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          🔄 Reload defaults
         </button>
       </div>
     </div>

@@ -49,10 +49,42 @@ export default function App() {
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationTarget, setCalibrationTarget] = useState<string | null>(null);
   const [calibrationVersion, setCalibrationVersion] = useState(0);
+  const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate'>('translate');
   const calibrationConfigRef = useRef<Map<string, THREE.Matrix4>>(new Map());
   const calibrationOverridesRef = useRef<Map<string, THREE.Matrix4>>(new Map());
   const handleCalibrationChange = useCallback(() => {
     setCalibrationVersion((v) => v + 1);
+  }, []);
+
+  // Upload: user selects a JSON file, loads into overridesRef
+  const handleUploadCalibration = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result as string);
+          if (data.version !== 1) { console.warn('Unknown calibration version'); return; }
+          const map = new Map<string, THREE.Matrix4>();
+          for (const entry of data.entries) {
+            const m = new THREE.Matrix4().compose(
+              new THREE.Vector3(...entry.translation),
+              new THREE.Quaternion(...entry.rotation),
+              new THREE.Vector3(1, 1, 1),
+            );
+            map.set(entry.filename, m);
+          }
+          calibrationOverridesRef.current = map;
+          setCalibrationVersion((v) => v + 1);
+        } catch (err) { console.error('Failed to parse calibration file', err); }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   }, []);
 
   useEffect(() => {
@@ -604,6 +636,7 @@ export default function App() {
           calibrationMode={calibrationMode}
           calibrationVersion={calibrationVersion}
           onCalibrationChange={handleCalibrationChange}
+          gizmoMode={gizmoMode}
         />
         {calibrationMode && fidelityMode === 'high' && (
           <CalibrationPanel
@@ -613,6 +646,9 @@ export default function App() {
             configRef={calibrationConfigRef}
             onSave={handleSaveCalibration}
             onReload={handleReloadCalibration}
+            onUpload={handleUploadCalibration}
+            gizmoMode={gizmoMode}
+            onGizmoModeChange={setGizmoMode}
             version={calibrationVersion}
           />
         )}

@@ -51,6 +51,9 @@ export default function StlRobotScene({
   calibrationOverridesRef,
   calibrationTarget,
   calibrationMode,
+  calibrationVersion,
+  onCalibrationChange,
+  gizmoMode,
 }: RobotRendererProps) {
   const geometries = useLoader(STLLoader, STL_URLS);
 
@@ -81,7 +84,7 @@ export default function StlRobotScene({
     return idx >= 0 ? { entry: entries[idx], index: idx } : null;
   }, [calibrationMode, calibrationTarget, entries]);
 
-  // TransformControls moved the mesh → save calibration offset
+  // TransformControls moved/rotated the mesh → save calibration offset
   const handleObjectChange = useCallback(() => {
     if (!targetEntry || !calibrationTarget) return;
     const mesh = targetEntry.entry.mesh;
@@ -89,12 +92,22 @@ export default function StlRobotScene({
     const jointIdx = targetEntry.entry.parentJoint >= 0
       ? targetEntry.entry.parentJoint
       : curFrames.length - 1;
-    const fkPos = new THREE.Vector3(...curFrames[jointIdx].pos);
+    const pose = curFrames[jointIdx];
+    if (!pose) return;
 
-    const meshPos = new THREE.Vector3();
-    mesh.getWorldPosition(meshPos);
-    const offset = meshPos.clone().sub(fkPos);
-    const cal = new THREE.Matrix4().makeTranslation(offset.x, offset.y, offset.z);
+    // Build FK world matrix
+    const fkWorld = new THREE.Matrix4().compose(
+      new THREE.Vector3(...pose.pos),
+      new THREE.Quaternion(...pose.quat),
+      new THREE.Vector3(1, 1, 1),
+    );
+
+    // Mesh world matrix
+    mesh.updateMatrixWorld();
+    const meshWorld = mesh.matrixWorld.clone();
+
+    // Calibration = FK⁻¹ × meshWorld (local offset from FK frame)
+    const cal = fkWorld.clone().invert().multiply(meshWorld);
     overridesRef.current?.current.set(calibrationTarget, cal);
   }, [targetEntry, calibrationTarget]);
 
@@ -182,7 +195,7 @@ export default function StlRobotScene({
             <TransformControls
               key={i}
               object={entry.mesh}
-              mode="translate"
+              mode={gizmoMode ?? 'translate'}
               onObjectChange={handleObjectChange}
             >
               {el}
