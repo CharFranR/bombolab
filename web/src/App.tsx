@@ -1,11 +1,14 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2 } from './wasm';
 import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
-import type { DebugToggles, FidelityMode } from './renderers/types';
+import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
+import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
+import CalibrationPanel from './renderers/CalibrationPanel';
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
@@ -42,6 +45,12 @@ export default function App() {
     showCalibrationAxes: false,
   });
 
+  // ─── Calibration state ──────────────────────────────────────────────────
+  const [calibrationMode, setCalibrationMode] = useState(false);
+  const [calibrationTarget, setCalibrationTarget] = useState<string | null>(null);
+  const calibrationConfigRef = useRef<Map<string, THREE.Matrix4>>(new Map());
+  const calibrationOverridesRef = useRef<Map<string, THREE.Matrix4>>(new Map());
+
   useEffect(() => {
     initWasm()
       .then(() => {
@@ -53,6 +62,41 @@ export default function App() {
     if (demoTimerRef.current) clearInterval(demoTimerRef.current);
   };
 }, []);
+
+  // ─── Fetch calibration config on mount ──────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/calibration.json')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((config: CalibrationConfig) => {
+        if (cancelled) return;
+        if (!config || config.version !== 1) {
+          console.warn('[App] calibration.json: invalid or missing version — using identity');
+          return;
+        }
+        const map = new Map<string, THREE.Matrix4>();
+        for (const entry of config.entries) {
+          const [tx, ty, tz] = entry.translation;
+          const [rx, ry, rz, rw] = entry.rotation;
+          const m = new THREE.Matrix4().compose(
+            new THREE.Vector3(tx, ty, tz),
+            new THREE.Quaternion(rx, ry, rz, rw),
+            new THREE.Vector3(1, 1, 1),
+          );
+          map.set(entry.filename, m);
+        }
+        calibrationConfigRef.current = map;
+        console.log(`[App] Loaded calibration.json — ${map.size} entries`);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[App] Failed to load calibration.json:', err.message);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const sendQ = useCallback((segments: Segment[], g: number) => {
     const port = portRef.current;
@@ -122,6 +166,11 @@ export default function App() {
     return () => window.removeEventListener('wheel', onWheel);
   }, [ikMode, ikTarget]);
 
+  // Deactivate calibration mode when switching to low fidelity
+  useEffect(() => {
+    if (fidelityMode === 'low') setCalibrationMode(false);
+  }, [fidelityMode]);
+
   useEffect(() => {
     if (!robot) return;
     sendQ(robot.segments, gripper);
@@ -132,6 +181,69 @@ export default function App() {
     setRobot(home);
     setGripper(50);
     sendQRef.current(home.segments, 50);
+  }, []);
+
+  // ─── Calibration save handler ──────────────────────────────────────────
+  // Merges overrides into config, serializes as calibration.json, triggers
+  // browser download. The user must manually replace web/public/calibration.json.
+  const handleSaveCalibration = useCallback(() => {
+    const entries = ALL_STL_FILES.map((file) => {
+      const m = calibrationOverridesRef.current.get(file)
+             ?? calibrationConfigRef.current.get(file)
+             ?? new THREE.Matrix4().identity();
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      m.decompose(pos, quat, new THREE.Vector3());
+      return {
+        filename: file,
+        translation: [pos.x, pos.y, pos.z] as [number, number, number],
+        rotation: [quat.x, quat.y, quat.z, quat.w] as [number, number, number, number],
+      };
+    });
+    const blob = new Blob(
+      [JSON.stringify({ version: 1, entries }, null, 2)],
+      { type: 'application/json' },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'calibration.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  // ─── Calibration reload handler ─────────────────────────────────────────
+  // Clears overrides and re-fetches the server config.
+  const handleReloadCalibration = useCallback(() => {
+    calibrationOverridesRef.current.clear();
+    setCalibrationTarget(null);
+    fetch('/calibration.json')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((config: CalibrationConfig) => {
+        if (!config || config.version !== 1) {
+          console.warn('[App] Reload: calibration.json invalid — using identity');
+          return;
+        }
+        const map = new Map<string, THREE.Matrix4>();
+        for (const entry of config.entries) {
+          const [tx, ty, tz] = entry.translation;
+          const [rx, ry, rz, rw] = entry.rotation;
+          const m = new THREE.Matrix4().compose(
+            new THREE.Vector3(tx, ty, tz),
+            new THREE.Quaternion(rx, ry, rz, rw),
+            new THREE.Vector3(1, 1, 1),
+          );
+          map.set(entry.filename, m);
+        }
+        calibrationConfigRef.current = map;
+        console.log(`[App] Reloaded calibration.json — ${map.size} entries`);
+      })
+      .catch((err) => {
+        console.warn('[App] Reload: failed to fetch calibration.json:', err.message);
+      });
   }, []);
 
   const workspacePoints = useMemo(
@@ -215,6 +327,20 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Calibration mode — visible only in high fidelity */}
+        {fidelityMode === 'high' && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={calibrationMode}
+                onChange={(e) => setCalibrationMode(e.target.checked)}
+              />
+              Calibration Mode
+            </label>
+          </div>
+        )}
 
         {/* Debug visualization toggles — visible only in high fidelity */}
         {fidelityMode === 'high' && (
@@ -459,7 +585,31 @@ export default function App() {
       </div>
 
       {/* 3D Viewport */}
-      <RobotViewer robot={robot} gripper={gripper} workspacePoints={workspacePoints} ikTarget={ikTarget} onIkTargetChange={setIkTarget} fidelityMode={fidelityMode} debugToggles={debugToggles} />
+      <div style={{ flex: 1, position: 'relative' }}>
+        <RobotViewer
+          robot={robot}
+          gripper={gripper}
+          workspacePoints={workspacePoints}
+          ikTarget={ikTarget}
+          onIkTargetChange={setIkTarget}
+          fidelityMode={fidelityMode}
+          debugToggles={debugToggles}
+          calibrationConfigRef={calibrationConfigRef}
+          calibrationOverridesRef={calibrationOverridesRef}
+          calibrationTarget={calibrationTarget}
+          calibrationMode={calibrationMode}
+        />
+        {calibrationMode && fidelityMode === 'high' && (
+          <CalibrationPanel
+            target={calibrationTarget}
+            onTargetChange={setCalibrationTarget}
+            overridesRef={calibrationOverridesRef}
+            configRef={calibrationConfigRef}
+            onSave={handleSaveCalibration}
+            onReload={handleReloadCalibration}
+          />
+        )}
+      </div>
     </div>
   );
 }
