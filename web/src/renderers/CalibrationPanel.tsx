@@ -14,6 +14,7 @@ interface CalibrationPanelProps {
   onUpload: () => void;
   gizmoMode: 'translate' | 'rotate';
   onGizmoModeChange: (mode: 'translate' | 'rotate') => void;
+  stlScaleRef: React.MutableRefObject<number>;
   version: number;
 }
 
@@ -61,25 +62,24 @@ export default function CalibrationPanel({
   onUpload,
   gizmoMode,
   onGizmoModeChange,
+  stlScaleRef,
   version,
 }: CalibrationPanelProps) {
   const [x, setX] = useState(0);
   const [y, setY] = useState(0);
   const [z, setZ] = useState(0);
-  const [s, setS] = useState(1);
+  const [globalScale, setGlobalScale] = useState(stlScaleRef.current);
 
-  // When target changes, read current translation + scale from refs
+  // When target changes, read current translation from refs
   useEffect(() => {
-    if (!target) { setX(0); setY(0); setZ(0); setS(1); return; }
+    if (!target) { setX(0); setY(0); setZ(0); return; }
     const m = overridesRef.current.get(target)
           ?? configRef.current.get(target);
     if (m) {
       const [tx, ty, tz] = getTranslation(m);
-      const scl = new THREE.Vector3();
-      m.decompose(new THREE.Vector3(), new THREE.Quaternion(), scl);
-      setX(tx); setY(ty); setZ(tz); setS(scl.x);
+      setX(tx); setY(ty); setZ(tz);
     } else {
-      setX(0); setY(0); setZ(0); setS(1);
+      setX(0); setY(0); setZ(0);
     }
   }, [target, version, overridesRef, configRef]);
 
@@ -98,19 +98,6 @@ export default function CalibrationPanel({
       quat,
       new THREE.Vector3(1, 1, 1),
     );
-    overridesRef.current.set(target, m);
-  }, [target, overridesRef, configRef]);
-
-  // Update scale in overridesRef
-  const updateScale = useCallback((newScale: number) => {
-    if (!target || newScale <= 0) return;
-    const current = overridesRef.current.get(target)
-                ?? configRef.current.get(target)
-                ?? new THREE.Matrix4().identity();
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    current.decompose(pos, quat, new THREE.Vector3());
-    const m = new THREE.Matrix4().compose(pos, quat, new THREE.Vector3(newScale, newScale, newScale));
     overridesRef.current.set(target, m);
   }, [target, overridesRef, configRef]);
 
@@ -267,14 +254,14 @@ export default function CalibrationPanel({
         </div>
       </div>
 
-      {/* Scale */}
-      <label style={{ fontSize: 11, color: '#888' }}>Scale</label>
+      {/* Global scale */}
+      <label style={{ fontSize: 11, color: '#888' }}>STL Scale (global)</label>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-        <input type="range" min={0.1} max={5} step={0.01} value={s}
-          onChange={(e) => { const v = parseFloat(e.target.value); setS(v); updateScale(v); }}
+        <input type="range" min={0.1} max={5} step={0.01} value={globalScale}
+          onChange={(e) => { const v = parseFloat(e.target.value); setGlobalScale(v); stlScaleRef.current = v; }}
           style={{ flex: 1 }} />
-        <input type="number" step={0.01} value={s}
-          onChange={(e) => { const v = parseFloat(e.target.value) || 1; setS(v); updateScale(v); }}
+        <input type="number" step={0.01} value={globalScale}
+          onChange={(e) => { const v = parseFloat(e.target.value) || 1; setGlobalScale(v); stlScaleRef.current = v; }}
           style={{ ...inputStyle, width: 60 }} />
       </div>
 

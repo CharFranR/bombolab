@@ -26,11 +26,11 @@ export interface CalibrationEntry {
   filename: string;
   translation: [number, number, number];
   rotation: [number, number, number, number];
-  scale?: [number, number, number]; // default [1,1,1]
 }
 
 export interface CalibrationConfig {
   version: number;
+  stlScale?: number; // global uniform scale, default 1.0
   entries: CalibrationEntry[];
 }
 
@@ -52,6 +52,7 @@ export interface RobotRendererProps {
   calibrationVersion?: number;
   onCalibrationChange?: () => void;
   gizmoMode?: 'translate' | 'rotate';
+  stlScaleRef?: React.MutableRefObject<number>;
 }
 
 // ─── Loaded STL mesh + FK binding ───────────────────────────────────────────

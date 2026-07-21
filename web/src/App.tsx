@@ -52,6 +52,7 @@ export default function App() {
   const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate'>('translate');
   const calibrationConfigRef = useRef<Map<string, THREE.Matrix4>>(new Map());
   const calibrationOverridesRef = useRef<Map<string, THREE.Matrix4>>(new Map());
+  const stlScaleRef = useRef(1.0);
   const handleCalibrationChange = useCallback(() => {
     setCalibrationVersion((v) => v + 1);
   }, []);
@@ -74,7 +75,7 @@ export default function App() {
             const m = new THREE.Matrix4().compose(
               new THREE.Vector3(...entry.translation),
               new THREE.Quaternion(...entry.rotation),
-              new THREE.Vector3(...(entry.scale ?? [1, 1, 1])),
+              new THREE.Vector3(1, 1, 1),
             );
             map.set(entry.filename, m);
           }
@@ -120,12 +121,13 @@ export default function App() {
           const m = new THREE.Matrix4().compose(
             new THREE.Vector3(tx, ty, tz),
             new THREE.Quaternion(rx, ry, rz, rw),
-            new THREE.Vector3(...(entry.scale ?? [1, 1, 1])),
+            new THREE.Vector3(1, 1, 1),
           );
           map.set(entry.filename, m);
         }
         calibrationConfigRef.current = map;
-        console.log(`[App] Loaded calibration.json — ${map.size} entries`);
+        stlScaleRef.current = config.stlScale ?? 1.0;
+        console.log(`[App] Loaded calibration.json — ${map.size} entries, scale ${stlScaleRef.current}`);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -229,17 +231,15 @@ export default function App() {
              ?? new THREE.Matrix4().identity();
       const pos = new THREE.Vector3();
       const quat = new THREE.Quaternion();
-      const scl = new THREE.Vector3();
-      m.decompose(pos, quat, scl);
+      m.decompose(pos, quat, new THREE.Vector3());
       return {
         filename: file,
         translation: [pos.x, pos.y, pos.z] as [number, number, number],
         rotation: [quat.x, quat.y, quat.z, quat.w] as [number, number, number, number],
-        scale: [scl.x, scl.y, scl.z] as [number, number, number],
       };
     });
     const blob = new Blob(
-      [JSON.stringify({ version: 1, entries }, null, 2)],
+      [JSON.stringify({ version: 1, stlScale: stlScaleRef.current, entries }, null, 2)],
       { type: 'application/json' },
     );
     const url = URL.createObjectURL(blob);
@@ -272,7 +272,7 @@ export default function App() {
           const m = new THREE.Matrix4().compose(
             new THREE.Vector3(tx, ty, tz),
             new THREE.Quaternion(rx, ry, rz, rw),
-            new THREE.Vector3(...(entry.scale ?? [1, 1, 1])),
+            new THREE.Vector3(1, 1, 1),
           );
           map.set(entry.filename, m);
         }
@@ -639,6 +639,7 @@ export default function App() {
           calibrationVersion={calibrationVersion}
           onCalibrationChange={handleCalibrationChange}
           gizmoMode={gizmoMode}
+          stlScaleRef={stlScaleRef}
         />
         {calibrationMode && fidelityMode === 'high' && (
           <CalibrationPanel
@@ -651,6 +652,7 @@ export default function App() {
             onUpload={handleUploadCalibration}
             gizmoMode={gizmoMode}
             onGizmoModeChange={setGizmoMode}
+            stlScaleRef={stlScaleRef}
             version={calibrationVersion}
           />
         )}

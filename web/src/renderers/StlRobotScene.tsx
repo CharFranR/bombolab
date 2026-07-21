@@ -54,6 +54,7 @@ export default function StlRobotScene({
   calibrationVersion,
   onCalibrationChange,
   gizmoMode,
+  stlScaleRef,
 }: RobotRendererProps) {
   const geometries = useLoader(STLLoader, STL_URLS);
 
@@ -76,6 +77,8 @@ export default function StlRobotScene({
   targetRef.current = calibrationTarget;
   const modeRef = useRef(calibrationMode);
   modeRef.current = calibrationMode;
+  const scaleRef = useRef(stlScaleRef);
+  scaleRef.current = stlScaleRef;
 
   // Find target entry for TransformControls
   const targetEntry = useMemo(() => {
@@ -157,8 +160,10 @@ export default function StlRobotScene({
       cal.decompose(calPos, calQuat, new THREE.Vector3());
 
       if (isTarget) {
-        // Target: FK × calibration as position+quaternion for TransformControls
+        // Target: FK × scale × calibration as position+quaternion for TransformControls
         const fkMatrix = new THREE.Matrix4().compose(tempPos.clone(), tempQuat.clone(), new THREE.Vector3(1, 1, 1));
+        const s = scaleRef.current?.current ?? 1;
+        fkMatrix.multiply(new THREE.Matrix4().makeScale(s, s, s));
         fkMatrix.multiply(cal);
         const finalPos = new THREE.Vector3();
         const finalQuat = new THREE.Quaternion();
@@ -171,6 +176,8 @@ export default function StlRobotScene({
       } else {
         // Non-target: matrix pipeline
         world.compose(tempPos, tempQuat, tempScale);
+        const s = scaleRef.current?.current ?? 1;
+        world.multiply(new THREE.Matrix4().makeScale(s, s, s));
         world.multiply(cal);
         // Animate gripper jaws
         if (entry.isGripper) {

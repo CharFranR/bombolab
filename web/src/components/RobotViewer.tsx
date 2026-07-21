@@ -35,7 +35,7 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode }: {
+function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
@@ -52,6 +52,7 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
   calibrationVersion?: number;
   onCalibrationChange?: () => void;
   gizmoMode?: 'translate' | 'rotate';
+  stlScaleRef?: React.MutableRefObject<number>;
 }) {
   // 1. Forward kinematics → raw Mat4 frames
   const { frames: rawFrames } = useMemo(
@@ -95,6 +96,7 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
     calibrationVersion,
     onCalibrationChange,
     gizmoMode,
+    stlScaleRef,
   };
 
   // 4. Branch on fidelity mode (React-conditional → unmount/remount)
@@ -113,7 +115,7 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode }: {
+export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   gripper?: number;
   workspacePoints?: [number, number, number][];
@@ -128,6 +130,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
   calibrationVersion?: number;
   onCalibrationChange?: () => void;
   gizmoMode?: 'translate' | 'rotate';
+  stlScaleRef?: React.MutableRefObject<number>;
 }) {
   const [ikDragging, setIkDragging] = useState(false);
   return (
@@ -162,6 +165,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
           calibrationVersion={calibrationVersion}
           onCalibrationChange={onCalibrationChange}
           gizmoMode={gizmoMode}
+          stlScaleRef={stlScaleRef}
         />
 
         <OrbitControls
