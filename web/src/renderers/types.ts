@@ -20,6 +20,19 @@ export interface DebugToggles {
   showCalibrationAxes: boolean;
 }
 
+// ─── Calibration config shape ────────────────────────────────────────────────
+
+export interface CalibrationEntry {
+  filename: string;
+  translation: [number, number, number];
+  rotation: [number, number, number, number];
+}
+
+export interface CalibrationConfig {
+  version: number;
+  entries: CalibrationEntry[];
+}
+
 // ─── Props every robot renderer receives ────────────────────────────────────
 
 export interface RobotRendererProps {
@@ -31,6 +44,10 @@ export interface RobotRendererProps {
   onDragStart?: () => void;
   onDragEnd?: () => void;
   debugToggles?: DebugToggles;
+  calibrationConfigRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
+  calibrationOverridesRef?: React.MutableRefObject<Map<string, THREE.Matrix4>>;
+  calibrationTarget?: string | null;
+  calibrationMode?: boolean;
 }
 
 // ─── Loaded STL mesh + FK binding ───────────────────────────────────────────
