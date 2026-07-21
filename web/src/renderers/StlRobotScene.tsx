@@ -24,15 +24,17 @@ function buildEntries(geometries: THREE.BufferGeometry[]): MeshEntry[] {
     metalness: 0.3,
   });
   return geometries.map((geo, i) => {
+    const meta = STL_META[i];
+    console.log(`[StlRobotScene] Loaded ${meta.file}`);
     const mesh = new THREE.Mesh(geo, material);
     mesh.matrixAutoUpdate = false;
     mesh.matrix.identity();
     return {
       mesh,
-      parentJoint: STL_META[i].parentJoint,
+      parentJoint: meta.parentJoint,
       calibrationTransform: new THREE.Matrix4().identity(),
-      isGripper: STL_META[i].jawDirection !== 0,
-      jawDirection: STL_META[i].jawDirection,
+      isGripper: meta.jawDirection !== 0,
+      jawDirection: meta.jawDirection,
     };
   });
 }
@@ -52,11 +54,14 @@ export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
   framesRef.current = frames;
   const gripperRef = useRef(gripper);
   gripperRef.current = gripper;
+  const firstFrameRef = useRef(true);
 
   // ─── Per-frame mesh positioning ─────────────────────────────────────────
   useFrame(() => {
     const curFrames = framesRef.current;
     const curGripper = gripperRef.current;
+    const isFirst = firstFrameRef.current;
+    if (isFirst) firstFrameRef.current = false;
 
     // Reusable temp objects (no allocation per mesh)
     const tempPos = new THREE.Vector3();
@@ -65,13 +70,19 @@ export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
     const world = new THREE.Matrix4();
     const jawM = new THREE.Matrix4();
 
-    for (const entry of entriesRef.current) {
+    entriesRef.current.forEach((entry, i) => {
       // Determine parent frame index (-1 → tool-tip = last frame)
       const jointIdx = entry.parentJoint >= 0
         ? entry.parentJoint
         : curFrames.length - 1;
       const pose = curFrames[jointIdx];
-      if (!pose) continue;
+      if (!pose) return;
+
+      // Diagnostic: log first-frame transform application
+      if (isFirst) {
+        const label = entry.parentJoint >= 0 ? `Joint ${entry.parentJoint}` : 'Tool-tip';
+        console.log(`[StlRobotScene] Applying transform: ${label} -> ${STL_META[i].file}`);
+      }
 
       // Build world transform from FK frame pose
       tempPos.set(...pose.pos);
@@ -92,7 +103,7 @@ export default function StlRobotScene({ frames, gripper }: RobotRendererProps) {
       entry.mesh.matrix.copy(world);
       entry.mesh.matrixAutoUpdate = false;
       entry.mesh.matrixWorldNeedsUpdate = true;
-    }
+    });
   });
 
   return (
