@@ -175,6 +175,11 @@ export default function StlRobotScene({
       if (isTarget) {
         // Target: FK × scale × calibration as position+quaternion for TransformControls
         const fkMatrix = new THREE.Matrix4().compose(tempPos.clone(), tempQuat.clone(), new THREE.Vector3(1, 1, 1));
+        // Jaw animation in FK local space (before scale+calibration)
+        if (entry.isGripper) {
+          const jawOpen = (1 - curGripper / 100) * 10;
+          fkMatrix.multiply(new THREE.Matrix4().makeTranslation(0, entry.jawDirection * jawOpen, 0));
+        }
         const s = scaleRef.current?.current ?? 1;
         fkMatrix.multiply(new THREE.Matrix4().makeScale(s, s, s));
         fkMatrix.multiply(cal);
@@ -189,15 +194,15 @@ export default function StlRobotScene({
       } else {
         // Non-target: matrix pipeline
         world.compose(tempPos, tempQuat, tempScale);
-        const s = scaleRef.current?.current ?? 1;
-        world.multiply(new THREE.Matrix4().makeScale(s, s, s));
-        world.multiply(cal);
-        // Animate gripper jaws
+        // Animate gripper jaws BEFORE calibration (FK local space = same as SimpleRobotScene)
         if (entry.isGripper) {
           const jawOpen = (1 - curGripper / 100) * 10;
           jawM.makeTranslation(0, entry.jawDirection * jawOpen, 0);
           world.multiply(jawM);
         }
+        const s = scaleRef.current?.current ?? 1;
+        world.multiply(new THREE.Matrix4().makeScale(s, s, s));
+        world.multiply(cal);
         entry.mesh.matrix.copy(world);
         entry.mesh.matrixAutoUpdate = false;
         entry.mesh.matrixWorldNeedsUpdate = true;
