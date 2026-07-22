@@ -104,7 +104,6 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
     return (
       <Suspense fallback={null}>
         <StlErrorBoundary>
-          {calibrationMode && <SimpleRobotScene {...commonProps} />}
           <StlRobotScene {...commonProps} />
         </StlErrorBoundary>
       </Suspense>
