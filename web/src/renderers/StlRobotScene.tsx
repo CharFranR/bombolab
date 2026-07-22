@@ -46,6 +46,7 @@ function buildEntries(geometries: THREE.BufferGeometry[]): MeshEntry[] {
 export default function StlRobotScene({
   frames,
   gripper,
+  workspacePoints,
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -232,6 +233,20 @@ export default function StlRobotScene({
         calibrationRef={(calibrationConfigRef ?? { current: new Map() }) as React.MutableRefObject<Map<string, THREE.Matrix4>>}
         toggles={toggles}
       />
+      {/* Workspace point cloud */}
+      {workspacePoints && workspacePoints.length > 0 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={workspacePoints.length}
+              array={new Float32Array(workspacePoints.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
+        </points>
+      )}
     </group>
   );
 }
