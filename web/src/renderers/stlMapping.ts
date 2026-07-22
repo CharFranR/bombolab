@@ -43,6 +43,6 @@ export const STL_META: StlMeta[] = [
   { file: 'Base de la garra.stl',  parentJoint: -1, jawDirection:  0 },
   { file: 'Engranaje1.stl',        parentJoint: -1, jawDirection:  0 },
   { file: 'Engranaje2.stl',        parentJoint: -1, jawDirection:  0 },
-  { file: 'Pinza1.stl',            parentJoint: -1, jawDirection: -1 },
-  { file: 'Pinza2.stl',            parentJoint: -1, jawDirection:  1 },
+  { file: 'Pinza1.stl',            parentJoint: -1, jawDirection:  1 },
+  { file: 'Pinza2.stl',            parentJoint: -1, jawDirection: -1 },
 ];
