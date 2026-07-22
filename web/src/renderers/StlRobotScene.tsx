@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES, STL_META } from './stlMapping';
 import DebugAxes from './debugAxes';
+import IkTarget from '../components/IkTarget';
 
 // ─── STL paths ──────────────────────────────────────────────────────────────
 
@@ -56,6 +57,10 @@ export default function StlRobotScene({
   onCalibrationChange,
   gizmoMode,
   stlScaleRef,
+  ikTarget,
+  onIkTargetChange,
+  onDragStart,
+  onDragEnd,
 }: RobotRendererProps) {
   const geometries = useLoader(STLLoader, STL_URLS);
 
@@ -246,6 +251,10 @@ export default function StlRobotScene({
           </bufferGeometry>
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
+      )}
+      {/* IK target */}
+      {ikTarget && onIkTargetChange && (
+        <IkTarget position={ikTarget} onChange={onIkTargetChange} onDragStart={onDragStart} onDragEnd={onDragEnd} />
       )}
     </group>
   );
