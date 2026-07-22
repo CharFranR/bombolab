@@ -9,22 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- README.md with project documentation
-- CONTRIBUTING.md with contribution guidelines
-- CHANGELOG.md for tracking changes
-- .editorconfig for consistent formatting
+- **Visual fidelity modes**: Low/High fidelity toggle with STL 3D model rendering
+- `RobotRenderer` abstraction with `SimpleRobotScene` (primitives) and `StlRobotScene` (STL meshes)
+- Real-time calibration panel with step buttons, numeric inputs, save/upload/reload
+- TransformControls gizmo for interactive STL positioning (translate/rotate)
+- Debug visualization: Joint Frames, STL Origins, Calibration Axes toggles
+- Global `stlScale` slider for uniform STL model scaling
+- Workspace point cloud rendering in high fidelity mode
+- IK target ball in high fidelity mode
+- Error boundary for graceful STL load failure
+- Diagnostic logs for STL loading and transform application
 
 ### Changed
 
-- Translated all code, comments, and documentation to English
-- Restructured project into Cargo workspace (bombolab-core, bombolab-gui)
-- Connected UI layer with domain and kinematics modules
-- Unified data types between UI and domain
+- **DH parameters corrected** to match physical robot measurements:
+  - Base → shoulder: d₁ = 85mm (was 95)
+  - Shoulder → elbow: a₂ = 120mm (was 162)
+  - Elbow → wrist roll: a₃ = 90mm (was 111)
+  - Wrist roll offset: d₄ = 15mm (was 0)
+- **Twist FK formula** now includes `d` parameter (was hardcoded to 0), applied on DH Y axis
+- Gripper jaw animation order: `world × jawM × scale × cal` (FK local space, matches SimpleRobotScene)
+- Removed low-fi skeleton overlay from high fidelity mode
 
 ### Fixed
 
-- Eliminated duplicate JointType definitions between UI and domain
-- Connected forward kinematics computation to UI display
+- STL-to-joint mapping corrected per user-identified physical parts
+- Gripper jaw directions corrected for center-closing behavior
+- `dh_params()` for Twist joints now returns actual `d` value instead of hardcoded 0
 
 ## [0.1.0] - 2026-01-01
 
