@@ -107,7 +107,7 @@ pub fn geometric_jacobian(
 mod tests {
     use super::*;
     use crate::kinematics::dh::{DHParameter, solve};
-    use crate::math::{FRAC_PI_2, Iso3, Mat4};
+    use crate::math::{Iso3, Mat4};
 
     const EPS: f64 = 1e-10;
 
