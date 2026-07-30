@@ -14,6 +14,10 @@ name = "quaternion-solve"
 path = "src/bin/quaternion-solve.rs"
 
 [[bin]]
+name = "dynamics-report"
+path = "src/bin/dynamics-report.rs"
+
+[[bin]]
 name = "serial-test"
 path = "src/bin/serial-test.rs"
 required-features = ["serial"]

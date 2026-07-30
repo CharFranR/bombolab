@@ -6,6 +6,9 @@ use crate::math::{Mat4, MatDyn, Vec3};
 pub enum JointKind {
     Revolute,
     Prismatic,
+    /// Twist joint rotates around the X axis of the previous frame
+    /// (first column of R_{i-1}) rather than Z.
+    Twist,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,8 +39,13 @@ impl std::error::Error for JacobianError {}
 /// Returns a `6 × n` geometric Jacobian.
 /// Top 3 rows = linear velocity, bottom 3 = angular velocity.
 ///
-/// For a revolute joint `i`: `J_i = [z_i × (p_ee − p_i); z_i]`
-/// For a prismatic joint `i`: `J_i = [z_i; 0]`
+/// For a revolute joint `i`:   `J_i = [z_i × (p_ee − p_i); z_i]`
+/// For a prismatic joint `i`:  `J_i = [z_i; 0]`
+/// For a twist joint `i`:      `J_i = [0; x_i]`
+///   where x_i is the first column of the rotation matrix (X axis).
+///   The linear component is zero because the frame origin of a
+///   Twist joint (Iso3::from_parts with constant translation)
+///   does not move when the joint rotates.
 pub fn geometric_jacobian(
     intermediates: &[Mat4],
     joint_kinds: &[JointKind],
@@ -59,24 +67,32 @@ pub fn geometric_jacobian(
 
     for (i, kind) in joint_kinds.iter().enumerate() {
         // Use frame BEFORE the joint (frame i-1) for the geometric Jacobian:
-        //   - Joint i rotates about Z_{i-1}
+        //   - Revolute/Prismatic: joint i rotates about Z_{i-1}
+        //   - Twist: joint i rotates about X_{i-1}
         //   - For i=0, the base frame (identity) is used.
-        let (z_i, p_i) = if i == 0 {
-            (Vec3::z(), Vec3::zeros())
+        let (axis, p_i) = if i == 0 {
+            let ax = match kind {
+                JointKind::Twist => Vec3::x(),
+                _ => Vec3::z(),
+            };
+            (ax, Vec3::zeros())
         } else {
             let prev = &intermediates[i - 1];
-            (
-                prev.fixed_view::<3, 1>(0, 2).into_owned(),
-                prev.fixed_view::<3, 1>(0, 3).into_owned(),
-            )
+            let ax = match kind {
+                JointKind::Twist => prev.fixed_view::<3, 1>(0, 0).into_owned(),
+                _ => prev.fixed_view::<3, 1>(0, 2).into_owned(),
+            };
+            let p = prev.fixed_view::<3, 1>(0, 3).into_owned();
+            (ax, p)
         };
 
         let linear = match kind {
-            JointKind::Revolute => z_i.cross(&(p_ee - p_i)),
-            JointKind::Prismatic => z_i,
+            JointKind::Revolute => axis.cross(&(p_ee - p_i)),
+            JointKind::Prismatic => axis,
+            JointKind::Twist => Vec3::zeros(),
         };
         let angular = match kind {
-            JointKind::Revolute => z_i,
+            JointKind::Revolute | JointKind::Twist => axis,
             JointKind::Prismatic => Vec3::zeros(),
         };
 
@@ -91,7 +107,7 @@ pub fn geometric_jacobian(
 mod tests {
     use super::*;
     use crate::kinematics::dh::{DHParameter, solve};
-    use crate::math::FRAC_PI_2;
+    use crate::math::{FRAC_PI_2, Iso3, Mat4};
 
     const EPS: f64 = 1e-10;
 
@@ -197,63 +213,69 @@ mod tests {
 
     #[test]
     fn fabri_creator_home_pose() {
-        // FABRI Creator DH table (corregida: a₄=35, J2 θ=-π/2, J3 θ=+π/2)
-        // En home (q=0): brazo vertical d₁+a₂=257, horizontal a₁+a₃+a₄=161, Y=0.
-        let table = vec![
-            DHParameter::new(-FRAC_PI_2, 15.0, 95.0, 0.0),
-            DHParameter::new(0.0, 162.0, 0.0, -FRAC_PI_2),
-            DHParameter::new(-FRAC_PI_2, 111.0, 0.0, FRAC_PI_2),
-            DHParameter::new(FRAC_PI_2, 35.0, 0.0, 0.0),
-            DHParameter::new(0.0, 0.0, 0.0, 0.0),
+        // Uses the actual fabri_creator() robot via forward_kinematics(),
+        // with JointKind::Twist for joint 4.
+        use crate::kinematics::forward::forward_kinematics;
+        use crate::robot::fabri_creator::fabri_creator;
+
+        let robot = fabri_creator();
+        let base = Iso3::identity();
+        let (frames, ee) = forward_kinematics(base, &robot);
+
+        let mats: Vec<Mat4> = frames.iter().map(|iso| iso.to_matrix()).collect();
+        let ee_mat = ee.to_matrix();
+        let kinds = [
+            JointKind::Revolute,
+            JointKind::Revolute,
+            JointKind::Revolute,
+            JointKind::Twist,
+            JointKind::Revolute,
         ];
-        let sol = solve(&table);
-        let j = geometric_jacobian(
-            &sol.intermediates,
-            &[JointKind::Revolute; 5],
-            &sol.final_transform,
-        )
-        .unwrap();
+
+        let j = geometric_jacobian(&mats, &kinds, &ee_mat).unwrap();
         assert_eq!(j.nrows(), 6);
         assert_eq!(j.ncols(), 5);
         assert!(j.iter().all(|v| v.is_finite()));
 
-        // Home (q=0): brazo vertical, extendido en X, Y=0
-        let p = sol.translation();
-        assert!((p.x - 161.0).abs() < 1e-10, "home x: {}", p.x);   // a₁+a₃+a₄ = 15+111+35
-        assert!((p.y - 0.0).abs() < 1e-10, "home y: {}", p.y);     // Y=0 (no más offset)
-        assert!((p.z - 257.0).abs() < 1e-10, "home z: {}", p.z);   // d₁+a₂ = 95+162
+        // Home position from forward_kinematics:
+        // p_ee = (140, -15, 205) without base/tool
+        let p_ee = ee_mat.fixed_view::<3, 1>(0, 3);
+        assert!((p_ee[(0, 0)] - 140.0).abs() < 1e-10, "home x: {}", p_ee[(0, 0)]);
+        assert!((p_ee[(1, 0)] - -15.0).abs() < 1e-10, "home y: {}", p_ee[(1, 0)]);
+        assert!((p_ee[(2, 0)] - 205.0).abs() < 1e-10, "home z: {}", p_ee[(2, 0)]);
+
+        // Verify J_ee structure at home
+        // Column 1: z0 × (p_ee − p0), z0
+        approx_eq(j[(0, 0)], 15.0);
+        approx_eq(j[(1, 0)], 140.0);
+        approx_eq(j[(2, 0)], 0.0);
+        approx_eq(j[(5, 0)], 1.0);
+        // Column 4 (Twist): linear=0 (frame origin does not move), angular=x3
+        approx_eq(j[(0, 3)], 0.0);
+        approx_eq(j[(1, 3)], 0.0);
+        approx_eq(j[(2, 3)], 0.0);
+        approx_eq(j[(3, 3)], 1.0);
     }
 
-    /// Finite-difference validation of the geometric Jacobian.
-    ///
-    /// For each column i, perturbs θ_i by ε and computes the numerical Jacobian
-    /// as (FK(q + ε·e_i) - FK(q)) / ε. Compares each element against the
-    /// analytical `geometric_jacobian`. Runs at home pose and several arbitrary
-    /// configurations.
-    ///
-    /// Uses the corrected FABRI Creator DH table (a₄=35).
+    /// Finite-difference validation of the geometric Jacobian using the
+    /// actual fabri_creator() robot via forward_kinematics(). Joint 4 uses
+    /// JointKind::Twist (X-axis rotation).
     #[test]
     fn fabri_creator_jacobian_finite_differences() {
+        use crate::kinematics::forward::forward_kinematics;
+        use crate::robot::fabri_creator::fabri_creator;
 
-        // FABRI Creator: Standard DH (corregida: a₄=35, J2 θ=-π/2, J3 θ=+π/2)
-        // DHParameter::new(alpha, a, d, theta) donde theta = θ_fixed + qᵢ
-        let make_table = |q: &[f64; 5]| -> Vec<DHParameter> {
-            vec![
-                DHParameter::new(-FRAC_PI_2, 15.0, 95.0, 0.0 + q[0]),
-                DHParameter::new(0.0, 162.0, 0.0, -FRAC_PI_2 + q[1]),
-                DHParameter::new(-FRAC_PI_2, 111.0, 0.0, FRAC_PI_2 + q[2]),
-                DHParameter::new(FRAC_PI_2, 35.0, 0.0, 0.0 + q[3]),
-                DHParameter::new(0.0, 0.0, 0.0, 0.0 + q[4]),
-            ]
-        };
+        let kinds = [
+            JointKind::Revolute,
+            JointKind::Revolute,
+            JointKind::Revolute,
+            JointKind::Twist,
+            JointKind::Revolute,
+        ];
 
         let eps = 1e-8;
-        // Forward-difference tolerance: O(ε) truncation + O(δ/ε) rounding.
-        // Link lengths up to 162mm → linear J entries O(100),
-        // so truncation ~ O(100·ε) ≈ 1e-6, tol = 1e-5 is safe.
         let tol = 1e-5;
 
-        // Test configurations: home + 4 arbitrary poses
         let configs: [[f64; 5]; 5] = [
             [0.0, 0.0, 0.0, 0.0, 0.0],
             [0.3, -0.5, 0.7, 0.2, -0.4],
@@ -263,27 +285,31 @@ mod tests {
         ];
 
         for (ci, q) in configs.iter().enumerate() {
-            let table = make_table(q);
-            let sol = solve(&table);
-            let p_ee = sol.translation();
-            let r_ee = sol.rotation();
+            let mut robot = fabri_creator();
+            for (seg, &qi) in robot.segments.iter_mut().zip(q.iter()) {
+                seg.joint.value = qi;
+            }
 
-            let j_ana = geometric_jacobian(
-                &sol.intermediates,
-                &[JointKind::Revolute; 5],
-                &sol.final_transform,
-            )
-            .unwrap();
+            let base = Iso3::identity();
+            let (frames, ee) = forward_kinematics(base, &robot);
+            let mats: Vec<Mat4> = frames.iter().map(|iso| iso.to_matrix()).collect();
+            let ee_mat = ee.to_matrix();
+            let p_ee = ee_mat.fixed_view::<3, 1>(0, 3).into_owned();
+            let r_ee = ee_mat.fixed_view::<3, 3>(0, 0).into_owned();
+
+            let j_ana = geometric_jacobian(&mats, &kinds, &ee_mat).unwrap();
 
             for col in 0..5 {
-                let mut q_pert = *q;
-                q_pert[col] += eps;
-                let tab_pert = make_table(&q_pert);
-                let sol_pert = solve(&tab_pert);
+                let mut robot_pert = fabri_creator();
+                for (k, &qk) in q.iter().enumerate() {
+                    robot_pert.segments[k].joint.value = if k == col { qk + eps } else { qk };
+                }
+                let (_frames_pert, ee_pert) = forward_kinematics(base, &robot_pert);
+                let ee_pert_mat = ee_pert.to_matrix();
+                let p_pert = ee_pert_mat.fixed_view::<3, 1>(0, 3).into_owned();
 
-                // --- Linear velocity: (p_pert - p_ee) / ε ---
-                let dp = (sol_pert.translation() - p_ee) / eps;
-
+                // Linear velocity
+                let dp = (p_pert - p_ee) / eps;
                 for row in 0..3 {
                     let num = dp[row];
                     let ana = j_ana[(row, col)];
@@ -295,16 +321,15 @@ mod tests {
                     );
                 }
 
-                // --- Angular velocity: extract ω from ΔR = R_pert · R_eeᵀ ---
-                // For small ε, ΔR ≈ I + [ω]× · ε, so ω · ε ≈ skew(ΔR)
-                let r_rel = sol_pert.rotation() * r_ee.transpose();
+                // Angular velocity
+                let r_pert = ee_pert_mat.fixed_view::<3, 3>(0, 0).into_owned();
+                let r_rel = r_pert * r_ee.transpose();
                 let wx = (r_rel[(2, 1)] - r_rel[(1, 2)]) / (2.0 * eps);
                 let wy = (r_rel[(0, 2)] - r_rel[(2, 0)]) / (2.0 * eps);
                 let wz = (r_rel[(1, 0)] - r_rel[(0, 1)]) / (2.0 * eps);
-                let omega = Vec3::new(wx, wy, wz);
 
                 for row in 0..3 {
-                    let num = omega[row];
+                    let num = [wx, wy, wz][row];
                     let ana = j_ana[(3 + row, col)];
                     assert!(
                         (num - ana).abs() < tol,
