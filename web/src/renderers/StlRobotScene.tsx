@@ -110,6 +110,16 @@ export default function StlRobotScene({
       new THREE.Quaternion(...pose.quat),
       new THREE.Vector3(1, 1, 1),
     );
+    // Gripper jaws animate in FK local space BEFORE calibration; the
+    // calibration must NOT absorb the jaw offset. Replicate the exact
+    // pipeline the non-target branch uses (FK × jaw × S × cal) so
+    // meshWorld and fkWorld agree on the jaw term.
+    const jawOpen = (1 - gripperRef.current / 100) * 10;
+    if (targetEntry.entry.isGripper && jawOpen !== 0) {
+      fkWorld.multiply(
+        new THREE.Matrix4().makeTranslation(0, targetEntry.entry.jawDirection * jawOpen, 0),
+      );
+    }
 
     // Actual mesh world matrix after TransformControls manipulation
     mesh.updateMatrixWorld();
@@ -125,7 +135,12 @@ export default function StlRobotScene({
     cal.decompose(calPos, calQuat, new THREE.Vector3());
     const calClean = new THREE.Matrix4().compose(calPos, calQuat, new THREE.Vector3(1, 1, 1));
     overridesRef.current?.current.set(calibrationTarget, calClean);
-  }, [targetEntry, calibrationTarget]);
+    // Notify the panel so its numeric inputs re-read the new override.
+    // Without this, gizmo drags write overridesRef but `version` never
+    // bumps → the panel shows stale values and the next step-button click
+    // silently discards the gizmo calibration (lost updates).
+    onCalibrationChange?.();
+  }, [targetEntry, calibrationTarget, onCalibrationChange]);
 
   // ─── Per-frame mesh positioning ─────────────────────────────────────────
   useFrame(() => {
@@ -242,6 +257,7 @@ export default function StlRobotScene({
         stlMeta={STL_META}
         calibrationRef={(calibrationConfigRef ?? { current: new Map() }) as React.MutableRefObject<Map<string, THREE.Matrix4>>}
         toggles={toggles}
+        scaleRef={stlScaleRef}
       />
       {/* Workspace point cloud */}
       {workspacePoints && workspacePoints.length > 0 && (
