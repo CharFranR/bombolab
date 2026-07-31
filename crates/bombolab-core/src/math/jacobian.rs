@@ -41,11 +41,16 @@ impl std::error::Error for JacobianError {}
 ///
 /// For a revolute joint `i`:   `J_i = [z_i × (p_ee − p_i); z_i]`
 /// For a prismatic joint `i`:  `J_i = [z_i; 0]`
-/// For a twist joint `i`:      `J_i = [0; x_i]`
-///   where x_i is the first column of the rotation matrix (X axis).
-///   The linear component is zero because the frame origin of a
-///   Twist joint (Iso3::from_parts with constant translation)
-///   does not move when the joint rotates.
+/// For a twist joint `i`:      `J_i = [x_i × (p_ee − o_i); x_i]`
+///   where x_i is the first column of the rotation matrix (X axis) and
+///   o_i is the origin of the frame AFTER the joint.
+///   The twist transform is `Trans(a, d, 0) · RotX(alpha + q)`: the
+///   translation is applied BEFORE the rotation and is constant in `q`,
+///   so the frame origin `o_i` stays fixed while the body rotates around
+///   the axis through it. The instantaneous axis therefore passes through
+///   `o_i` (the displaced origin), NOT through `o_{i-1}`. A zero linear
+///   component only occurs when `p_ee − o_i` is parallel to `x_i` (as in
+///   the FABRI, where the tool is aligned with the twist axis).
 pub fn geometric_jacobian(
     intermediates: &[Mat4],
     joint_kinds: &[JointKind],
@@ -89,7 +94,16 @@ pub fn geometric_jacobian(
         let linear = match kind {
             JointKind::Revolute => axis.cross(&(p_ee - p_i)),
             JointKind::Prismatic => axis,
-            JointKind::Twist => Vec3::zeros(),
+            JointKind::Twist => {
+                // The twist transform is Trans(a, d, 0) · RotX(alpha + q):
+                // translation precedes rotation and is constant in q, so the
+                // frame origin of joint i (o_i, the origin of intermediates[i],
+                // the frame AFTER the joint) is a fixed point of the motion and
+                // the instantaneous axis passes through it. Pivot is therefore
+                // o_i, not o_{i-1}; the axis direction is X_{i-1}.
+                let p_twist = intermediates[i].fixed_view::<3, 1>(0, 3).into_owned();
+                axis.cross(&(p_ee - p_twist))
+            }
         };
         let angular = match kind {
             JointKind::Revolute | JointKind::Twist => axis,
@@ -350,6 +364,111 @@ mod tests {
                         (num - ana).abs()
                     );
                 }
+            }
+        }
+    }
+
+    /// Synthetic chain: Twist → revolute with non-axial offset → TCP.
+    ///
+    /// The twist rotates about X of the base frame, but the TCP sits off the
+    /// twist axis (offset along Z of the next frame), so the twist linear
+    /// column must NOT be zero. Validated against central finite differences.
+    #[test]
+    fn twist_with_non_axial_offset_finite_differences() {
+        use crate::kinematics::forward::forward_kinematics;
+        use crate::robot::{DHParams, Joint, JointType, Robot, Segment};
+
+        // Segment 1: Twist, identity DH (a=0, d=0, alpha=0) → rotates about
+        // the base X axis, frame origin stays at base origin.
+        // Segment 2: Revolute with d=50 → frame 2 origin is 50mm along Z of
+        // frame 1, which is NOT on the twist axis.
+        let make_robot = |q1: f64, q2: f64| {
+            Robot::new(vec![
+                Segment::new(
+                    Joint::new(JointType::Twist, q1, 2.0, -2.0),
+                    DHParams::new(0.0, 0.0, 0.0, 0.0),
+                ),
+                Segment::new(
+                    Joint::new(JointType::Revolute, q2, 2.0, -2.0),
+                    DHParams::new(0.0, 50.0, 0.0, 0.0),
+                ),
+            ])
+        };
+        let robot = make_robot(0.3, -0.5);
+
+        let base = Iso3::identity();
+        let (frames, ee) = forward_kinematics(base, &robot);
+        let mats: Vec<Mat4> = frames.iter().map(|iso| iso.to_matrix()).collect();
+        let ee_mat = ee.to_matrix();
+        let kinds = [JointKind::Twist, JointKind::Revolute];
+
+        let j_ana = geometric_jacobian(&mats, &kinds, &ee_mat).unwrap();
+
+        // The twist linear column must be non-zero: the TCP is off-axis.
+        let twist_lin = j_ana.fixed_view::<3, 1>(0, 0).into_owned();
+        assert!(
+            twist_lin.norm() > 1.0,
+            "twist linear column must be non-zero for off-axis TCP, got {twist_lin:?}"
+        );
+
+        // Central finite differences on both joints.
+        let eps = 1e-8;
+        let tol = 1e-5;
+        let p_ee = ee_mat.fixed_view::<3, 1>(0, 3).into_owned();
+        let r_ee = ee_mat.fixed_view::<3, 3>(0, 0).into_owned();
+
+        let mut q = [0.3, -0.5];
+        for col in 0..2 {
+            q[col] += eps;
+            let robot_pert = make_robot(q[0], q[1]);
+            let (_fp, ee_p) = forward_kinematics(base, &robot_pert);
+            let ee_p_mat = ee_p.to_matrix();
+            let p_plus = ee_p_mat.fixed_view::<3, 1>(0, 3).into_owned();
+            let r_plus = ee_p_mat.fixed_view::<3, 3>(0, 0).into_owned();
+
+            q[col] -= 2.0 * eps;
+            let robot_pert = make_robot(q[0], q[1]);
+            let (_fm, ee_m) = forward_kinematics(base, &robot_pert);
+            let ee_m_mat = ee_m.to_matrix();
+            let p_minus = ee_m_mat.fixed_view::<3, 1>(0, 3).into_owned();
+            let r_minus = ee_m_mat.fixed_view::<3, 3>(0, 0).into_owned();
+            q[col] += eps;
+
+            // Linear part
+            let dp = (p_plus - p_minus) / (2.0 * eps);
+            for row in 0..3 {
+                let num = dp[row];
+                let ana = j_ana[(row, col)];
+                assert!(
+                    (num - ana).abs() < tol,
+                    "col {col}, linear row {row}: numerical = {num:.6e}, \
+                     analytical = {ana:.6e}",
+                );
+            }
+
+            // Angular part
+            let r_rel_p = r_plus * r_ee.transpose();
+            let wx_p = (r_rel_p[(2, 1)] - r_rel_p[(1, 2)]) / 2.0;
+            let wy_p = (r_rel_p[(0, 2)] - r_rel_p[(2, 0)]) / 2.0;
+            let wz_p = (r_rel_p[(1, 0)] - r_rel_p[(0, 1)]) / 2.0;
+            let r_rel_m = r_minus * r_ee.transpose();
+            let wx_m = (r_rel_m[(2, 1)] - r_rel_m[(1, 2)]) / 2.0;
+            let wy_m = (r_rel_m[(0, 2)] - r_rel_m[(2, 0)]) / 2.0;
+            let wz_m = (r_rel_m[(1, 0)] - r_rel_m[(0, 1)]) / 2.0;
+
+            let domega = [
+                (wx_p - wx_m) / (2.0 * eps),
+                (wy_p - wy_m) / (2.0 * eps),
+                (wz_p - wz_m) / (2.0 * eps),
+            ];
+            for row in 0..3 {
+                let num = domega[row];
+                let ana = j_ana[(3 + row, col)];
+                assert!(
+                    (num - ana).abs() < tol,
+                    "col {col}, angular row {row}: numerical = {num:.6e}, \
+                     analytical = {ana:.6e}",
+                );
             }
         }
     }

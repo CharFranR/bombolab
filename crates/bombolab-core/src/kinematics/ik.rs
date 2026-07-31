@@ -159,32 +159,8 @@ impl IkSolver {
                 return Ok(q);
             }
 
-            // 3. Jacobiana lineal 3×n
-            //    Joint i rota sobre el eje de su tipo:
-            //    - Revolute / Prismatic: eje Z_{i-1}
-            //    - Twist:               eje X_{i-1}
-            //    J1 usa el eje base (Z₀ o X₀), J2 usa frames[0], etc.
-            let mut j = SMatrix::<f64, 3, 5>::zeros();
-            let base_z = Vec3::z();
-            let base_x = Vec3::x();
-            let base_p = base.translation.vector;
-            for i in 0..n {
-                let (axis_i, p_i) = if i == 0 {
-                    let ax = match robot_q.segments[i].joint.joint_type {
-                        JointType::Twist => base_x,
-                        _ => base_z,
-                    };
-                    (ax, base_p)
-                } else {
-                    let prev = &frames[i - 1];
-                    let ax = match robot_q.segments[i].joint.joint_type {
-                        JointType::Twist => prev * Vec3::x(),
-                        _ => prev * Vec3::z(),
-                    };
-                    (ax, prev.translation.vector)
-                };
-                j.column_mut(i).copy_from(&axis_i.cross(&(p_ee - p_i)));
-            }
+            // 3. Jacobiana lineal 3×n (función extraída para testing FD)
+            let j = position_jacobian(&robot_q, &frames, &p_ee, base, n);
 
             // 4. DLS: Δq = J^T · (J·J^T + λ²·I)⁻¹ · error
             let jjt = j * j.transpose();
@@ -219,6 +195,67 @@ impl IkSolver {
         let final_err = position_error(&robot_q, target, base, tool);
         Err(IkError::MaxIterationsReached { error: final_err })
     }
+}
+
+/// Position Jacobian (3×n) of the tool tip for the DLS position solver.
+///
+/// Column `i` is the linear velocity of `p_ee` produced by joint `i`:
+///
+/// - **Revolute / Prismatic**: joint `i` rotates about `Z_{i-1}` (the Z axis
+///   of the frame BEFORE the joint). For `i=0` the base frame is used.
+///   Pivot: `o_{i-1}` — the classical `z_{i-1} × (p_ee − o_{i-1})`.
+/// - **Twist**: joint `i` rotates about `X_{i-1}` (the X axis of the frame
+///   BEFORE the joint), but the twist transform is
+///   `T = Trans(a, d, 0) · RotX(alpha + q)`: the translation is applied
+///   FIRST and is constant in `q`, so the frame origin `o_i` stays fixed
+///   while the body rotates around the axis through it.
+///   Pivot: `o_i` (the origin of the frame AFTER the joint, `frames[i]`),
+///   giving `x_{i-1} × (p_ee − o_i)`.
+///
+/// Using `o_{i-1}` for a Twist would place the rotation axis through the
+/// previous frame origin, which is wrong: the instantaneous axis passes
+/// through the displaced origin `o_i = (a, d, 0)` in frame `i-1`.
+fn position_jacobian(
+    robot_q: &Robot,
+    frames: &[Iso3],
+    p_ee: &Vec3,
+    base: &Iso3,
+    n: usize,
+) -> SMatrix<f64, 3, 5> {
+    let mut j = SMatrix::<f64, 3, 5>::zeros();
+    let base_z = Vec3::z();
+    let base_x = Vec3::x();
+    let base_p = base.translation.vector;
+    for i in 0..n {
+        let (axis_i, p_i) = if i == 0 {
+            let ax = match robot_q.segments[i].joint.joint_type {
+                JointType::Twist => base_x,
+                _ => base_z,
+            };
+            // Twist en la base: el eje X₀ pasa por el origen del frame 1
+            // (frames[0]) porque la traslación (a, d, 0) precede a la rotación.
+            let p = match robot_q.segments[i].joint.joint_type {
+                JointType::Twist => frames[i].translation.vector,
+                _ => base_p,
+            };
+            (ax, p)
+        } else {
+            let prev = &frames[i - 1];
+            let ax = match robot_q.segments[i].joint.joint_type {
+                JointType::Twist => prev * Vec3::x(),
+                _ => prev * Vec3::z(),
+            };
+            // Twist: pivot = o_i (frames[i], el frame DESPUÉS del joint),
+            // NO o_{i-1}: la rotación ocurre alrededor del origen desplazado.
+            let p = match robot_q.segments[i].joint.joint_type {
+                JointType::Twist => frames[i].translation.vector,
+                _ => prev.translation.vector,
+            };
+            (ax, p)
+        };
+        j.column_mut(i).copy_from(&axis_i.cross(&(p_ee - p_i)));
+    }
+    j
 }
 
 // ─── Default ───────────────────────────────────────────────────────────────
@@ -585,6 +622,76 @@ mod tests {
                 got: 7
             })
         ));
+    }
+
+    /// Finite-difference validation of the position Jacobian used by the
+    /// DLS solver, on the real FABRI robot (with base and tool).
+    ///
+    /// Perturbs each joint `i` by ±ε and compares `(FK(q+ε) − FK(q−ε)) / 2ε`
+    /// against the analytical column. This catches pivot errors (Twist must
+    /// pivot about `o_i`, not `o_{i-1}` — the FABRI twist column must be ~0).
+    #[test]
+    fn position_jacobian_finite_differences_fabri() {
+        let (_, robot, base, tool) = make_test();
+        use crate::kinematics::forward::forward_kinematics;
+
+        let eps = 1e-8;
+        let tol = 1e-4; // mm per rad
+
+        // Configuraciones variadas, incluyendo home y el twist activo.
+        let configs: [[f64; 5]; 4] = [
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.3, -0.5, 0.7, 0.4, -0.4],
+            [-0.2, 0.4, -0.3, 0.5, 0.1],
+            [0.0, 0.8, -0.6, 0.2, -0.2],
+        ];
+
+        for q in configs.iter() {
+            let robot_q = build_robot(&robot, q);
+            let (frames, _) = forward_kinematics(base, &robot_q);
+            let tool_pose = frames.last().unwrap() * tool;
+            let p_ee = tool_pose.translation.vector;
+            let j_ana = position_jacobian(&robot_q, &frames, &p_ee, &base, 5);
+
+            for col in 0..5 {
+                let mut q_plus = *q;
+                let mut q_minus = *q;
+                q_plus[col] += eps;
+                q_minus[col] -= eps;
+
+                let robot_plus = build_robot(&robot, &q_plus);
+                let (frames_plus, _) = forward_kinematics(base, &robot_plus);
+                let p_plus = (frames_plus.last().unwrap() * tool).translation.vector;
+
+                let robot_minus = build_robot(&robot, &q_minus);
+                let (frames_minus, _) = forward_kinematics(base, &robot_minus);
+                let p_minus = (frames_minus.last().unwrap() * tool).translation.vector;
+
+                let dp = (p_plus - p_minus) / (2.0 * eps);
+
+                for row in 0..3 {
+                    let num = dp[row];
+                    let ana = j_ana[(row, col)];
+                    assert!(
+                        (num - ana).abs() < tol,
+                        "config {q:?}, col {col}, row {row}: \
+                         numerical = {num:.6e}, analytical = {ana:.6e}, diff = {}",
+                        (num - ana).abs()
+                    );
+                }
+            }
+
+            // En home (q = [0;5]) el tool (75 mm ∥ x₃) queda sobre el eje del
+            // twist, así que la columna lineal del twist debe ser ~0. Un pivot
+            // incorrecto (o_{i-1}) produciría aquí (0, 0, −15).
+            if *q == [0.0; 5] {
+                let twist_col = j_ana.fixed_view::<3, 1>(0, 3).into_owned();
+                assert!(
+                    twist_col.norm() < 1e-6,
+                    "FABRI twist linear column at home should be ~0, got {twist_col:?}"
+                );
+            }
+        }
     }
 
     #[test]
