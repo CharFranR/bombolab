@@ -240,9 +240,21 @@ mod tests {
         // Home position from forward_kinematics:
         // p_ee = (140, -15, 205) without base/tool
         let p_ee = ee_mat.fixed_view::<3, 1>(0, 3);
-        assert!((p_ee[(0, 0)] - 140.0).abs() < 1e-10, "home x: {}", p_ee[(0, 0)]);
-        assert!((p_ee[(1, 0)] - -15.0).abs() < 1e-10, "home y: {}", p_ee[(1, 0)]);
-        assert!((p_ee[(2, 0)] - 205.0).abs() < 1e-10, "home z: {}", p_ee[(2, 0)]);
+        assert!(
+            (p_ee[(0, 0)] - 140.0).abs() < 1e-10,
+            "home x: {}",
+            p_ee[(0, 0)]
+        );
+        assert!(
+            (p_ee[(1, 0)] - -15.0).abs() < 1e-10,
+            "home y: {}",
+            p_ee[(1, 0)]
+        );
+        assert!(
+            (p_ee[(2, 0)] - 205.0).abs() < 1e-10,
+            "home z: {}",
+            p_ee[(2, 0)]
+        );
 
         // Verify J_ee structure at home
         // Column 1: z0 × (p_ee − p0), z0

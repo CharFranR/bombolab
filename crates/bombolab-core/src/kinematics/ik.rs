@@ -12,9 +12,14 @@ use super::forward::forward_kinematics;
 #[derive(Debug, Clone)]
 pub enum IkError {
     DegenerateChain,
-    MaxIterationsReached { error: f64 },
+    MaxIterationsReached {
+        error: f64,
+    },
     /// La orientación objetivo es inalcanzable con la muñeca de 2 GDL.
-    UnreachableOrientation { r35_02: f64, tolerance: f64 },
+    UnreachableOrientation {
+        r35_02: f64,
+        tolerance: f64,
+    },
 }
 
 impl fmt::Display for IkError {
@@ -121,7 +126,7 @@ impl IkSolver {
         let n = robot.dof().min(5);
         let mut q = q_init.to_vec();
         let target_v = Vec3::new(target[0], target[1], target[2]);
-            let damping_sq = self.damping * self.damping;
+        let damping_sq = self.damping * self.damping;
 
         for _iter in 0..self.max_iterations {
             let robot_q = build_robot(robot, &q);
@@ -206,9 +211,9 @@ impl Default for IkSolver {
     fn default() -> Self {
         Self {
             max_iterations: 50,
-            tolerance: 1.0,   // 1 mm
+            tolerance: 1.0, // 1 mm
             damping: 0.1,
-            step_size: 0.5,   // ~28°/iteración máx
+            step_size: 0.5, // ~28°/iteración máx
         }
     }
 }
@@ -296,7 +301,7 @@ impl OrientationSolver {
         //          └                       ┘
         let c4 = -m[(1, 2)];
         let s4 = -m[(2, 2)];
-        let c5 =  m[(0, 0)];
+        let c5 = m[(0, 0)];
         let s5 = -m[(0, 1)];
 
         let q4 = s4.atan2(c4);
@@ -502,7 +507,11 @@ mod tests {
         let robot_home = build_robot(&robot, &home_q);
         let (frames, _last) = forward_kinematics(base, &robot_home);
         let tool_tip = frames.last().unwrap() * tool;
-        let target = [tool_tip.translation.x, tool_tip.translation.y, tool_tip.translation.z];
+        let target = [
+            tool_tip.translation.x,
+            tool_tip.translation.y,
+            tool_tip.translation.z,
+        ];
         let q_init = vec![0.0; 5];
 
         let result = solver.solve_position(&target, &q_init, &robot, &base, &tool);
@@ -514,7 +523,11 @@ mod tests {
         let (frames_q, _) = forward_kinematics(base, &robot_q);
         let tip_q = frames_q.last().unwrap() * tool;
         let err = (tip_q.translation.vector - tool_tip.translation.vector).norm();
-        assert!(err < 2.0, "Position error at home: {:.3}mm (should be < 2mm)", err);
+        assert!(
+            err < 2.0,
+            "Position error at home: {:.3}mm (should be < 2mm)",
+            err
+        );
     }
 
     #[test]
@@ -531,10 +544,7 @@ mod tests {
         let q = result.unwrap();
         let robot_q = build_robot(&robot, &q);
         let err = position_error(&robot_q, &target, &base, &tool);
-        assert!(
-            err < 10.0,
-            "error debería ser <10mm, got {err:.3}"
-        );
+        assert!(err < 10.0, "error debería ser <10mm, got {err:.3}");
     }
 
     #[test]
@@ -551,10 +561,7 @@ mod tests {
         let q = result.unwrap();
         let robot_q = build_robot(&robot, &q);
         let err = position_error(&robot_q, &target, &base, &tool);
-        assert!(
-            err < 10.0,
-            "error debería ser <10mm, got {err:.3}"
-        );
+        assert!(err < 10.0, "error debería ser <10mm, got {err:.3}");
     }
 
     #[test]
@@ -632,16 +639,8 @@ mod orientation_tests {
         assert!(result.is_ok(), "home debería ser alcanzable");
 
         let [q4, q5] = result.unwrap();
-        assert!(
-            q4.abs() < TOL,
-            "q4 en home debería ser 0, got {:.2e}",
-            q4
-        );
-        assert!(
-            q5.abs() < TOL,
-            "q5 en home debería ser 0, got {:.2e}",
-            q5
-        );
+        assert!(q4.abs() < TOL, "q4 en home debería ser 0, got {:.2e}", q4);
+        assert!(q5.abs() < TOL, "q5 en home debería ser 0, got {:.2e}", q5);
     }
 
     #[test]
@@ -663,7 +662,9 @@ mod orientation_tests {
                 let lo = robot.segments[i].joint.value_min.max(-2.0);
                 let hi = robot.segments[i].joint.value_max.min(2.0);
                 // LCG simple
-                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 let r = (seed as f64) / (u64::MAX as f64);
                 lo + r * (hi - lo)
             });
@@ -677,7 +678,11 @@ mod orientation_tests {
             assert!(
                 result.is_ok(),
                 "q = [{:.4}, {:.4}, {:.4}, {:.4}, {:.4}] debería ser alcanzable",
-                q[0], q[1], q[2], q[3], q[4]
+                q[0],
+                q[1],
+                q[2],
+                q[3],
+                q[4]
             );
 
             let [q4, q5] = result.unwrap();
@@ -694,31 +699,37 @@ mod orientation_tests {
             assert!(
                 q4_err < 1e-12,
                 "error q4 = {:.2e} para original={:.6}, extraído={:.6}",
-                q4_err, q[3], q4
+                q4_err,
+                q[3],
+                q4
             );
             assert!(
                 q5_err < 1e-12,
                 "error q5 = {:.2e} para original={:.6}, extraído={:.6}",
-                q5_err, q[4], q5
+                q5_err,
+                q[4],
+                q5
             );
 
             // Reconstrucción: R_target ≈ R03 · R35(q4, q5)
             let (s4, c4) = q4.sin_cos();
             let (s5, c5) = q5.sin_cos();
             let r35_reconstructed = Rot3::from_matrix_unchecked(nalgebra::Matrix3::new(
-                c5,    -s5,     0.0,
-                -s4*s5, -s4*c5, -c4,
-                c4*s5,  c4*c5,  -s4,
+                c5,
+                -s5,
+                0.0,
+                -s4 * s5,
+                -s4 * c5,
+                -c4,
+                c4 * s5,
+                c4 * c5,
+                -s4,
             ));
             let r_reconstructed = r03 * r35_reconstructed;
             let diff = (r_reconstructed.matrix() - r_target.matrix()).norm();
             max_reconstruction_err = max_reconstruction_err.max(diff);
 
-            assert!(
-                diff < 1e-12,
-                "error reconstrucción = {:.2e}",
-                diff
-            );
+            assert!(diff < 1e-12, "error reconstrucción = {:.2e}", diff);
         }
 
         eprintln!("=== OrientationSolver: random configs ===");
@@ -744,7 +755,9 @@ mod orientation_tests {
             for i in 0..3 {
                 let lo = robot.segments[i].joint.value_min.max(-2.0);
                 let hi = robot.segments[i].joint.value_max.min(2.0);
-                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 let r = (seed as f64) / (u64::MAX as f64);
                 q[i] = lo + r * (hi - lo);
             }
@@ -756,10 +769,7 @@ mod orientation_tests {
             // Crear una R_target que tenga una rotación pura sobre Y en R35,
             // violando la condición estructural R35[0,2] = 0.
             // R35_perturbed = Rot_y(0.2) → R35[0,2] = sin(0.2) ≈ 0.2 > ε
-            let r_y = Rot3::from_axis_angle(
-                &nalgebra::Unit::new_normalize(Vec3::y()),
-                0.2,
-            );
+            let r_y = Rot3::from_axis_angle(&nalgebra::Unit::new_normalize(Vec3::y()), 0.2);
             // R_target = R03 · R35_perturbed
             let r_target_perturbed = r03 * r_y;
 
@@ -770,7 +780,12 @@ mod orientation_tests {
             );
             match result {
                 Err(OrientationError::UnreachableOrientation { r35_02, tolerance }) => {
-                    assert!(r35_02 > tolerance, "r35_02={:.2e} debería exceder tol={:.2e}", r35_02, tolerance);
+                    assert!(
+                        r35_02 > tolerance,
+                        "r35_02={:.2e} debería exceder tol={:.2e}",
+                        r35_02,
+                        tolerance
+                    );
                 }
                 _ => unreachable!(),
             }
@@ -794,7 +809,9 @@ mod orientation_tests {
             for i in 0..3 {
                 let lo = robot.segments[i].joint.value_min.max(-2.0);
                 let hi = robot.segments[i].joint.value_max.min(2.0);
-                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 let r = (seed as f64) / (u64::MAX as f64);
                 q_base[i] = lo + r * (hi - lo);
             }
@@ -866,12 +883,7 @@ mod full_ik_tests {
     }
 
     /// Computa error de orientación: norma Frobenius de R_target - R_actual.
-    fn orientation_error_for_q(
-        robot: &Robot,
-        q: &[f64],
-        target_rot: &Rot3,
-        base: &Iso3,
-    ) -> f64 {
+    fn orientation_error_for_q(robot: &Robot, q: &[f64], target_rot: &Rot3, base: &Iso3) -> f64 {
         let robot_q = build_robot(robot, q);
         let (_frames, effector) = forward_kinematics(*base, &robot_q);
         let r_actual = get_rot3(&effector);
@@ -879,7 +891,9 @@ mod full_ik_tests {
     }
 
     fn lcg(seed: &mut u64) -> f64 {
-        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (*seed as f64) / (u64::MAX as f64)
     }
 
@@ -899,7 +913,11 @@ mod full_ik_tests {
         let q_home = [0.0; 5];
         let robot_home = build_robot(&robot, &q_home);
         let (_frames, effector) = forward_kinematics(base, &robot_home);
-        let target_pos = [effector.translation.x, effector.translation.y, effector.translation.z];
+        let target_pos = [
+            effector.translation.x,
+            effector.translation.y,
+            effector.translation.z,
+        ];
         let target_rot = get_rot3(&effector);
 
         let q_init = vec![0.0; 5];
@@ -923,7 +941,11 @@ mod full_ik_tests {
 
         // Verificar orientación final
         let orient_err = orientation_error_for_q(&robot, &q, &target_rot, &base);
-        assert!(orient_err < 1e-1, "error orientación home: {:.2e}", orient_err);
+        assert!(
+            orient_err < 1e-1,
+            "error orientación home: {:.2e}",
+            orient_err
+        );
     }
 
     #[test]
@@ -987,7 +1009,8 @@ mod full_ik_tests {
             assert!(
                 pos_err < 10.0,
                 "error posición = {:.3}mm para q_target={:.3?}",
-                pos_err, q
+                pos_err,
+                q
             );
 
             // Orientación
@@ -996,7 +1019,8 @@ mod full_ik_tests {
             assert!(
                 orient_err < 1e-10,
                 "error orientación = {:.2e} para q_target={:.3?}",
-                orient_err, q
+                orient_err,
+                q
             );
         }
 
@@ -1025,10 +1049,7 @@ mod full_ik_tests {
         let r05_home = get_rot3(&effector);
 
         // Perturbar R_target con Rot_y(0.3) → viola R35[0,2] = 0
-        let r_y = Rot3::from_axis_angle(
-            &nalgebra::Unit::new_normalize(Vec3::y()),
-            0.3,
-        );
+        let r_y = Rot3::from_axis_angle(&nalgebra::Unit::new_normalize(Vec3::y()), 0.3);
         let target_rot = r05_home * r_y;
 
         let q_init = vec![0.0; 5];
@@ -1043,10 +1064,7 @@ mod full_ik_tests {
             &tool,
         );
 
-        assert!(
-            result.is_err(),
-            "debería rechazar orientación inalcanzable"
-        );
+        assert!(result.is_err(), "debería rechazar orientación inalcanzable");
         match result {
             Err(IkError::UnreachableOrientation { r35_02, tolerance }) => {
                 assert!(
@@ -1055,7 +1073,10 @@ mod full_ik_tests {
                     r35_02,
                     tolerance
                 );
-                eprintln!("✓ Orientación inalcanzable detectada: r35_02={:.2e}", r35_02);
+                eprintln!(
+                    "✓ Orientación inalcanzable detectada: r35_02={:.2e}",
+                    r35_02
+                );
             }
             Err(other) => panic!("error inesperado: {other}"),
             Ok(_) => unreachable!(),
@@ -1125,11 +1146,11 @@ mod full_ik_tests {
 
         // Varias posiciones de dibujo sobre una mesa (z ≈ 80mm desde base)
         let test_positions: [[f64; 3]; 5] = [
-            [200.0,   0.0, 80.0],   // centro
-            [150.0,  50.0, 80.0],   // derecha
-            [150.0, -50.0, 80.0],   // izquierda
-            [250.0,   0.0, 100.0],  // más lejos
-            [180.0,  30.0, 70.0],   // bajo
+            [200.0, 0.0, 80.0],   // centro
+            [150.0, 50.0, 80.0],  // derecha
+            [150.0, -50.0, 80.0], // izquierda
+            [250.0, 0.0, 100.0],  // más lejos
+            [180.0, 30.0, 70.0],  // bajo
         ];
 
         for &pos in &test_positions {
@@ -1149,7 +1170,10 @@ mod full_ik_tests {
 
             eprintln!();
             eprintln!("═══════════════════════════════════════════════");
-            eprintln!("Pose de dibujo: ({:.0}, {:.0}, {:.0}) mm", pos[0], pos[1], pos[2]);
+            eprintln!(
+                "Pose de dibujo: ({:.0}, {:.0}, {:.0}) mm",
+                pos[0], pos[1], pos[2]
+            );
 
             match result {
                 Err(e) => {
@@ -1157,8 +1181,10 @@ mod full_ik_tests {
                     continue;
                 }
                 Ok(q) => {
-                    eprintln!("✅ Solución IK: q = [{:.4}, {:.4}, {:.4}, {:.4}, {:.4}]",
-                        q[0], q[1], q[2], q[3], q[4]);
+                    eprintln!(
+                        "✅ Solución IK: q = [{:.4}, {:.4}, {:.4}, {:.4}, {:.4}]",
+                        q[0], q[1], q[2], q[3], q[4]
+                    );
 
                     // R_target
                     let r_target = target.rotation;
@@ -1166,11 +1192,19 @@ mod full_ik_tests {
                     eprintln!("R_target (PoseGenerator):");
                     let rt = r_target.matrix();
                     for row in 0..3 {
-                        eprintln!("  [{:>8.4} {:>8.4} {:>8.4}]",
-                            rt[(row, 0)], rt[(row, 1)], rt[(row, 2)]);
+                        eprintln!(
+                            "  [{:>8.4} {:>8.4} {:>8.4}]",
+                            rt[(row, 0)],
+                            rt[(row, 1)],
+                            rt[(row, 2)]
+                        );
                     }
-                    eprintln!("  → X5 (marcador) en mundo: [{:.4}, {:.4}, {:.4}]",
-                        rt[(0, 0)], rt[(1, 0)], rt[(2, 0)]);
+                    eprintln!(
+                        "  → X5 (marcador) en mundo: [{:.4}, {:.4}, {:.4}]",
+                        rt[(0, 0)],
+                        rt[(1, 0)],
+                        rt[(2, 0)]
+                    );
 
                     // FK con solución IK → R05
                     let robot_q = build_robot(&robot, &q);
@@ -1180,19 +1214,32 @@ mod full_ik_tests {
                     eprintln!();
                     eprintln!("R05 (FK desde solución IK):");
                     for row in 0..3 {
-                        eprintln!("  [{:>8.4} {:>8.4} {:>8.4}]",
-                            r05_m[(row, 0)], r05_m[(row, 1)], r05_m[(row, 2)]);
+                        eprintln!(
+                            "  [{:>8.4} {:>8.4} {:>8.4}]",
+                            r05_m[(row, 0)],
+                            r05_m[(row, 1)],
+                            r05_m[(row, 2)]
+                        );
                     }
-                    eprintln!("  → X5 real en mundo: [{:.4}, {:.4}, {:.4}]",
-                        r05_m[(0, 0)], r05_m[(1, 0)], r05_m[(2, 0)]);
+                    eprintln!(
+                        "  → X5 real en mundo: [{:.4}, {:.4}, {:.4}]",
+                        r05_m[(0, 0)],
+                        r05_m[(1, 0)],
+                        r05_m[(2, 0)]
+                    );
 
                     // TCP position
                     let tool_pose = effector * tool;
                     let tcp = tool_pose.translation.vector;
                     eprintln!();
-                    eprintln!("TCP real (con tool_transform): ({:.2}, {:.2}, {:.2}) mm",
-                        tcp.x, tcp.y, tcp.z);
-                    eprintln!("TCP objetivo: ({:.0}, {:.0}, {:.0}) mm", pos[0], pos[1], pos[2]);
+                    eprintln!(
+                        "TCP real (con tool_transform): ({:.2}, {:.2}, {:.2}) mm",
+                        tcp.x, tcp.y, tcp.z
+                    );
+                    eprintln!(
+                        "TCP objetivo: ({:.0}, {:.0}, {:.0}) mm",
+                        pos[0], pos[1], pos[2]
+                    );
                     let pos_err = (Vec3::new(pos[0], pos[1], pos[2]) - tcp).norm();
                     eprintln!("Error posición: {:.4} mm", pos_err);
 
@@ -1202,13 +1249,21 @@ mod full_ik_tests {
                     eprintln!();
                     eprintln!("R_error = R05^T · R_target (≈ I si IK correcta):");
                     for row in 0..3 {
-                        eprintln!("  [{:>8.4} {:>8.4} {:>8.4}]",
-                            re[(row, 0)], re[(row, 1)], re[(row, 2)]);
+                        eprintln!(
+                            "  [{:>8.4} {:>8.4} {:>8.4}]",
+                            re[(row, 0)],
+                            re[(row, 1)],
+                            re[(row, 2)]
+                        );
                     }
 
                     let angle_err = r_error.angle();
                     let frob_err = (re - nalgebra::Matrix3::<f64>::identity()).norm();
-                    eprintln!("Error angular: {:.2e} rad ({:.6}°)", angle_err, angle_err.to_degrees());
+                    eprintln!(
+                        "Error angular: {:.2e} rad ({:.6}°)",
+                        angle_err,
+                        angle_err.to_degrees()
+                    );
                     eprintln!("Error Frobenius: {:.2e}", frob_err);
 
                     if angle_err < 1e-6 {
@@ -1237,7 +1292,13 @@ mod full_ik_tests {
         // Posición centrada (q₁≈0) — debe funcionar
         let pos = [200.0, 0.0, 80.0];
         let result = solve_drawing_ik(
-            &pos_solver, &orient_solver, &pos, &[0.0; 5], &robot, &base, &tool,
+            &pos_solver,
+            &orient_solver,
+            &pos,
+            &[0.0; 5],
+            &robot,
+            &base,
+            &tool,
         );
         assert!(result.is_ok(), "centrada debe funcionar: {result:?}");
         let q = result.unwrap();
@@ -1252,8 +1313,10 @@ mod full_ik_tests {
         assert!((x5.y).abs() < 1e-6, "X5_y ≈ 0, got {}", x5.y);
         assert!((x5.z + 1.0).abs() < 1e-6, "X5_z ≈ -1, got {}", x5.z);
 
-        eprintln!("✅ solve_drawing_ik centrada: q=[{:.4},{:.4},{:.4},{:.4},{:.4}]",
-            q[0], q[1], q[2], q[3], q[4]);
+        eprintln!(
+            "✅ solve_drawing_ik centrada: q=[{:.4},{:.4},{:.4},{:.4},{:.4}]",
+            q[0], q[1], q[2], q[3], q[4]
+        );
     }
 
     #[test]
@@ -1267,23 +1330,32 @@ mod full_ik_tests {
         // Posiciones laterales — la adaptativa debe funcionar donde
         // la constante fallaba
         let test_positions: [[f64; 3]; 6] = [
-            [200.0,  50.0, 80.0],
+            [200.0, 50.0, 80.0],
             [200.0, 100.0, 80.0],
             [200.0, -50.0, 80.0],
-            [200.0,-100.0, 80.0],
-            [250.0,  50.0, 90.0],
-            [150.0,  80.0, 75.0],
+            [200.0, -100.0, 80.0],
+            [250.0, 50.0, 90.0],
+            [150.0, 80.0, 75.0],
         ];
 
         let all_ok: bool = true;
         for &pos in &test_positions {
             let result = solve_drawing_ik(
-                &pos_solver, &orient_solver, &pos, &[0.0; 5], &robot, &base, &tool,
+                &pos_solver,
+                &orient_solver,
+                &pos,
+                &[0.0; 5],
+                &robot,
+                &base,
+                &tool,
             );
 
             match result {
                 Err(e) => {
-                    eprintln!("⚠️  ({:.0},{:.0},{:.0}) rechazada: {e}", pos[0], pos[1], pos[2]);
+                    eprintln!(
+                        "⚠️  ({:.0},{:.0},{:.0}) rechazada: {e}",
+                        pos[0], pos[1], pos[2]
+                    );
                 }
                 Ok(q) => {
                     let robot_q = build_robot(&robot, &q);
@@ -1295,11 +1367,21 @@ mod full_ik_tests {
                     assert!(
                         x5_down < 1e-6,
                         "({:.0},{:.0},{:.0}): X5_z ≈ -1, got {:.4} (q1={:.1}°)",
-                        pos[0], pos[1], pos[2], x5.z, q[0].to_degrees()
+                        pos[0],
+                        pos[1],
+                        pos[2],
+                        x5.z,
+                        q[0].to_degrees()
                     );
                     eprintln!(
                         "✅ ({:.0},{:.0},{:.0}) q1={:.1}° X5=[{:.3},{:.3},{:.3}]",
-                        pos[0], pos[1], pos[2], q[0].to_degrees(), x5.x, x5.y, x5.z
+                        pos[0],
+                        pos[1],
+                        pos[2],
+                        q[0].to_degrees(),
+                        x5.x,
+                        x5.y,
+                        x5.z
                     );
                 }
             }
@@ -1323,8 +1405,14 @@ mod full_ik_tests {
         // Constante falla
         let const_pose = PoseGenerator::drawing_pose(pos);
         let const_result = solve_full_ik(
-            &pos_solver, &orient_solver, &pos, &const_pose.rotation,
-            &[0.0; 5], &robot, &base, &tool,
+            &pos_solver,
+            &orient_solver,
+            &pos,
+            &const_pose.rotation,
+            &[0.0; 5],
+            &robot,
+            &base,
+            &tool,
         );
         assert!(
             const_result.is_err(),
@@ -1333,7 +1421,13 @@ mod full_ik_tests {
 
         // Adaptativa funciona
         let adapt_result = solve_drawing_ik(
-            &pos_solver, &orient_solver, &pos, &[0.0; 5], &robot, &base, &tool,
+            &pos_solver,
+            &orient_solver,
+            &pos,
+            &[0.0; 5],
+            &robot,
+            &base,
+            &tool,
         );
         assert!(
             adapt_result.is_ok(),

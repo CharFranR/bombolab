@@ -43,7 +43,12 @@ pub fn fabri_creator() -> Robot {
         // θ=0,  d=0,  a=0,  α=0
         // Límites asimétricos: offset 60°, dir=-1 → servo min 10°→ q=55°, servo max 170°→ q=-115°
         Segment::new(
-            Joint::new(JointType::Revolute, 0.0, 55.0_f64.to_radians(), (-115.0_f64).to_radians()),
+            Joint::new(
+                JointType::Revolute,
+                0.0,
+                55.0_f64.to_radians(),
+                (-115.0_f64).to_radians(),
+            ),
             DHParams::new(0.0, 0.0, 0.0, 0.0),
         ),
     ];

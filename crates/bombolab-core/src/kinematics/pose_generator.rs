@@ -50,9 +50,7 @@ impl PoseGenerator {
             position,
             // R_target(π): θ = π → q4=0 para brazos centrados
             rotation: Rot3::from_matrix_unchecked(nalgebra::Matrix3::new(
-                0.0, -1.0,  0.0,
-                0.0,  0.0,  1.0,
-               -1.0,  0.0,  0.0,
+                0.0, -1.0, 0.0, 0.0, 0.0, 1.0, -1.0, 0.0, 0.0,
             )),
         }
     }
@@ -87,9 +85,7 @@ impl PoseGenerator {
         TargetPose {
             position,
             rotation: Rot3::from_matrix_unchecked(nalgebra::Matrix3::new(
-                0.0, -cq1, -sq1,
-                0.0, -sq1,  cq1,
-               -1.0,  0.0,  0.0,
+                0.0, -cq1, -sq1, 0.0, -sq1, cq1, -1.0, 0.0, 0.0,
             )),
         }
     }
@@ -111,9 +107,7 @@ impl PoseGenerator {
         TargetPose {
             position,
             rotation: Rot3::from_matrix_unchecked(nalgebra::Matrix3::new(
-                cq1,  0.0, -sq1,
-                sq1,  0.0,  cq1,
-                0.0, -1.0,  0.0,
+                cq1, 0.0, -sq1, sq1, 0.0, cq1, 0.0, -1.0, 0.0,
             )),
         }
     }
@@ -136,15 +130,18 @@ mod tests {
         let m = pose.rotation.matrix();
         assert!(
             (m[(0, 0)] - 0.0).abs() < EPS,
-            "X5_x debe ser 0, got {}", m[(0, 0)]
+            "X5_x debe ser 0, got {}",
+            m[(0, 0)]
         );
         assert!(
             (m[(1, 0)] - 0.0).abs() < EPS,
-            "X5_y debe ser 0, got {}", m[(1, 0)]
+            "X5_y debe ser 0, got {}",
+            m[(1, 0)]
         );
         assert!(
             (m[(2, 0)] + 1.0).abs() < EPS,
-            "X5_z debe ser -1, got {}", m[(2, 0)]
+            "X5_z debe ser -1, got {}",
+            m[(2, 0)]
         );
 
         // Columna 1 (Y5) debe ser [-1, 0, 0] (θ=π)
@@ -203,8 +200,16 @@ mod tests {
 
         let diff12 = (p1.rotation.matrix() - p2.rotation.matrix()).norm();
         let diff13 = (p1.rotation.matrix() - p3.rotation.matrix()).norm();
-        assert!(diff12 < EPS, "rotación debe ser constante, diff12={:.2e}", diff12);
-        assert!(diff13 < EPS, "rotación debe ser constante, diff13={:.2e}", diff13);
+        assert!(
+            diff12 < EPS,
+            "rotación debe ser constante, diff12={:.2e}",
+            diff12
+        );
+        assert!(
+            diff13 < EPS,
+            "rotación debe ser constante, diff13={:.2e}",
+            diff13
+        );
     }
 
     // ─── Adaptive pose tests ─────────────────────────────────────────────
@@ -234,7 +239,10 @@ mod tests {
                     && (m[(1, 0)] - 0.0).abs() < EPS
                     && (m[(2, 0)] + 1.0).abs() < EPS,
                 "q1={}°: X5 debe ser [0,0,-1], got [{:.2e}, {:.2e}, {:.2e}]",
-                q1_deg, m[(0, 0)], m[(1, 0)], m[(2, 0)]
+                q1_deg,
+                m[(0, 0)],
+                m[(1, 0)],
+                m[(2, 0)]
             );
         }
     }
@@ -258,7 +266,12 @@ mod tests {
             // R^T · R = I
             let rtr = pose.rotation.transpose() * pose.rotation;
             let diff = (rtr.matrix() - nalgebra::Matrix3::identity()).norm();
-            assert!(diff < EPS, "q1={}°: R^T·R debe ser I, error {:.2e}", q1_deg, diff);
+            assert!(
+                diff < EPS,
+                "q1={}°: R^T·R debe ser I, error {:.2e}",
+                q1_deg,
+                diff
+            );
         }
     }
 
@@ -309,9 +322,11 @@ mod tests {
                 let s23 = q23.sin();
 
                 // R03 para estos valores
-                let _r03 = [[c1*s23, 0.0, -c1*s23],
-                           [0.0,   -c1,  0.0],
-                           [-s23,   0.0, -s23]];
+                let _r03 = [
+                    [c1 * s23, 0.0, -c1 * s23],
+                    [0.0, -c1, 0.0],
+                    [-s23, 0.0, -s23],
+                ];
 
                 // Esto es solo una verificación conceptual
                 // R35[0,2] = c₂₃·sin(π) = 0 (analíticamente)

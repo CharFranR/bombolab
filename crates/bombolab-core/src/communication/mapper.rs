@@ -56,7 +56,12 @@ mod tests {
     fn make_robot() -> Robot {
         let seg = || -> Segment {
             Segment::new(
-                Joint::new(JointType::Revolute, 0.0, std::f64::consts::PI, -std::f64::consts::PI),
+                Joint::new(
+                    JointType::Revolute,
+                    0.0,
+                    std::f64::consts::PI,
+                    -std::f64::consts::PI,
+                ),
                 DHParams::new(0.0, 0.0, 0.0, 0.0),
             )
         };

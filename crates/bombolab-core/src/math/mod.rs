@@ -1,12 +1,16 @@
 pub mod constants;
+pub mod dynamics;
 pub mod isometry;
 pub mod jacobian;
 pub mod quaternion;
 
 pub use constants::{DEG_TO_RAD, EPS, FRAC_PI_2, FRAC_PI_4, PI, RAD_TO_DEG, TAU};
+pub use dynamics::{LinkParams, gravity_vector, inertia_matrix};
 pub use isometry::{Movement, make_movement, rotation_and_translation, translation_and_rotation};
 pub use jacobian::{JacobianError, JointKind, geometric_jacobian};
-pub use quaternion::{Quaternion, solve_add, solve_divide, solve_multiply, solve_subtract};
+pub use quaternion::{
+    DualQuaternion, Quaternion, solve_add, solve_divide, solve_multiply, solve_subtract,
+};
 
 // Alias que apuntan a nalgebra
 pub type Vec3 = nalgebra::Vector3<f64>;

@@ -18,6 +18,10 @@ name = "dynamics-report"
 path = "src/bin/dynamics-report.rs"
 
 [[bin]]
+name = "test-case-report"
+path = "src/bin/test-case-report.rs"
+
+[[bin]]
 name = "serial-test"
 path = "src/bin/serial-test.rs"
 required-features = ["serial"]
