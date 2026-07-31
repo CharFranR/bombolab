@@ -153,6 +153,13 @@ export default function SimpleRobotScene({
   // geoFrames = everything except tool tip (base + all joint frames)
   const geoFrames = poses.slice(0, -1);
 
+  // P3 (Stage 3C): Float32Array del workspace memoizado — se reconstruye
+  // solo cuando cambian los puntos, no en cada render de React.
+  const workspaceArray = useMemo(
+    () => (workspacePoints.length > 0 ? new Float32Array(workspacePoints.flat()) : undefined),
+    [workspacePoints],
+  );
+
   return (
     <group>
       {/* Piso */}
@@ -236,14 +243,14 @@ export default function SimpleRobotScene({
         <IkTarget position={ikTarget} onChange={onIkTargetChange} onDragStart={onDragStart} onDragEnd={onDragEnd} />
       )}
 
-      {/* Workspace point cloud */}
+      {/* Workspace point cloud — Float32Array memoizado (P3, Stage 3C) */}
       {workspacePoints.length > 0 && (
         <points>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
               count={workspacePoints.length}
-              array={new Float32Array(workspacePoints.flat())}
+              array={workspaceArray}
               itemSize={3}
             />
           </bufferGeometry>

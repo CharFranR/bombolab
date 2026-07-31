@@ -443,23 +443,3 @@ fn compute_position_error(
     let target_v = nalgebra::Vector3::new(target[0], target[1], target[2]);
     Ok((target_v - p_ee).norm())
 }
-
-/// Get base transform as 4x3 matrix (row-major, 12 floats).
-///
-/// Returns a `Result`; on error a JS exception is thrown (never traps).
-#[wasm_bindgen]
-pub fn base_transform() -> Result<JsValue, JsValue> {
-    let t = make_base_transform();
-    let arr = iso3_to_array(&t);
-    to_js_value(&arr)
-}
-
-/// Get tool transform as 4x3 matrix (row-major, 12 floats).
-///
-/// Returns a `Result`; on error a JS exception is thrown (never traps).
-#[wasm_bindgen]
-pub fn tool_transform() -> Result<JsValue, JsValue> {
-    let t = make_tool_transform();
-    let arr = iso3_to_array(&t);
-    to_js_value(&arr)
-}

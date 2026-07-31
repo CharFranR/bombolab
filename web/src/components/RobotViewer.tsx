@@ -35,8 +35,9 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
+  rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
@@ -54,11 +55,16 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
   gizmoMode?: 'translate' | 'rotate';
   stlScaleRef?: React.MutableRefObject<number>;
 }) {
-  // 1. Forward kinematics → raw Mat4 frames
-  const { frames: rawFrames } = useMemo(
-    () => forwardKinematics(robot.segments, robot.baseTransform),
+  // 1. Forward kinematics → raw Mat4 frames.
+  //    P2 (Stage 3C): App computa el FK una sola vez y lo distribuye;
+  //    este dispatcher solo lo interpreta (convierte a poses) y lo
+  //    transforma para el renderer. Fallback al cálculo interno si el
+  //    prop rawFrames no viene (uso standalone del componente).
+  const computedFrames = useMemo(
+    () => forwardKinematics(robot.segments, robot.baseTransform).frames,
     [robot.segments, robot.baseTransform],
   );
+  const frames: Mat4[] = rawFrames ?? computedFrames;
 
   // 2. Tool-transform matrix (translation along X only)
   const toolTransform: Mat4 = useMemo(() => [
@@ -71,14 +77,14 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
   // 3. Convert all FK frames + tool tip → FramePose[]
   const poses = useMemo(() => {
     // Tool-tip frame: last FK frame composed with tool transform
-    const last = rawFrames[rawFrames.length - 1];
+    const last = frames[frames.length - 1];
     const m = mulMat4(last, toolTransform);
     const toolTip = framePose(m);
     // All FK frames + tool tip appended at end
-    const allPoses = rawFrames.map(framePose);
+    const allPoses = frames.map(framePose);
     allPoses.push(toolTip);
     return allPoses;
-  }, [rawFrames, toolTransform]);
+  }, [frames, toolTransform]);
 
   const commonProps: RobotRendererProps = {
     frames: poses,
@@ -114,8 +120,9 @@ function RobotSceneDispatcher({ robot, gripper = 0, workspacePoints = [], ikTarg
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
+  rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
@@ -149,6 +156,7 @@ export default function RobotViewer({ robot, gripper = 0, workspacePoints = [], 
 
         <RobotSceneDispatcher
           robot={robot}
+          rawFrames={rawFrames}
           gripper={gripper}
           workspacePoints={workspacePoints}
           ikTarget={ikTarget}
