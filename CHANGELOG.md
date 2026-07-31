@@ -37,6 +37,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gripper jaw directions corrected for center-closing behavior
 - `dh_params()` for Twist joints now returns actual `d` value instead of hardcoded 0
 
+### Fixed — Stage 2 (math consistency)
+
+- **Twist Jacobian pivot** (`MATH-01/02`): the instantaneous axis of a Twist
+  joint passes through `o_i` (the displaced frame origin), not `o_{i-1}`.
+  Verified by central finite differences on the real robot and on a
+  synthetic Twist + non-axial-offset chain; `geometric_jacobian` and the
+  DLS solver now agree.
+- **Phantom base frame** (`C-4`): `wasm.ts` prepended `baseMat` on top of
+  Rust frames that already include the base → phantom frame at 57mm above
+  ground; calibration absorbed the error (base parts buried ~26mm). The TS
+  contract now exposes the world frame (z=0) as `frames[0]`.
+- **DH struct bridge**: `DHParams` (robot model, θ,d,a,α) and `DHParameter`
+  (generic solver, α,a,d,θ) have opposite field orders — silent swap risk.
+  Added field-by-name `From` conversions both ways, derives, and docs.
+- **Joint limits aligned** (`COM-10`): model limits were the exact inverse
+  image of the servo range; the mapper silently clamped up to 14° per
+  joint. Now `servo(q_min)=5/10` and `servo(q_max)=170/175` by construction
+  — no silent trimming possible.
+
+### Changed — Stage 3B (dynamics scope)
+
+- `LinkParams` now documents the deliberate static-model simplifications:
+  COM at frame origin (which makes the Twist column in `jacobian_com`
+  exactly zero by construction), no Coriolis term, estimated masses.
+- `M(q)` and `g(q)` verified against an independent kinetic-energy
+  finite-difference construction (new regression tests).
+- `test-case-report` now states explicitly that the identity
+  `M q̈ + C q̇ + g = τ` only holds at rest (no Coriolis implemented).
+
+### Changed — Stage 3C (performance)
+
+- **StlRobotScene**: per-frame temporaries hoisted out of the per-mesh
+  loop — 43 → 16 allocations/frame in the normal path (−63%,
+  ~2.6k → ~1.0k allocs/s at 60fps). No behavior change.
+- **Single FK source**: `App` computes `forwardKinematics` once and
+  distributes `rawFrames` to `InfoPanel` and `RobotViewer` — one FK +
+  one WASM serialization per interaction instead of two. `App` shares the
+  result only; it does not interpret kinematics.
+- **Workspace buffer**: `Float32Array(workspacePoints.flat())` was rebuilt
+  on every render in both scenes (24KB + `flat()` per interaction); now
+  memoized per points array.
+- **Dead WASM exports removed**: `base_transform()` / `tool_transform()`
+  from `bombolab-wasm` had no JS consumers (the transforms reach JS via
+  the robot object). The `bombolab-core` Rust versions remain (used by
+  docs, tests and examples).
+
 ### Known Technical Debt
 
 - **DH → Three.js representation is a reflection (C-3)** — `framePose` in
@@ -61,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   masses/inertias are estimates (PETG 25% + MG996R/MG90S specs), and no
   Coriolis/centrifugal term exists. Acceptable for educational use;
   revisit if used for control.
+- **App.tsx is a 679-line god component** — state, serial, IK, calibration
+  and layout mixed; calibration props drill 3 levels. A real refactor
+  (hooks + layout components) is a large change without a demonstrated
+  functional benefit; deferred.
 
 ## [0.1.0] - 2026-01-01
 

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
@@ -62,6 +62,19 @@ jobs:
           workspaces: crates/bombolab-core
       - run: cargo check --manifest-path crates/bombolab-core/Cargo.toml --features ws-bridge
       - run: cargo clippy --manifest-path crates/bombolab-core/Cargo.toml --features ws-bridge -- -D warnings
+
+  wasm:
+    name: WASM build (wasm32-unknown-unknown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/bombolab-wasm
+      - run: cargo check --manifest-path crates/bombolab-wasm/Cargo.toml --target wasm32-unknown-unknown
 
   web-tsc:
     name: Web typecheck
