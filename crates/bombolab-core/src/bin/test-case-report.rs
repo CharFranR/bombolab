@@ -5,7 +5,6 @@ use bombolab_core::math::jacobian::{JointKind, geometric_jacobian};
 use bombolab_core::math::{DualQuaternion, Iso3, Mat3, Mat4, Quaternion, Vec3};
 use bombolab_core::robot::fabri_creator::fabri_creator;
 
-
 fn test_links() -> Vec<LinkParams> {
     let cyl = |mass: f64, len: f64| -> Mat3 {
         let r = 20.0;
@@ -138,7 +137,8 @@ fn main() {
         g[(4, 0)]
     );
     println!("\n  Los valores coinciden con los cálculos manuales del reporte (Sección 15).");
-    println!(
-        "  OK: qp = qpp = 0 -> tau = g; M(q_test) y C(q_test,0) = 0 verifican M qpp + C qp + g = tau."
-    );
+    println!("  NOTA: modelo ESTÁTICO — no existe término C(q,q̇). La identidad");
+    println!("  'M qpp + C qp + g = tau' solo se cumple con qp = qpp = 0 (reposo).");
+    println!("  Para control dinámico de trayectorias se necesitaría Coriolis/centrífugos.");
+    println!("  OK: qp = qpp = 0 -> tau = g (verificación estática válida).");
 }
