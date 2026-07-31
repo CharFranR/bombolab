@@ -42,7 +42,7 @@ impl ServoCommand {
             }
         }
 
-        // Mismo rango que el firmware: rechaza todo lo que no esté en [10, 170].
+        // Mismo rango que el firmware: rechaza todo lo que no esté en [5, 175].
         if gripper < ANGLE_MIN as u8 || gripper > ANGLE_MAX as u8 {
             return Err("gripper angle out of range");
         }
@@ -119,23 +119,23 @@ mod tests {
 
     #[test]
     fn test_valid_construction_at_boundaries() {
-        let cmd = ServoCommand::new([10.0, 170.0, 10.0, 170.0, 90.0], 10).unwrap();
-        assert_eq!(cmd.joints[0], 10.0);
-        assert_eq!(cmd.joints[1], 170.0);
-        assert_eq!(cmd.gripper, 10);
+        let cmd = ServoCommand::new([5.0, 175.0, 5.0, 175.0, 90.0], 5).unwrap();
+        assert_eq!(cmd.joints[0], 5.0);
+        assert_eq!(cmd.joints[1], 175.0);
+        assert_eq!(cmd.gripper, 5);
     }
 
     // ─── Construction: joint validation ──────────────────────────
 
     #[test]
     fn test_joint_below_min_rejected() {
-        let result = ServoCommand::new([9.9, 115.0, 110.0, 170.0, 90.0], 90);
+        let result = ServoCommand::new([4.9, 115.0, 110.0, 170.0, 90.0], 90);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_joint_above_max_rejected() {
-        let result = ServoCommand::new([90.0, 115.0, 110.0, 170.1, 90.0], 90);
+        let result = ServoCommand::new([90.0, 115.0, 110.0, 175.1, 90.0], 90);
         assert!(result.is_err());
     }
 
@@ -163,19 +163,19 @@ mod tests {
 
     #[test]
     fn test_gripper_at_max_accepted() {
-        let cmd = ServoCommand::new([90.0; 5], 170).unwrap();
-        assert_eq!(cmd.gripper, 170);
+        let cmd = ServoCommand::new([90.0; 5], 175).unwrap();
+        assert_eq!(cmd.gripper, 175);
     }
 
     #[test]
     fn test_gripper_above_max_rejected() {
-        let result = ServoCommand::new([90.0; 5], 171);
+        let result = ServoCommand::new([90.0; 5], 176);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_gripper_below_min_rejected() {
-        let result = ServoCommand::new([90.0; 5], 9);
+        let result = ServoCommand::new([90.0; 5], 4);
         assert!(result.is_err());
     }
 

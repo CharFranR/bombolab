@@ -13,15 +13,20 @@ use super::segment::{Robot, Segment};
 /// Basado en la tabla de `docs/fabri-creator/table-definition.md`.
 pub fn fabri_creator() -> Robot {
     // Límites del modelo = imagen inversa exacta del rango de servo
-    // [10°, 170°] que aceptan firmware (main.cpp) y ServoCommand:
-    //   q_eff = dir · (servo − offset)  →  servo(q_min) = 10, servo(q_max) = 170
+    // [5°, 175°] que aceptan firmware (main.cpp) y ServoCommand:
+    //   q_eff = dir · (servo − offset)  →  servo(q_min) = 5, servo(q_max) = 175
     // Así el clamp del mapper NUNCA recorta q dentro del modelo (no hay
     // configuraciones prometidas que el hardware no pueda ejecutar).
-    let q_j1_j2 = 80.0_f64.to_radians(); // servo = 90 − q → [10, 170] ⇒ q ∈ [−80, 80]
-    let q_j3_max = 85.0_f64.to_radians(); // servo = 81 + q → 170 ⇒ q ≤ 89; tope físico 85 (sin recorte: servo 166)
-    let q_j3_min = (-71.0_f64).to_radians(); // servo = 81 + q → 10 ⇒ q ≥ −71
-    let q_j4_max = 85.0_f64.to_radians(); // servo = 95 − q → 10 ⇒ q ≤ 85
-    let q_j4_min = (-75.0_f64).to_radians(); // servo = 95 − q → 170 ⇒ q ≥ −75
+    //
+    // Nota histórica: el rango fue [10,170] hasta julio-2026 (commit
+    // dc0bcc6 "change angles movement capacity from 10 to 170"); la
+    // expansión a [5,175] restaura el recorrido completo del SG90 y
+    // recupera los límites originales de J1/J2/J5.
+    let q_j1_j2 = 85.0_f64.to_radians(); // servo = 90 − q → [5, 175] ⇒ q ∈ [−85, 85]
+    let q_j3_max = 85.0_f64.to_radians(); // servo = 81 + q → 175 ⇒ q ≤ 94; tope físico 85 (sin recorte: servo 166)
+    let q_j3_min = (-76.0_f64).to_radians(); // servo = 81 + q → 5 ⇒ q ≥ −76
+    let q_j4_max = 85.0_f64.to_radians(); // servo = 95 − q → 5 ⇒ q ≤ 90; tope físico 85 (sin recorte: servo 10)
+    let q_j4_min = (-80.0_f64).to_radians(); // servo = 95 − q → 175 ⇒ q ≥ −80
 
     let segments = vec![
         // Joint 1 — Base (Yaw)
@@ -51,17 +56,17 @@ pub fn fabri_creator() -> Robot {
         // Joint 5 — Wrist Pitch
         // θ=0,  d=0,  a=0,  α=0
         // dir=-1, offset=60° → servo = 60° − q.
-        // Límites: servo 10°→ q=50°, servo 170°→ q=−110°  (q ∈ [−110, 50]).
-        // OJO: el comentario histórico decía q ∈ [−115, 55] ("servo min 10°→
-        // q=55°"), pero eso es matemáticamente falso con dir=−1/offset 60:
-        // q=55 → servo 5 (fuera de rango) y q=−115 → servo 175. Los límites
-        // se alinearon con la imagen inversa exacta de [10,170] → q ∈ [−110, 50].
+        // Con el rango [5,175]: servo 5°→ q=55°, servo 175°→ q=−115°  (q ∈ [−115, 55]).
+        // Este era el rango que el comentario histórico describía — era
+        // correcto para [5,175], pero el código usaba [10,170] (q=55 → servo 5
+        // quedaba fuera). Al expandir el rango del servo, el comentario
+        // original vuelve a ser matemáticamente exacto.
         Segment::new(
             Joint::new(
                 JointType::Revolute,
                 0.0,
-                50.0_f64.to_radians(),
-                (-110.0_f64).to_radians(),
+                55.0_f64.to_radians(),
+                (-115.0_f64).to_radians(),
             ),
             DHParams::new(0.0, 0.0, 0.0, 0.0),
         ),

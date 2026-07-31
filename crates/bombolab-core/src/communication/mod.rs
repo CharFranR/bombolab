@@ -63,10 +63,14 @@ pub const BAUD_RATE: u32 = 115_200;
 pub const JOINT_COUNT: usize = 6;
 
 /// Minimum servo angle in degrees (mechanical safety limit).
-pub const ANGLE_MIN: i32 = 10;
+///
+/// Was [10, 170] since commit dc0bcc6 (Jul 2026); expanded to [5, 175] to
+/// restore the full SG90 travel. Verify mechanically that 5° and 175° do
+/// not hit the physical end stops before relying on the extremes.
+pub const ANGLE_MIN: i32 = 5;
 
 /// Maximum servo angle in degrees (mechanical safety limit).
-pub const ANGLE_MAX: i32 = 170;
+pub const ANGLE_MAX: i32 = 175;
 
 /// Read timeout in milliseconds for serial responses.
 pub const READ_TIMEOUT_MS: u64 = 1000;

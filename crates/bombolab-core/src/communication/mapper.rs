@@ -1,7 +1,7 @@
 //! ServoMapper — centralized q→servo mapping with clamping.
 //!
 //! Converts kinematic coordinates (radians) to servo angles (degrees)
-//! by delegating to `Robot::q_to_servo()`, then clamping to [10°, 170°]
+//! by delegating to `Robot::q_to_servo()`, then clamping to [5°, 175°]
 //! and producing a `ServoCommand`.
 //!
 //! # Future direction inversion
@@ -22,7 +22,7 @@ pub struct ServoMapper<'a> {
 }
 
 impl<'a> ServoMapper<'a> {
-    /// Create a new mapper with default clamping [10°, 170°].
+    /// Create a new mapper with default clamping [5°, 175°].
     pub fn new(robot: &'a Robot) -> Self {
         Self {
             robot,
@@ -99,20 +99,20 @@ mod tests {
     fn test_clamp_below_min() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        // q value that maps to a very small servo angle (< 10°)
-        // Offset J0 = 90° → q = -1.4 rad → servo ≈ -80.2° → clamped to 10°
-        let cmd = mapper.map_q(&[-1.4, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
-        assert!((cmd.joints[0] - 10.0).abs() < 1e-6);
+        // q value that maps to a very small servo angle (< 5°)
+        // Offset J0 = 90° → q = -1.5 rad → servo ≈ -85.9° → clamped to 5°
+        let cmd = mapper.map_q(&[-1.5, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
+        assert!((cmd.joints[0] - 5.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_clamp_above_max() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        // q value that maps to a very large servo angle (> 170°)
-        // Offset J0 = 90° → q = 1.5 rad → servo ≈ 175.9° → clamped to 170°
-        let cmd = mapper.map_q(&[1.5, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
-        assert!((cmd.joints[0] - 170.0).abs() < 1e-6);
+        // q value that maps to a very large servo angle (> 175°)
+        // Offset J0 = 90° → q = 1.6 rad → servo ≈ 181.7° → clamped to 175°
+        let cmd = mapper.map_q(&[1.6, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
+        assert!((cmd.joints[0] - 175.0).abs() < 1e-6);
     }
 
     #[test]
@@ -178,7 +178,7 @@ mod tests {
     }
 
     /// INVARIANTE de límites del FABRI real: la imagen de q_min/q_max del
-    /// modelo debe caer EXACTAMENTE en [10°, 170°] — el rango que aceptan
+    /// modelo debe caer EXACTAMENTE en [5°, 175°] — el rango que aceptan
     /// ServoCommand y el firmware. Si este test falla, el modelo promete
     /// configuraciones que el hardware no puede ejecutar (recorte silencioso).
     #[test]
@@ -186,7 +186,7 @@ mod tests {
         let robot = crate::robot::fabri_creator();
         let mapper = ServoMapper::new(&robot);
 
-        // q = límites inferiores → servo debe ser exactamente 10° (o el
+        // q = límites inferiores → servo debe ser exactamente 5° (o el
         // límite superior del rango cuando la dirección es +1)
         let mut q_min = [0.0; 5];
         for (i, seg) in robot.segments.iter().enumerate() {
@@ -207,19 +207,19 @@ mod tests {
             let min_deg = robot.q_to_servo(&q_single)[i].to_degrees();
             q_single[i] = q_max[i];
             let max_deg = robot.q_to_servo(&q_single)[i].to_degrees();
-            // Tolerancia flotante: 60°−50° con offsets en radianes da
-            // 9.999999999999998, no 10.0 exacto.
+            // Tolerancia flotante: 55°−50° con offsets en radianes da
+            // 4.999999999999999, no 5.0 exacto.
             const TOL: f64 = 1e-9;
             assert!(
-                (10.0 - TOL..=170.0 + TOL).contains(&min_deg),
-                "J{}: q_min={:.2}° → servo {:.2}° FUERA de [10,170] (recorte silencioso)",
+                (5.0 - TOL..=175.0 + TOL).contains(&min_deg),
+                "J{}: q_min={:.2}° → servo {:.2}° FUERA de [5,175] (recorte silencioso)",
                 i + 1,
                 q_min[i].to_degrees(),
                 min_deg
             );
             assert!(
-                (10.0 - TOL..=170.0 + TOL).contains(&max_deg),
-                "J{}: q_max={:.2}° → servo {:.2}° FUERA de [10,170] (recorte silencioso)",
+                (5.0 - TOL..=175.0 + TOL).contains(&max_deg),
+                "J{}: q_max={:.2}° → servo {:.2}° FUERA de [5,175] (recorte silencioso)",
                 i + 1,
                 q_max[i].to_degrees(),
                 max_deg

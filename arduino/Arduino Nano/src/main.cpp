@@ -71,9 +71,10 @@ bool read_positions_serial(int positions[6]) {
             if (!has_digit || idx != 5) return false;
             positions[5] = value;
 
-            // Range validation
+            // Range validation: [5, 175] — full SG90 travel with 5°
+            // safety margin at each end (was [10,170] before Jul 2026).
             for (int i = 0; i < NUM_SERVOS; i++) {
-                if (positions[i] < 10 || positions[i] > 170) return false;
+                if (positions[i] < 5 || positions[i] > 175) return false;
             }
             return true;
         }
@@ -86,7 +87,7 @@ bool read_positions_serial(int positions[6]) {
             value = value * 10 + (c - '0');
             has_digit = true;
             digit_count++;
-            // No angle can have more than 3 digits (max 170). Rejecting here
+            // No angle can have more than 3 digits (max 175). Rejecting here
             // also prevents a 5-digit field from wrapping the 16-bit range.
             if (digit_count > 3) {
                 drain_rx_until_newline();
