@@ -11,13 +11,14 @@ interface DebugAxesProps {
   stlMeta: StlMeta[];
   calibrationRef: React.MutableRefObject<Map<string, THREE.Matrix4>>;
   toggles: DebugToggles;
+  scaleRef?: React.MutableRefObject<number>;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const JOINT_AXIS_SIZE = 30;
 const STL_AXIS_SIZE = 15;
-const NUM_FK_FRAMES = 6;    // 5 joints + tool-tip
+const NUM_FK_FRAMES = 6;    // world + 5 joints (tool-tip is appended separately)
 const NUM_STL_MESHES = 11;  // one per STL file
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ export default function DebugAxes({
   stlMeta,
   calibrationRef,
   toggles,
+  scaleRef,
 }: DebugAxesProps) {
   // Create 28 AxesHelper objects once — never re-created after mount
   const helpers = useMemo(() => {
@@ -116,10 +118,15 @@ export default function DebugAxes({
           const pose = curFrames[jointIdx];
           if (!pose) { helper.visible = false; break; }
 
-          // Compose world = FK pose × calibration offset
+          // Compose world = FK pose × scale × calibration offset — must
+          // match the mesh pipeline (StlRobotScene: FK × jaw × S × cal),
+          // otherwise axes drift off the meshes whenever stlScale ≠ 1.
           tempPos.set(...pose.pos);
           tempQuat.set(...pose.quat);
           tempWorld.compose(tempPos, tempQuat, tempScale);
+
+          const s = scaleRef?.current ?? 1;
+          tempWorld.multiply(new THREE.Matrix4().makeScale(s, s, s));
 
           const cal = calMap.get(meta.file);
           if (cal) {

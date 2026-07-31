@@ -58,7 +58,13 @@ function Link({ from, to, width = 14 }: {
     const dir = new THREE.Vector3().subVectors(toVec, fromVec);
     const len = dir.length();
     const up = new THREE.Vector3(0, 1, 0);
-    const q = new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize());
+    // Guard: two consecutive FK frames can coincide (e.g. elbow at full
+    // extension), making dir a zero vector. normalize() of a zero vector
+    // yields NaN, which poisons the quaternion and the whole mesh.
+    // Fall back to the identity quaternion when the link has no length.
+    const q = len < 1e-6
+      ? new THREE.Quaternion()
+      : new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize());
     return {
       position: [mid.x, mid.y, mid.z] as [number, number, number],
       quaternion: [q.x, q.y, q.z, q.w] as [number, number, number, number],
