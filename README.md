@@ -54,41 +54,43 @@ npm run wasm   # desde web/
 
 ```
 bombolab/
-├── Cargo.toml                       # Workspace root
-├── book.toml                        # mdBook configuration
+├── Cargo.toml                       # Root package (thin app binary)
+├── src/main.rs                      # Root app stub (GUI lives in web/)
+├── book.toml                        # mdBook configuration (src = book/src, output = docs/)
 ├── crates/
-│   ├── bombolab-core/               # Domain model, kinematics, math (lib + bins)
+│   ├── bombolab-core/               # Domain model, kinematics, math, serial (lib + 6 bins)
 │   │   └── src/
 │   │       ├── lib.rs               # Re-exports: robot, math, kinematics, communication
 │   │       ├── robot/               # Joint, DHParams, Segment, Robot, errors, fabri_creator
 │   │       ├── kinematics/          # Forward kinematics, IK solver, DH solve
 │   │       ├── math/                # Isometries (nalgebra wrappers), quaternions, constants
 │   │       ├── communication/       # Serial protocol, ServoMapper, interpolation
-│   │       └── bin/                 # CLI binaries: dh-solve, quaternion-solve, serial-test
-│   ├── bombolab-wasm/               # WASM bridge (wasm-bindgen): FK, IK, fabri_creator
+│   │       └── bin/                 # dh-solve, quaternion-solve, dynamics-report,
+│   │                                # test-case-report, serial-test, ws-bridge
+│   └── bombolab-wasm/               # WASM bridge (wasm-bindgen): FK, IK, fabri_creator
 │       └── src/lib.rs
-├── web/                             # Visualizador 3D web
-│   ├── src/
-│   │   ├── components/              # React: RobotViewer, JointControls, InfoPanel, IkTarget
-│   │   ├── kinematics/types.ts      # TypeScript interfaces (Mat4, Segment, RobotDef)
-│   │   ├── wasm.ts                  # WASM bridge TS (FK, IK delegates to Rust)
-│   │   └── serial.ts                # WebSerial
-│   ├── package.json
-│   └── vite.config.ts
-├── arduino/                         # Firmware (PlatformIO, C++ — Arduino Nano)
-├── book/                            # mdBook documentation (book/src/ → book/book/)
-├── docs/fabri-creator/              # Hardware docs, DH table definition
+├── web/                             # Visualizador 3D web (React + Three.js)
+│   └── src/
+│       ├── components/              # React: RobotViewer, JointControls, InfoPanel, IkTarget
+│       ├── kinematics/types.ts      # TypeScript interfaces (Mat4, Segment, RobotDef)
+│       ├── wasm.ts                  # WASM bridge TS (FK, IK delegates to Rust)
+│       └── serial.ts                # WebSerial
+├── arduino/
+│   └── Arduino Nano/                # Firmware (PlatformIO, C++ — Arduino Nano)
+├── book/src/                        # mdBook source documentation
+├── docs/                            # mdBook build output (book.toml build-dir)
+├── robot-docs/                      # Hardware docs, DH table definition
 └── AGENTS.md                        # OpenCode / AI assistant instructions
 ```
 
 ## Architecture
 
-The project is organized as a Cargo workspace with 3 Rust crates:
+The project is organized as Rust packages plus web/firmware components:
 
 | Crate | Type | Responsibility |
 |-------|------|----------------|
-| **bombolab** (root) | placeholder | — |
-| **bombolab-core** | lib + 3 bins | Domain model, kinematics, math, serial, CLI tools |
+| **bombolab** (root) | app stub | Prints a pointer to the web viewer |
+| **bombolab-core** | lib + 6 bins | Domain model, kinematics, math, serial, CLI tools |
 | **bombolab-wasm** | lib (wasm) | wasm-bindgen bridge: FK, IK, robot factory |
 
 Additional non-Rust components:

@@ -8,11 +8,16 @@ use super::{BAUD_RATE, ConnectionError, READ_TIMEOUT_MS};
 
 /// Arduino Nano serial connection.
 ///
-/// Wraps a serial port handle and provides angle transmission with
-/// OK/ERR response verification. Uses the crate-level constants
-/// `BAUD_RATE`, `JOINT_COUNT`, and `READ_TIMEOUT_MS`.
+/// Wraps a serial port handle (inside a persistent `BufReader`) and provides
+/// angle transmission with OK/ERR response verification. Uses the crate-level
+/// constants `BAUD_RATE`, `JOINT_COUNT`, and `READ_TIMEOUT_MS`.
+///
+/// The `BufReader` lives for the whole connection so bytes buffered after a
+/// partial read (e.g. a timeout mid-response) are kept for the next
+/// `read_response` call — a fresh reader per call would drop them and
+/// permanently shift every subsequent response by one line.
 pub struct ArduinoNano {
-    port: Box<dyn SerialPort>,
+    reader: BufReader<Box<dyn SerialPort>>,
     port_name: String,
 }
 
@@ -36,7 +41,7 @@ impl ArduinoNano {
             })?;
 
         Ok(Self {
-            port,
+            reader: BufReader::new(port),
             port_name: port_name.into(),
         })
     }
@@ -47,26 +52,26 @@ impl ArduinoNano {
     /// as the original `send_angles()` — no protocol breakage.
     pub fn send(&mut self, cmd: &ServoCommand) -> Result<(), ConnectionError> {
         let msg = cmd.to_wire();
-        self.port
-            .write_all(msg.as_bytes())
+        let port = self.reader.get_mut();
+        port.write_all(msg.as_bytes())
             .map_err(|e| ConnectionError::WriteFailed {
                 port: self.port_name.clone(),
                 source: e.to_string(),
             })?;
-        self.port
-            .flush()
-            .map_err(|e| ConnectionError::WriteFailed {
-                port: self.port_name.clone(),
-                source: e.to_string(),
-            })?;
+        port.flush().map_err(|e| ConnectionError::WriteFailed {
+            port: self.port_name.clone(),
+            source: e.to_string(),
+        })?;
         Ok(())
     }
 
     /// Read one line from Arduino (expects "OK" or "ERR").
+    ///
+    /// Uses the connection-wide `BufReader`, so bytes buffered after a partial
+    /// read are preserved for the next call.
     pub fn read_response(&mut self) -> Result<String, ConnectionError> {
-        let mut reader = BufReader::new(&mut self.port);
         let mut line = String::new();
-        reader
+        self.reader
             .read_line(&mut line)
             .map_err(|e| ConnectionError::ReadFailed {
                 port: self.port_name.clone(),
@@ -94,7 +99,8 @@ impl ArduinoNano {
 
     /// Flush and close the port.
     pub fn disconnect(&mut self) -> Result<(), ConnectionError> {
-        self.port
+        self.reader
+            .get_mut()
             .flush()
             .map_err(|e| ConnectionError::WriteFailed {
                 port: self.port_name.clone(),

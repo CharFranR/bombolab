@@ -18,26 +18,26 @@ CI runs: `cargo check --workspace` → `cargo test --workspace` → `cargo clipp
 
 | Path | Type | Description |
 |------|------|-------------|
-| `src/main.rs` | binary (root) | GUI entrypoint – wires `bombolab-gui` into eframe |
-| `crates/bombolab-core/` | lib + 2 bins | Domain model, kinematics, math. **CLI binaries**: `dh-solve`, `quaternion-solve` |
-| `crates/bombolab-gui/` | lib | egui/eframe rendering layer |
-| `arduino/` | PlatformIO (C++) | Arduino Nano firmware (servo control via `Servo` lib) |
+| `src/main.rs` | binary (root) | App stub – prints a pointer to the web viewer (GUI lives in `web/`) |
+| `crates/bombolab-core/` | lib + 6 bins | Domain model, kinematics, math. **CLI binaries**: `dh-solve`, `quaternion-solve`, `dynamics-report`, `test-case-report`, `serial-test`, `ws-bridge` |
+| `crates/bombolab-wasm/` | lib (wasm) | wasm-bindgen bridge: FK, IK, robot factory |
+| `arduino/Arduino Nano/` | PlatformIO (C++) | Arduino Nano firmware (servo control via `Servo` lib) |
 | — | — | — |
-| `docs/` | mdBook | Documentation source (`docs/src/`) |
+| `book/src/` | mdBook | Documentation source (built to `docs/` via `book.toml`) |
 
-The workspace has **3 Rust crates**: root (app), `bombolab-core`, `bombolab-gui`. All use edition 2024.
+The project has **3 Rust packages**: root (app stub), `bombolab-core`, `bombolab-wasm`. All use edition 2024. Note: the packages are **not** members of a Cargo `[workspace]` — build/test them with `--manifest-path crates/<crate>/Cargo.toml` or from inside the crate directory; `--workspace` from the root only covers the root package.
 
 ## Key commands
 
-- **Run a single binary**: `cargo run --bin dh-solve -p bombolab-core`
-- **Run a single test**: `cargo test -p bombolab-core forward::tests::test_forward_kinematics_two_segments` (inline tests, no test harness quirks)
+- **Run a single binary**: `cargo run --bin dh-solve --manifest-path crates/bombolab-core/Cargo.toml`
+- **Run a single test**: `cargo test --manifest-path crates/bombolab-core/Cargo.toml forward::tests::test_forward_kinematics_two_segments` (inline tests, no test harness quirks)
 - **Build firmware**: open `arduino/` dir, use `pio run` (requires PlatformIO, not Rust)
-- **Docs**: `mdbook build` (requires `mdbook` CLI), output in `docs/book/`
+- **Docs**: `mdbook build` (requires `mdbook` CLI), output in `docs/`
 
 ## Architecture notes
 
 - `bombolab-core` re-exports all public types from `robot`, `math`, `kinematics` modules at crate root (`crates/bombolab-core/src/lib.rs`).
-- `bombolab-gui` depends on `bombolab-core`; root app depends on both.
+- `bombolab-wasm` depends on `bombolab-core`; the root app depends on `bombolab-core` (the GUI is the `web/` React app).
 - DH parameters use **nalgebra 0.35** `Iso3` (isometry) for transformation.
 - Joint angles are in **radians** throughout (constants `DEG_TO_RAD` / `RAD_TO_DEG` in `math` module).
 

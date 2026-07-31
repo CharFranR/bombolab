@@ -127,7 +127,7 @@ fn main() {
         let input = read_input("> ");
         let parts: Vec<&str> = input.split_whitespace().collect();
 
-        match parts.first().map(|s| *s) {
+        match parts.first().copied() {
             Some("quit") | Some("exit") => {
                 println!("Disconnecting...");
                 if let Ok(mut guard) = nano.lock() {
@@ -166,7 +166,7 @@ fn main() {
             }
             Some(s) if s.parse::<usize>().is_ok() => {
                 let servo: usize = s.parse().unwrap();
-                if servo < 1 || servo > JOINT_COUNT {
+                if !(1..=JOINT_COUNT).contains(&servo) {
                     eprintln!("Servo must be 1-{}", JOINT_COUNT);
                     continue;
                 }

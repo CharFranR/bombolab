@@ -138,7 +138,7 @@ pub fn solve(table: &[DHParameter]) -> DHSolution {
     let mut intermediates = Vec::with_capacity(a_matrices.len());
     let mut acc = Mat4::identity();
     for a in &a_matrices {
-        acc = acc * a;
+        acc *= a;
         intermediates.push(acc);
     }
 

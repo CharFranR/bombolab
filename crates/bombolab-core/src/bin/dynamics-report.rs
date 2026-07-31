@@ -60,11 +60,7 @@ fn main() {
         let x = mats[i].fixed_view::<3, 1>(0, 0);
         let kind = kinds[i + 1];
         let axis = if kind == JointKind::Twist { x } else { z };
-        let label = if kind == JointKind::Twist {
-            "x"
-        } else {
-            "z"
-        };
+        let label = if kind == JointKind::Twist { "x" } else { "z" };
         println!(
             "  {}_{:<1} = ({:>8.4}, {:>8.4}, {:>8.4})  ({})",
             label,
@@ -86,7 +82,7 @@ fn main() {
     // ============================================================
     println!("=== 3. J_ω,i (3×5, columnas i+1..5 nulas) ===\n");
     let axes: [Vec3; 6] = [
-        Vec3::new(0.0, 0.0, 1.0), // z0
+        Vec3::new(0.0, 0.0, 1.0),                      // z0
         mats[0].fixed_view::<3, 1>(0, 2).into_owned(), // z1
         mats[1].fixed_view::<3, 1>(0, 2).into_owned(), // z2
         mats[2].fixed_view::<3, 1>(0, 0).into_owned(), // x3 (Twist)
@@ -96,11 +92,10 @@ fn main() {
 
     for i in 1..=5 {
         print!("  J_ω,{} = [", i);
-        for j in 0..5 {
+        for (j, ax) in axes.iter().enumerate() {
             if j >= i {
                 print!(" (0,0,0)");
             } else {
-                let ax = axes[j];
                 print!(" ({:.4},{:.4},{:.4})", ax[0], ax[1], ax[2]);
             }
             if j < 4 {

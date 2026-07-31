@@ -13,7 +13,6 @@ fn read_vec3(prompt: &str) -> Vec3 {
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     let parts: Vec<f64> = input
-        .trim()
         .split_whitespace()
         .map(|s| s.parse().unwrap())
         .collect();

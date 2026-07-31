@@ -20,6 +20,11 @@ pub enum IkError {
         r35_02: f64,
         tolerance: f64,
     },
+    /// `q_init` no coincide con el número de articulaciones del robot.
+    InvalidInitLength {
+        expected: usize,
+        got: usize,
+    },
 }
 
 impl fmt::Display for IkError {
@@ -35,6 +40,9 @@ impl fmt::Display for IkError {
                     "orientation not reachable: R35[0,2] = {:.2e} exceeds tolerance {:.2e}",
                     r35_02, tolerance
                 )
+            }
+            IkError::InvalidInitLength { expected, got } => {
+                write!(f, "invalid q_init length: expected {expected}, got {got}")
             }
         }
     }
@@ -123,6 +131,14 @@ impl IkSolver {
             return Err(IkError::DegenerateChain);
         }
 
+        // q_init de longitud incorrecta paniqueaba en frames.last().unwrap().
+        if q_init.len() != robot.dof() {
+            return Err(IkError::InvalidInitLength {
+                expected: robot.dof(),
+                got: q_init.len(),
+            });
+        }
+
         let n = robot.dof().min(5);
         let mut q = q_init.to_vec();
         let target_v = Vec3::new(target[0], target[1], target[2]);
@@ -171,7 +187,7 @@ impl IkSolver {
             }
 
             // 4. DLS: Δq = J^T · (J·J^T + λ²·I)⁻¹ · error
-            let jjt = &j * j.transpose();
+            let jjt = j * j.transpose();
             let reg = jjt + SMatrix::<f64, 3, 3>::identity() * damping_sq;
 
             if let Some(inv) = reg.try_inverse() {
@@ -344,6 +360,8 @@ impl OrientationSolver {
 ///
 /// Si la orientación no es alcanzable, devuelve
 /// `IkError::UnreachableOrientation` sin modificar la posición.
+// API refactor (argument struct) is deferred to the architecture stage.
+#[allow(clippy::too_many_arguments)]
 pub fn solve_full_ik(
     pos_solver: &IkSolver,
     orient_solver: &OrientationSolver,
@@ -528,6 +546,45 @@ mod tests {
             "Position error at home: {:.3}mm (should be < 2mm)",
             err
         );
+    }
+
+    #[test]
+    fn solve_q_init_length_validated() {
+        let (solver, robot, base, tool) = make_test();
+        let target = [200.0, 0.0, 280.0];
+
+        // q_init vacío debe devolver Err, no paniquear.
+        let empty: Vec<f64> = vec![];
+        let result = solver.solve_position(&target, &empty, &robot, &base, &tool);
+        assert!(matches!(
+            result,
+            Err(IkError::InvalidInitLength {
+                expected: 5,
+                got: 0
+            })
+        ));
+
+        // q_init corto (menos articulaciones que el robot) → Err.
+        let short = vec![0.0; 3];
+        let result = solver.solve_position(&target, &short, &robot, &base, &tool);
+        assert!(matches!(
+            result,
+            Err(IkError::InvalidInitLength {
+                expected: 5,
+                got: 3
+            })
+        ));
+
+        // q_init largo → Err.
+        let long = vec![0.0; 7];
+        let result = solver.solve_position(&target, &long, &robot, &base, &tool);
+        assert!(matches!(
+            result,
+            Err(IkError::InvalidInitLength {
+                expected: 5,
+                got: 7
+            })
+        ));
     }
 
     #[test]
@@ -1039,7 +1096,7 @@ mod full_ik_tests {
         let orient_solver = OrientationSolver::new(1e-10); // tolerancia estricta
 
         // Usar home position (alcanzable desde q_init=[0;5])
-        // Home: q=[0;5] → TCP ~ (236, 0, 314)
+        // Home: q=[0;5] → TCP ≈ (215, −15, 262)
         let target_pos = [236.0, 0.0, 314.0];
 
         // Obtener R05 en home

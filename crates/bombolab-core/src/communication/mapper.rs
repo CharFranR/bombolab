@@ -35,14 +35,22 @@ impl<'a> ServoMapper<'a> {
     ///
     /// Delegates to `Robot::q_to_servo()` for rad→rad conversion,
     /// then converts to degrees and clamps to [`angle_min`, `angle_max`].
-    pub fn map_q(&self, q: &[f64], gripper: u8) -> ServoCommand {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if any mapped angle is non-finite (NaN/±Inf)
+    /// or outside the accepted range after clamping.
+    pub fn map_q(&self, q: &[f64], gripper: u8) -> Result<ServoCommand, &'static str> {
         let servo_rad = self.robot.q_to_servo(q);
         let mut joints = [0.0_f64; 5];
         for (i, &sr) in servo_rad.iter().enumerate().take(5) {
             let deg = sr.to_degrees();
+            if !deg.is_finite() {
+                return Err("joint angle out of range (non-finite)");
+            }
             joints[i] = deg.clamp(self.angle_min, self.angle_max);
         }
-        ServoCommand { joints, gripper }
+        ServoCommand::new(joints, gripper)
     }
 }
 
@@ -78,7 +86,7 @@ mod tests {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
         // q = [0,0,0,0,0] → servo = offsets = [90, 90, 90, 90, 90]
-        let cmd = mapper.map_q(&[0.0; 5], 90);
+        let cmd = mapper.map_q(&[0.0; 5], 90).unwrap();
         assert!((cmd.joints[0] - 90.0).abs() < 1e-6);
         assert!((cmd.joints[1] - 90.0).abs() < 1e-6);
         assert!((cmd.joints[2] - 90.0).abs() < 1e-6);
@@ -93,7 +101,7 @@ mod tests {
         let mapper = ServoMapper::new(&robot);
         // q value that maps to a very small servo angle (< 10°)
         // Offset J0 = 90° → q = -1.4 rad → servo ≈ -80.2° → clamped to 10°
-        let cmd = mapper.map_q(&[-1.4, 0.0, 0.0, 0.0, 0.0], 90);
+        let cmd = mapper.map_q(&[-1.4, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
         assert!((cmd.joints[0] - 10.0).abs() < 1e-6);
     }
 
@@ -103,7 +111,7 @@ mod tests {
         let mapper = ServoMapper::new(&robot);
         // q value that maps to a very large servo angle (> 170°)
         // Offset J0 = 90° → q = 1.5 rad → servo ≈ 175.9° → clamped to 170°
-        let cmd = mapper.map_q(&[1.5, 0.0, 0.0, 0.0, 0.0], 90);
+        let cmd = mapper.map_q(&[1.5, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
         assert!((cmd.joints[0] - 170.0).abs() < 1e-6);
     }
 
@@ -111,7 +119,7 @@ mod tests {
     fn test_gripper_passthrough() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        let cmd = mapper.map_q(&[0.0; 5], 127);
+        let cmd = mapper.map_q(&[0.0; 5], 127).unwrap();
         assert_eq!(cmd.gripper, 127);
     }
 
@@ -122,7 +130,7 @@ mod tests {
         // q = [0.1, -0.2, 0.0, 0.15, -0.1] rad
         // All offsets = 90° (π/2 ≈ 1.571 rad)
         // servo_deg = (q + offset) * 180/π → clamped to [10, 170]
-        let cmd = mapper.map_q(&[0.1, -0.2, 0.0, 0.15, -0.1], 45);
+        let cmd = mapper.map_q(&[0.1, -0.2, 0.0, 0.15, -0.1], 45).unwrap();
         // J0: (0.1 + 1.571) rad * 180/π ≈ 95.73°
         // J1: (-0.2 + 1.571) rad * 180/π ≈ 78.56°
         // J2: (0.0 + 1.571) rad * 180/π ≈ 90.00°
@@ -139,10 +147,33 @@ mod tests {
     fn test_output_is_servo_command() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        let cmd = mapper.map_q(&[0.1, -0.2, 0.3, -0.1, 0.15], 45);
+        let cmd = mapper.map_q(&[0.1, -0.2, 0.3, -0.1, 0.15], 45).unwrap();
         // to_wire should produce valid output
         let wire = cmd.to_wire();
         assert!(wire.ends_with('\n'));
         assert_eq!(wire.split(',').count(), 6);
+    }
+
+    #[test]
+    fn test_nan_q_rejected() {
+        let robot = make_robot();
+        let mapper = ServoMapper::new(&robot);
+        assert!(mapper.map_q(&[f64::NAN, 0.0, 0.0, 0.0, 0.0], 90).is_err());
+    }
+
+    #[test]
+    fn test_inf_q_rejected() {
+        let robot = make_robot();
+        let mapper = ServoMapper::new(&robot);
+        assert!(
+            mapper
+                .map_q(&[f64::INFINITY, 0.0, 0.0, 0.0, 0.0], 90)
+                .is_err()
+        );
+        assert!(
+            mapper
+                .map_q(&[f64::NEG_INFINITY, 0.0, 0.0, 0.0, 0.0], 90)
+                .is_err()
+        );
     }
 }

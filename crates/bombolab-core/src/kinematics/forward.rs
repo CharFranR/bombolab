@@ -27,7 +27,7 @@ pub fn forward_kinematics(base: Iso3, robot: &Robot) -> (Vec<Iso3>, Iso3) {
     let mut current = base;
 
     for segment in &robot.segments {
-        current = current * matrix_from_segment(segment);
+        current *= matrix_from_segment(segment);
         frames.push(current);
     }
 

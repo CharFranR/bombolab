@@ -28,12 +28,15 @@
 //!
 //! | Pin | Servo | Joint   | Notes        |
 //! |-----|-------|---------|--------------|
-//! | A5  | S1    | J1      | Base yaw     |
-//! | A3  | S2    | J2      | Shoulder     |
-//! | A4  | S3    | J3      | Elbow        |
-//! | A2  | S4    | J4      | Wrist roll   |
-//! | A0  | S5    | J5      | Wrist pitch  |
-//! | A1  | S6    | Gripper | —            |
+//! | A1  | S1    | J1      | Base yaw     |
+//! | A0  | S2    | J2      | Shoulder     |
+//! | A2  | S3    | J3      | Elbow        |
+//! | A4  | S4    | J4      | Wrist roll   |
+//! | 13  | S5    | J5      | Wrist pitch  |
+//! | A5  | S6    | Gripper | —            |
+//!
+//! Tabla unificada con el firmware (`arduino/Arduino Nano/src/main.cpp`).
+//! VERIFICAR contra el cableado físico real.
 
 #[cfg(feature = "serial")]
 pub mod arduino_nano;
