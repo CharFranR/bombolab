@@ -86,6 +86,15 @@ export default function StlRobotScene({
   const scaleRef = useRef(stlScaleRef);
   scaleRef.current = stlScaleRef;
 
+  // P3 (Stage 3C): Float32Array del workspace memoizado — se reconstruye
+  // solo cuando cambian los puntos, no en cada render de React.
+  const workspaceArray = useMemo(
+    () => (workspacePoints && workspacePoints.length > 0
+      ? new Float32Array(workspacePoints.flat())
+      : undefined),
+    [workspacePoints],
+  );
+
   // Find target entry for TransformControls
   const targetEntry = useMemo(() => {
     if (!calibrationMode || !calibrationTarget) return null;
@@ -155,6 +164,20 @@ export default function StlRobotScene({
     const tempScale = new THREE.Vector3(1, 1, 1);
     const world = new THREE.Matrix4();
     const jawM = new THREE.Matrix4();
+    const scaleM = new THREE.Matrix4();
+    // Hoisted temporaries for the calibration decompose + target branch —
+    // created once per frame instead of once per mesh (43 allocs/frame → 0
+    // in the common non-target path). P1 (Stage 3C perf audit).
+    const calPos = new THREE.Vector3();
+    const calQuat = new THREE.Quaternion();
+    const calScale = new THREE.Vector3();
+    const calDecomp = new THREE.Vector3();
+    const fkMatrix = new THREE.Matrix4();
+    const jawM2 = new THREE.Matrix4();
+    const scaleM2 = new THREE.Matrix4();
+    const finalPos = new THREE.Vector3();
+    const finalQuat = new THREE.Quaternion();
+    const finalScale = new THREE.Vector3(1, 1, 1);
 
     entriesRef.current.forEach((entry, i) => {
       const file = STL_META[i].file;
@@ -183,24 +206,22 @@ export default function StlRobotScene({
       const cal = calOverride ?? calConfig ?? new THREE.Matrix4().identity();
       entry.calibrationTransform.copy(cal);
 
-      const calPos = new THREE.Vector3();
-      const calQuat = new THREE.Quaternion();
-      cal.decompose(calPos, calQuat, new THREE.Vector3());
+      // Reuse hoisted temporaries (no allocation per mesh)
+      cal.decompose(calPos, calQuat, calDecomp);
 
       if (isTarget) {
         // Target: FK × scale × calibration as position+quaternion for TransformControls
-        const fkMatrix = new THREE.Matrix4().compose(tempPos.clone(), tempQuat.clone(), new THREE.Vector3(1, 1, 1));
+        fkMatrix.compose(tempPos, tempQuat, tempScale);
         // Jaw animation in FK local space (before scale+calibration)
         if (entry.isGripper) {
           const jawOpen = (1 - curGripper / 100) * 10;
-          fkMatrix.multiply(new THREE.Matrix4().makeTranslation(0, entry.jawDirection * jawOpen, 0));
+          jawM2.makeTranslation(0, entry.jawDirection * jawOpen, 0);
+          fkMatrix.multiply(jawM2);
         }
         const s = scaleRef.current?.current ?? 1;
-        fkMatrix.multiply(new THREE.Matrix4().makeScale(s, s, s));
+        scaleM2.makeScale(s, s, s);
+        fkMatrix.multiply(scaleM2);
         fkMatrix.multiply(cal);
-        const finalPos = new THREE.Vector3();
-        const finalQuat = new THREE.Quaternion();
-        const finalScale = new THREE.Vector3();
         fkMatrix.decompose(finalPos, finalQuat, finalScale);
         entry.mesh.position.copy(finalPos);
         entry.mesh.quaternion.copy(finalQuat);
@@ -216,7 +237,8 @@ export default function StlRobotScene({
           world.multiply(jawM);
         }
         const s = scaleRef.current?.current ?? 1;
-        world.multiply(new THREE.Matrix4().makeScale(s, s, s));
+        scaleM.makeScale(s, s, s);
+        world.multiply(scaleM);
         world.multiply(cal);
         entry.mesh.matrix.copy(world);
         entry.mesh.matrixAutoUpdate = false;
@@ -259,14 +281,15 @@ export default function StlRobotScene({
         toggles={toggles}
         scaleRef={stlScaleRef}
       />
-      {/* Workspace point cloud */}
+      {/* Workspace point cloud — Float32Array memoizado (P3, Stage 3C):
+          antes se reconstruía por render (24KB + flat() por interacción) */}
       {workspacePoints && workspacePoints.length > 0 && (
         <points>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
               count={workspacePoints.length}
-              array={new Float32Array(workspacePoints.flat())}
+              array={workspaceArray}
               itemSize={3}
             />
           </bufferGeometry>

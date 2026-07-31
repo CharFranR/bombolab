@@ -1,14 +1,17 @@
 import type { Mat4, Pose, RobotDef } from '../kinematics/types';
-import { forwardKinematics } from '../wasm';
 import { useMemo } from 'react';
 
-export default function InfoPanel({ robot }: { robot: RobotDef }) {
+// P2 (Stage 3C): recibe rawFrames YA calculados por App — no ejecuta su
+// propia forwardKinematics (elimina la segunda serialización WASM por
+// render). Solo interpreta el resultado compartido.
+export default function InfoPanel({ robot, rawFrames }: { robot: RobotDef; rawFrames?: Mat4[] }) {
   const result = useMemo(
     () => {
-      const fk = forwardKinematics(robot.segments, robot.baseTransform);
-      const frames = fk.frames;
+      if (!rawFrames || rawFrames.length === 0) {
+        return { ee: null, tool: null };
+      }
       // Aplicar tool transform
-      const tool = fk.frames[fk.frames.length - 1];
+      const tool = rawFrames[rawFrames.length - 1];
       const toolMat: Mat4 = [
         1, 0, 0, robot.toolTransform[0],
         0, 1, 0, robot.toolTransform[1],
@@ -16,10 +19,12 @@ export default function InfoPanel({ robot }: { robot: RobotDef }) {
         0, 0, 0, 1,
       ];
       const m = mulMat4(tool, toolMat);
-      return { ee: poseFromMat4(frames[frames.length - 1]), tool: poseFromMat4(m) };
+      return { ee: poseFromMat4(rawFrames[rawFrames.length - 1]), tool: poseFromMat4(m) };
     },
-    [robot.segments, robot.baseTransform, robot.toolTransform],
+    [rawFrames, robot.toolTransform],
   );
+
+  if (!result.tool) return null;
 
   return (
     <div style={{ padding: '12px 16px', borderTop: '1px solid #333' }}>

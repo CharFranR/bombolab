@@ -289,6 +289,14 @@ export default function App() {
     [showWorkspace],
   );
 
+  // P2 (Stage 3C): FK calculado UNA vez en App y distribuido a los
+  // consumidores (RobotViewer + InfoPanel). App no interpreta ni modifica
+  // la cinemática — solo comparte el resultado crudo.
+  const rawFrames = useMemo(
+    () => robot ? forwardKinematics(robot.segments, robot.baseTransform).frames : [],
+    [robot],
+  );
+
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
   return (
@@ -325,7 +333,7 @@ export default function App() {
         </div>
 
         {/* Info panel */}
-        <InfoPanel robot={robot} />
+        <InfoPanel robot={robot} rawFrames={rawFrames} />
 
         {/* Fidelity toggle */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
@@ -626,6 +634,7 @@ export default function App() {
       <div style={{ flex: 1, position: 'relative' }}>
         <RobotViewer
           robot={robot}
+          rawFrames={rawFrames}
           gripper={gripper}
           workspacePoints={workspacePoints}
           ikTarget={ikTarget}
