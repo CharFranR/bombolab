@@ -104,15 +104,23 @@ export function forwardKinematics(segments: Segment[], base: [number, number, nu
     0, 0, 0, 1,
   ];
 
-  const baseMat: Mat4 = [
-    1, 0, 0, base[0],
-    0, 1, 0, base[1],
-    0, 0, 1, base[2],
+  // Contract: result.frames[0] is base·T₁ — the first JOINT frame, base
+  // already applied. The renderer expects frames[0] to be the WORLD frame
+  // (z=0, the ground where the base sits) so the fixed base parts
+  // (parentJoint 0) hang from the world, NOT from base_transform().
+  // Prepending the identity gives: [world, base·T₁, base·T₁T₂, ...].
+  // (Never prepend baseMat here: base is already inside every Rust frame;
+  //  doing so creates a phantom frame at (0,0,57) that calibration then
+  //  has to absorb — base parts end up buried ~26mm under the ground.)
+  const worldMat: Mat4 = [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
     0, 0, 0, 1,
   ];
 
   return {
-    frames: [baseMat, ...result.frames.map(toMat4)],
+    frames: [worldMat, ...result.frames.map(toMat4)],
     ee: toMat4(result.ee),
   };
 }

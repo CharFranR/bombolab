@@ -2,7 +2,7 @@
  * STL load order and per-mesh metadata.
  *
  * Joint mapping (from user):
- *   0 = base rotation    → Base.stl, Tapa Base.stl
+ *   0 = world frame (z=0, ground) → Base.stl, Tapa Base.stl (fixed parts)
  *   1 = shoulder         → Eje Central.stl    (base → shoulder, 95mm)
  *   2 = elbow            → Antebrazo.stl      (shoulder → elbow, 162mm)
  *   3 = wrist roll       → Brazo.stl          (elbow → wrist, 111mm)
@@ -10,6 +10,10 @@
  *  -1 = tool-tip frame   → Base de la garra, Engranajes, Pinzas
  *
  * jawDirection: 0 = rigid part, -1/+1 = gripper jaw opening axis (±Y).
+ *
+ * NOTE: parentJoint indexes into the TS frames array exposed by wasm.ts,
+ * whose frame 0 is the WORLD frame (identity). The Rust frames
+ * (base·T₁ … base·T₁…T₅) start at index 1 — base is already applied.
  */
 
 export interface StlMeta {
