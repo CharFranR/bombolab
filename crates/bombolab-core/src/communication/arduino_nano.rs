@@ -58,11 +58,10 @@ impl ArduinoNano {
                 port: self.port_name.clone(),
                 source: e.to_string(),
             })?;
-        port.flush()
-            .map_err(|e| ConnectionError::WriteFailed {
-                port: self.port_name.clone(),
-                source: e.to_string(),
-            })?;
+        port.flush().map_err(|e| ConnectionError::WriteFailed {
+            port: self.port_name.clone(),
+            source: e.to_string(),
+        })?;
         Ok(())
     }
 

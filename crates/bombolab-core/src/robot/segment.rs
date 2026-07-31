@@ -32,7 +32,7 @@ impl Segment {
                 self.dh.alpha,
             ),
             JointType::Prismatic => (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha),
-            // Twist joints use Rot_x(alpha + q) · Trans_x(a) · Trans_y(d).
+            // Twist joints implement Trans(a, d, 0) · Rot_x(alpha + q).
             JointType::Twist => (0.0, self.dh.d, self.dh.a, self.joint.value + self.dh.alpha),
         }
     }

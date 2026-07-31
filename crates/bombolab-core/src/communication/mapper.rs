@@ -165,7 +165,15 @@ mod tests {
     fn test_inf_q_rejected() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        assert!(mapper.map_q(&[f64::INFINITY, 0.0, 0.0, 0.0, 0.0], 90).is_err());
-        assert!(mapper.map_q(&[f64::NEG_INFINITY, 0.0, 0.0, 0.0, 0.0], 90).is_err());
+        assert!(
+            mapper
+                .map_q(&[f64::INFINITY, 0.0, 0.0, 0.0, 0.0], 90)
+                .is_err()
+        );
+        assert!(
+            mapper
+                .map_q(&[f64::NEG_INFINITY, 0.0, 0.0, 0.0, 0.0], 90)
+                .is_err()
+        );
     }
 }

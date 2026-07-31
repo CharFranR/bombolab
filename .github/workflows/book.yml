@@ -7,6 +7,12 @@ on:
       - "docs/src/**"
       - "book.toml"
       - ".github/workflows/book.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "docs/src/**"
+      - "book.toml"
+      - ".github/workflows/book.yml"
   workflow_dispatch:
 
 permissions:

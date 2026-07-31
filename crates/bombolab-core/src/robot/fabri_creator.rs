@@ -8,7 +8,8 @@ use super::segment::{Robot, Segment};
 
 /// Create the FABRI Creator robot configuration.
 ///
-/// Robot de 5 GDL con servos SG90, Arduino Nano y PCA9685.
+/// Robot de 5 GDL con servos SG90 y Arduino Nano (control directo por pins,
+/// sin placa PCA9685 — nota de variante de hardware si se agrega un driver).
 /// Basado en la tabla de `docs/fabri-creator/table-definition.md`.
 pub fn fabri_creator() -> Robot {
     let q_max = 85.0_f64.to_radians();

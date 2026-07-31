@@ -18,6 +18,7 @@ const unsigned long HOLD_TIMEOUT_MS = 5000;
 // Wire pos 3 = J4 roll    → pin A4
 // Wire pos 4 = J5 pitch   → pin 13
 // Wire pos 5 = Gripper    → pin A5
+// VERIFICAR contra el cableado físico real
 const int SERVO_PINS[NUM_SERVOS] = {A1, A0, A2, A4, 13, A5};
 
 Servo servos[NUM_SERVOS];

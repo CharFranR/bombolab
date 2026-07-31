@@ -48,3 +48,43 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+
+  core-ws-bridge:
+    name: Core with ws-bridge feature
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/bombolab-core
+      - run: cargo check --manifest-path crates/bombolab-core/Cargo.toml --features ws-bridge
+      - run: cargo clippy --manifest-path crates/bombolab-core/Cargo.toml --features ws-bridge -- -D warnings
+
+  web-tsc:
+    name: Web typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx tsc --noEmit
+        working-directory: web
+
+  firmware:
+    name: Firmware build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install platformio
+      - run: pio run -d "arduino/Arduino Nano"

@@ -187,7 +187,7 @@ impl IkSolver {
             }
 
             // 4. DLS: Δq = J^T · (J·J^T + λ²·I)⁻¹ · error
-            let jjt = &j * j.transpose();
+            let jjt = j * j.transpose();
             let reg = jjt + SMatrix::<f64, 3, 3>::identity() * damping_sq;
 
             if let Some(inv) = reg.try_inverse() {
@@ -360,6 +360,8 @@ impl OrientationSolver {
 ///
 /// Si la orientación no es alcanzable, devuelve
 /// `IkError::UnreachableOrientation` sin modificar la posición.
+// API refactor (argument struct) is deferred to the architecture stage.
+#[allow(clippy::too_many_arguments)]
 pub fn solve_full_ik(
     pos_solver: &IkSolver,
     orient_solver: &OrientationSolver,
@@ -556,7 +558,10 @@ mod tests {
         let result = solver.solve_position(&target, &empty, &robot, &base, &tool);
         assert!(matches!(
             result,
-            Err(IkError::InvalidInitLength { expected: 5, got: 0 })
+            Err(IkError::InvalidInitLength {
+                expected: 5,
+                got: 0
+            })
         ));
 
         // q_init corto (menos articulaciones que el robot) → Err.
@@ -564,7 +569,10 @@ mod tests {
         let result = solver.solve_position(&target, &short, &robot, &base, &tool);
         assert!(matches!(
             result,
-            Err(IkError::InvalidInitLength { expected: 5, got: 3 })
+            Err(IkError::InvalidInitLength {
+                expected: 5,
+                got: 3
+            })
         ));
 
         // q_init largo → Err.
@@ -572,7 +580,10 @@ mod tests {
         let result = solver.solve_position(&target, &long, &robot, &base, &tool);
         assert!(matches!(
             result,
-            Err(IkError::InvalidInitLength { expected: 5, got: 7 })
+            Err(IkError::InvalidInitLength {
+                expected: 5,
+                got: 7
+            })
         ));
     }
 
@@ -1085,7 +1096,7 @@ mod full_ik_tests {
         let orient_solver = OrientationSolver::new(1e-10); // tolerancia estricta
 
         // Usar home position (alcanzable desde q_init=[0;5])
-        // Home: q=[0;5] → TCP ~ (236, 0, 314)
+        // Home: q=[0;5] → TCP ≈ (215, −15, 262)
         let target_pos = [236.0, 0.0, 314.0];
 
         // Obtener R05 en home
