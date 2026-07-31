@@ -37,6 +37,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gripper jaw directions corrected for center-closing behavior
 - `dh_params()` for Twist joints now returns actual `d` value instead of hardcoded 0
 
+### Known Technical Debt
+
+- **DH → Three.js representation is a reflection (C-3)** — `framePose` in
+  `web/src/renderers/types.ts` maps `(x, y, z)_DH → (x, z, y)_three`, a
+  transformation with `det = −1` (improper). The correct Z-up→Y-up rotation
+  is `(x, −z, y)` (`det = +1`). The rendered robot is the MIRROR IMAGE of
+  the physical robot: non-vertical joint rotations (J2–J5) appear inverted
+  and asymmetric parts appear on the wrong side. Internally consistent (all
+  layers use the same mapping and calibration was tuned on the mirrored
+  render), and the FABRI's near-symmetry hides it in practice — but a
+  camera/computer-vision integration or any asymmetric part would expose it
+  directly. Fix is one sign flip (`te[6] = -f[6]` or `te[14] = -f[7]`) but
+  requires full visual re-calibration of the 11 STL entries. **Deferred by
+  maintainer decision**: correct when validated against the physical robot
+  or when vision integration requires it.
+- **Physical pin table unverified** — servo pin mapping (J1→A1, J2→A0,
+  J3→A2, J4→A4, J5→13, Gripper→A5) was unified to the firmware as the
+  source of truth; still needs validation against the physical wiring
+  (marked `VERIFICAR contra el cableado físico real` in
+  `communication/mod.rs` and firmware `main.cpp`).
+- **Dynamics simplifications** — `dynamics.rs` models COM at frame origins,
+  masses/inertias are estimates (PETG 25% + MG996R/MG90S specs), and no
+  Coriolis/centrifugal term exists. Acceptable for educational use;
+  revisit if used for control.
+
 ## [0.1.0] - 2026-01-01
 
 ### Added

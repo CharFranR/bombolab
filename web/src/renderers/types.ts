@@ -71,6 +71,17 @@ export interface VisualLink {
 /** Converts a DH row-major 4×4 (Z-up convention) into a Three.js FramePose. */
 export function framePose(f: Mat4): FramePose {
   // DH → Three.js: X→X, Z→Y(up), Y→Z
+  //
+  // ⚠️ KNOWN TECHNICAL DEBT (C-3): this mapping (x,y,z)_DH → (x,z,y)_three
+  // is a REFLECTION (det = −1), not a rotation. The correct Z-up→Y-up
+  // rotation is (x,−z,y) (det = +1), which differs by one sign flip:
+  //   te[6] = -f[6]  (or equivalently te[14] = -f[7])
+  // The rendered robot is therefore the MIRROR image of the physical
+  // robot. Kept intentionally: the whole pipeline (calibration.json,
+  // debug axes, gizmo) is calibrated against this mirrored render and the
+  // FABRI is near-symmetric, so it is invisible in practice. DO NOT "fix"
+  // the sign without re-calibrating all 11 STL entries AND validating
+  // against the physical robot (see CHANGELOG → Known Technical Debt).
   const m = new THREE.Matrix4();
   const te = m.elements;
   // Col 0: X (DH column 0 → Three column 0)
