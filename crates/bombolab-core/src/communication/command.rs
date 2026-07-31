@@ -1,14 +1,15 @@
 //! Typed replacement for raw `[i32; 6]` arrays.
 //!
-//! Encapsulates 5 joint angles (degrees) and 1 gripper angle (0–180)
-//! with range validation and wire serialization.
+//! Encapsulates 5 joint angles (degrees) and 1 gripper angle, both
+//! validated to the firmware range [10°, 170°] with wire serialization.
 
 use super::{ANGLE_MAX, ANGLE_MIN};
 
 /// Servo command — 5 joint angles + gripper.
 ///
 /// Joints are in **degrees**, validated to [10°, 170°].
-/// Gripper is in 0–180 range (standard servo range).
+/// Gripper is also in [10°, 170°] — same contract as the firmware,
+/// which rejects every value outside that range.
 ///
 /// # Wire format
 ///
@@ -18,7 +19,7 @@ use super::{ANGLE_MAX, ANGLE_MIN};
 pub struct ServoCommand {
     /// 5 joint angles in degrees, indexed [J1..J5].
     pub joints: [f64; 5],
-    /// Gripper angle (0–180, standard servo range).
+    /// Gripper angle in degrees, same [10°, 170°] range as the joints.
     pub gripper: u8,
 }
 
@@ -28,18 +29,21 @@ impl ServoCommand {
     /// # Errors
     ///
     /// Returns an error string if any joint is outside [`ANGLE_MIN`, `ANGLE_MAX`]
-    /// or if gripper > 180.
+    /// or non-finite (NaN/±Inf), or if the gripper is outside the same range.
     pub fn new(joints: [f64; 5], gripper: u8) -> Result<Self, &'static str> {
         let min = ANGLE_MIN as f64;
         let max = ANGLE_MAX as f64;
 
         for &j in &joints {
-            if j < min || j > max {
-                return Err("joint angle out of range");
+            // `NaN < min` y `NaN > max` son false: hay que rechazar no finitos
+            // explícitamente, o NaN pasaría la validación.
+            if !j.is_finite() || j < min || j > max {
+                return Err("joint angle out of range (non-finite)");
             }
         }
 
-        if gripper > 180 {
+        // Mismo rango que el firmware: rechaza todo lo que no esté en [10, 170].
+        if gripper < ANGLE_MIN as u8 || gripper > ANGLE_MAX as u8 {
             return Err("gripper angle out of range");
         }
 
@@ -115,10 +119,10 @@ mod tests {
 
     #[test]
     fn test_valid_construction_at_boundaries() {
-        let cmd = ServoCommand::new([10.0, 170.0, 10.0, 170.0, 90.0], 0).unwrap();
+        let cmd = ServoCommand::new([10.0, 170.0, 10.0, 170.0, 90.0], 10).unwrap();
         assert_eq!(cmd.joints[0], 10.0);
         assert_eq!(cmd.joints[1], 170.0);
-        assert_eq!(cmd.gripper, 0);
+        assert_eq!(cmd.gripper, 10);
     }
 
     // ─── Construction: joint validation ──────────────────────────
@@ -135,17 +139,43 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // ─── Construction: non-finite rejection ─────────────────────────────
+
+    #[test]
+    fn test_joint_nan_rejected() {
+        let result = ServoCommand::new([f64::NAN, 115.0, 110.0, 170.0, 90.0], 90);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_joint_positive_inf_rejected() {
+        let result = ServoCommand::new([f64::INFINITY, 115.0, 110.0, 170.0, 90.0], 90);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_joint_negative_inf_rejected() {
+        let result = ServoCommand::new([f64::NEG_INFINITY, 115.0, 110.0, 170.0, 90.0], 90);
+        assert!(result.is_err());
+    }
+
     // ─── Construction: gripper validation ────────────────────────
 
     #[test]
     fn test_gripper_at_max_accepted() {
-        let cmd = ServoCommand::new([90.0; 5], 180).unwrap();
-        assert_eq!(cmd.gripper, 180);
+        let cmd = ServoCommand::new([90.0; 5], 170).unwrap();
+        assert_eq!(cmd.gripper, 170);
     }
 
     #[test]
-    fn test_gripper_overflow_rejected() {
-        let result = ServoCommand::new([90.0; 5], 181);
+    fn test_gripper_above_max_rejected() {
+        let result = ServoCommand::new([90.0; 5], 171);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gripper_below_min_rejected() {
+        let result = ServoCommand::new([90.0; 5], 9);
         assert!(result.is_err());
     }
 
@@ -195,14 +225,14 @@ mod tests {
     // ─── Edge cases ──────────────────────────────────────────────
 
     #[test]
-    fn test_gripper_zero_accepted() {
-        let cmd = ServoCommand::new([90.0; 5], 0).unwrap();
-        assert_eq!(cmd.gripper, 0);
+    fn test_gripper_min_accepted() {
+        let cmd = ServoCommand::new([90.0; 5], 10).unwrap();
+        assert_eq!(cmd.gripper, 10);
     }
 
     #[test]
     fn test_gripper_255_rejected() {
-        // u8 can hold 255, but ServoCommand only accepts up to 180
+        // u8 can hold 255, but ServoCommand only accepts up to 170
         let result = ServoCommand::new([90.0; 5], 255);
         assert!(result.is_err());
     }

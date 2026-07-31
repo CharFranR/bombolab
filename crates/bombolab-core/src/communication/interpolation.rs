@@ -9,6 +9,8 @@ use super::ServoCommand;
 /// Configuration for interpolation step size and timing.
 pub struct InterpolationConfig {
     /// Angle increment per step in degrees.
+    ///
+    /// Must be `> 0` — asserted in `interpolate_all` and `interpolate_joint`.
     pub step_size: i32,
     /// Delay between steps in milliseconds.
     pub delay_ms: u64,
@@ -25,29 +27,36 @@ impl Default for InterpolationConfig {
 
 /// Linear interpolation from current to target angle, stepping by `step_size`.
 /// Returns intermediate angles (exclusive start, inclusive end).
+///
+/// Precondition: `step_size > 0` (asserted).
 pub fn interpolate_joint(current: i32, target: i32, step_size: i32) -> Vec<i32> {
+    assert!(step_size > 0, "step_size must be > 0");
+
     if current == target {
         return Vec::new();
     }
 
-    let distance = (target - current).abs();
-    if step_size >= distance {
+    // i64 internals: `target - current` can overflow i32 (e.g. -170 → i32::MAX).
+    let distance = (target as i64 - current as i64).abs();
+    if step_size as i64 >= distance {
         return vec![target];
     }
 
-    let direction = if target > current { 1 } else { -1 };
+    let direction: i64 = if target > current { 1 } else { -1 };
+    let step = step_size as i64;
+    let target_i = target as i64;
     let mut steps = Vec::new();
-    let mut pos = current;
+    let mut pos: i64 = current as i64;
 
     loop {
-        pos += direction * step_size;
-        steps.push(pos);
-        if pos == target {
+        pos += direction * step;
+        steps.push(pos as i32);
+        if pos == target_i {
             break;
         }
         // If next step would overshoot the target, append target and finish
-        let next = pos + direction * step_size;
-        if direction * (next - target) >= 0 {
+        let next = pos + direction * step;
+        if direction * (next - target_i) >= 0 {
             steps.push(target);
             break;
         }
@@ -63,6 +72,8 @@ pub fn interpolate_all(
     target: &[i32; 6],
     config: &InterpolationConfig,
 ) -> Vec<[i32; 6]> {
+    assert!(config.step_size > 0, "step_size must be > 0");
+
     let joint_steps: Vec<Vec<i32>> = current
         .iter()
         .zip(target.iter())
@@ -217,5 +228,46 @@ mod tests {
         let steps = interpolate_all(&current, &target, &config);
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0], [92; 6]);
+    }
+
+    // ─── Preconditions and overflow ──────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "step_size must be > 0")]
+    fn interpolate_joint_zero_step_panics() {
+        interpolate_joint(90, 100, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "step_size must be > 0")]
+    fn interpolate_joint_negative_step_panics() {
+        interpolate_joint(90, 100, -5);
+    }
+
+    #[test]
+    #[should_panic(expected = "step_size must be > 0")]
+    fn interpolate_all_zero_step_panics() {
+        let config = InterpolationConfig {
+            step_size: 0,
+            delay_ms: 0,
+        };
+        interpolate_all(&[90; 6], &[100; 6], &config);
+    }
+
+    #[test]
+    fn interpolate_joint_extreme_values_no_overflow() {
+        // La distancia (-170 → i32::MAX) desborda i32: el cálculo interno
+        // debe usar i64. Con step grande el resultado es corto.
+        let steps = interpolate_joint(-170, i32::MAX, 1_000_000_000);
+        assert!(!steps.is_empty());
+        assert_eq!(*steps.last().unwrap(), i32::MAX);
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0], 999_999_830);
+        assert_eq!(steps[1], 1_999_999_830);
+
+        // Descendente con distancia máxima (i32::MAX → i32::MIN).
+        let steps = interpolate_joint(i32::MAX, i32::MIN, i32::MAX);
+        assert_eq!(*steps.last().unwrap(), i32::MIN);
+        assert_eq!(steps.len(), 3);
     }
 }
