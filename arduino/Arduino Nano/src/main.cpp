@@ -1,8 +1,14 @@
 #include <Arduino.h>
 #include <Servo.h>
 
+// Failsafe (watchdog): if no valid frame is received within HOLD_TIMEOUT_MS,
+// the servos are parked at the home pose (90,90,90,90,90,90) once per timeout
+// period. A new accepted frame resumes normal control. This prevents the arm
+// from holding torque forever if the host dies or the cable is unplugged.
+
 
 const int NUM_SERVOS = 6;
+const unsigned long HOLD_TIMEOUT_MS = 5000;
 
 // Pin mapping — ordered to match ServoCommand wire format:
 //   J1(yaw), J2(shoulder), J3(elbow), J4(roll), J5(pitch), Gripper
@@ -18,6 +24,10 @@ Servo servos[NUM_SERVOS];
 
 int actual_positions[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
 
+// Last accepted frame timestamp + failsafe parking state (see loop()).
+unsigned long last_command_ms = 0;
+bool parked = true;  // boot pose is the home pose; nothing to park yet
+
 // ---------------------------------------------------------------------------
 // Serial protocol parser — character-by-character, no sscanf
 // ---------------------------------------------------------------------------
@@ -25,15 +35,27 @@ int actual_positions[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
 // Rejects: extra commas, non-numeric chars, wrong field count, empty lines.
 // Returns true on success, false on any parse error.
 // ---------------------------------------------------------------------------
+// Drain the serial RX buffer until a newline is consumed (or the buffer is
+// empty), so a rejected frame cannot corrupt the next one.
+static void drain_rx_until_newline() {
+    while (Serial.available()) {
+        char discard = Serial.read();
+        if (discard == '\n') break;
+    }
+}
+
 bool read_positions_serial(int positions[6]) {
     int idx = 0;
-    int value = 0;
+    long value = 0;  // long is 32-bit on AVR; int is 16-bit and a 5-digit field would wrap
+    int digit_count = 0;
     bool has_digit = false;
     unsigned long start = millis();
 
     while (true) {
-        // Timeout — prevent blocking forever on a partial line
+        // Timeout — prevent blocking forever on a partial line, and drain the
+        // rest of the line so residual bytes cannot corrupt the next frame
         if (millis() - start > 100) {
+            drain_rx_until_newline();
             return false;
         }
 
@@ -62,6 +84,13 @@ bool read_positions_serial(int positions[6]) {
         if (c >= '0' && c <= '9') {
             value = value * 10 + (c - '0');
             has_digit = true;
+            digit_count++;
+            // No angle can have more than 3 digits (max 170). Rejecting here
+            // also prevents a 5-digit field from wrapping the 16-bit range.
+            if (digit_count > 3) {
+                drain_rx_until_newline();
+                return false;
+            }
         }
         // Comma — store current value and advance to next field
         else if (c == ',') {
@@ -69,13 +98,11 @@ bool read_positions_serial(int positions[6]) {
             positions[idx++] = value;
             value = 0;
             has_digit = false;
+            digit_count = 0;
         }
         // Invalid character — flush rest of line and fail
         else {
-            while (Serial.available()) {
-                char discard = Serial.read();
-                if (discard == '\n') break;
-            }
+            drain_rx_until_newline();
             return false;
         }
     }
@@ -93,7 +120,10 @@ void setup() {
     Serial.begin(115200);
 
     for (int i = 0; i < NUM_SERVOS; i++) {
-        servos[i].attach(SERVO_PINS[i]);
+        // Explicit Arduino Servo defaults (544–2400 µs) — no behavior change,
+        // but makes the pulse range visible. Per-servo µs calibration
+        // (SG90 nominal 500–2400 µs) is future work.
+        servos[i].attach(SERVO_PINS[i], 544, 2400);
     }
 
     apply_movement(actual_positions);
@@ -101,6 +131,14 @@ void setup() {
 
 
 void loop() {
+    // Failsafe: park at home pose once per timeout period when no valid
+    // frame has arrived (host died, cable unplugged, etc.).
+    if (millis() - last_command_ms > HOLD_TIMEOUT_MS && !parked) {
+        int park_positions[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
+        apply_movement(park_positions);
+        parked = true;
+    }
+
     if (!Serial.available()) {
         return;
     }
@@ -115,6 +153,8 @@ void loop() {
 
     if (read_positions_serial(new_positions)) {
         apply_movement(new_positions);
+        last_command_ms = millis();
+        parked = false;
         Serial.println(F("OK"));
     } else {
         Serial.println(F("ERR"));
