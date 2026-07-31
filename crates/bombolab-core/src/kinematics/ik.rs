@@ -3,7 +3,7 @@ use std::fmt;
 use nalgebra::SMatrix;
 
 use crate::math::{Iso3, Rot3, Vec3};
-use crate::robot::{DHParams, Joint, JointType, Robot, Segment};
+use crate::robot::{Joint, JointType, Robot, Segment};
 
 use super::forward::forward_kinematics;
 
@@ -65,7 +65,7 @@ fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
                 seg.joint.value_max,
                 seg.joint.value_min,
             );
-            let dh = DHParams::new(seg.dh.theta, seg.dh.d, seg.dh.a, seg.dh.alpha);
+            let dh = seg.dh; // DHParams es Copy — copia directa, sin reconstrucción
             Segment::new(joint, dh)
         })
         .collect();

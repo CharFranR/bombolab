@@ -1,8 +1,14 @@
 use wasm_bindgen::prelude::*;
 
+use bombolab_core::kinematics::{
+    IkSolver, OrientationSolver, forward_kinematics as fk, solve_drawing_ik as solve_drawing,
+    solve_drawing_ik_v2 as solve_drawing_v2,
+};
 use bombolab_core::math::Iso3;
-use bombolab_core::robot::{fabri_creator as make_fabri_creator, base_transform as make_base_transform, tool_transform as make_tool_transform, DHParams, Joint, JointType, Robot, Segment};
-use bombolab_core::kinematics::{forward_kinematics as fk, OrientationSolver, solve_drawing_ik as solve_drawing, solve_drawing_ik_v2 as solve_drawing_v2, IkSolver};
+use bombolab_core::robot::{
+    Joint, JointType, Robot, Segment, base_transform as make_base_transform,
+    fabri_creator as make_fabri_creator, tool_transform as make_tool_transform,
+};
 
 // ─── Serializable types for JS interop ──────────────────────────────────────
 
@@ -43,9 +49,18 @@ pub struct JsFkResult {
 fn iso3_to_array(t: &Iso3) -> [f64; 12] {
     let m = t.to_matrix();
     [
-        m[(0, 0)], m[(0, 1)], m[(0, 2)], m[(0, 3)],
-        m[(1, 0)], m[(1, 1)], m[(1, 2)], m[(1, 3)],
-        m[(2, 0)], m[(2, 1)], m[(2, 2)], m[(2, 3)],
+        m[(0, 0)],
+        m[(0, 1)],
+        m[(0, 2)],
+        m[(0, 3)],
+        m[(1, 0)],
+        m[(1, 1)],
+        m[(1, 2)],
+        m[(1, 3)],
+        m[(2, 0)],
+        m[(2, 1)],
+        m[(2, 2)],
+        m[(2, 3)],
     ]
 }
 
@@ -53,9 +68,15 @@ fn array_to_iso3(arr: &[f64; 12]) -> Iso3 {
     use nalgebra::{Translation3, UnitQuaternion};
     let translation = Translation3::new(arr[3], arr[7], arr[11]);
     // Extract rotation columns from 3x4 matrix (ignoring translation)
-    let r00 = arr[0]; let r01 = arr[1]; let r02 = arr[2];
-    let r10 = arr[4]; let r11 = arr[5]; let r12 = arr[6];
-    let r20 = arr[8]; let r21 = arr[9]; let r22 = arr[10];
+    let r00 = arr[0];
+    let r01 = arr[1];
+    let r02 = arr[2];
+    let r10 = arr[4];
+    let r11 = arr[5];
+    let r12 = arr[6];
+    let r20 = arr[8];
+    let r21 = arr[9];
+    let r22 = arr[10];
     // Build rotation matrix and convert to quaternion
     let rot = nalgebra::Matrix3::new(r00, r01, r02, r10, r11, r12, r20, r21, r22);
     let rotation = UnitQuaternion::from_matrix(&rot);
@@ -80,17 +101,20 @@ fn joint_type_from_str(s: &str) -> JointType {
 }
 
 fn robot_from_js(js_robot: &JsRobotDef) -> Robot {
-    let segments = js_robot.segments.iter().map(|s| {
-        let joint = bombolab_core::robot::Joint::new(
-            joint_type_from_str(&s.joint_type),
-            s.q,
-            s.q_max,
-            s.q_min,
-        );
-        let dh = bombolab_core::robot::DHParams::new(s.theta, s.d, s.a, s.alpha);
-        bombolab_core::robot::Segment::new(joint, dh)
-    }).collect();
-
+    let segments = js_robot
+        .segments
+        .iter()
+        .map(|s| {
+            let joint = bombolab_core::robot::Joint::new(
+                joint_type_from_str(&s.joint_type),
+                s.q,
+                s.q_max,
+                s.q_min,
+            );
+            let dh = bombolab_core::robot::DHParams::new(s.theta, s.d, s.a, s.alpha);
+            bombolab_core::robot::Segment::new(joint, dh)
+        })
+        .collect();
     Robot::new(segments)
 }
 
@@ -103,8 +127,7 @@ fn to_js_value<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
 
 /// Deserializa un `JsRobotDef` desde JS, mapeando el error a JS.
 fn robot_from_js_value(js_robot: &JsValue) -> Result<JsRobotDef, JsValue> {
-    serde_wasm_bindgen::from_value(js_robot.clone())
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serde_wasm_bindgen::from_value(js_robot.clone()).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Return the FABRI Creator robot definition.
@@ -117,8 +140,10 @@ pub fn fabri_creator() -> Result<JsValue, JsValue> {
     let tool = make_tool_transform();
 
     let js_robot = JsRobotDef {
-        segments: robot.segments.iter().map(|seg| {
-            JsSegment {
+        segments: robot
+            .segments
+            .iter()
+            .map(|seg| JsSegment {
                 q: seg.joint.value,
                 theta: seg.dh.theta,
                 d: seg.dh.d,
@@ -127,8 +152,8 @@ pub fn fabri_creator() -> Result<JsValue, JsValue> {
                 q_min: seg.joint.value_min,
                 q_max: seg.joint.value_max,
                 joint_type: joint_type_to_str(&seg.joint.joint_type).to_string(),
-            }
-        }).collect(),
+            })
+            .collect(),
         base_transform: iso3_to_array(&base),
         tool_transform: iso3_to_array(&tool),
     };
@@ -184,19 +209,36 @@ pub fn solve_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> Result<Js
         Ok(q) => {
             // Re-compute FK with solved q to get actual error
             let solved_robot = {
-                let segments: Vec<_> = robot.segments.iter().zip(q.iter()).map(|(seg, &val)| {
-                    let joint = Joint::new(seg.joint.joint_type, val, seg.joint.value_max, seg.joint.value_min);
-                    Segment::new(joint, DHParams::new(seg.dh.theta, seg.dh.d, seg.dh.a, seg.dh.alpha))
-                }).collect();
+                let segments: Vec<_> = robot
+                    .segments
+                    .iter()
+                    .zip(q.iter())
+                    .map(|(seg, &val)| {
+                        let joint = Joint::new(
+                            seg.joint.joint_type,
+                            val,
+                            seg.joint.value_max,
+                            seg.joint.value_min,
+                        );
+                        Segment::new(joint, seg.dh) // DHParams es Copy
+                    })
+                    .collect();
                 Robot::new(segments)
             };
             let (frames, _) = fk(base, &solved_robot);
-            let tool_pose = frames.last().ok_or_else(|| JsValue::from_str("robot has no segments"))? * tool;
+            let tool_pose = frames
+                .last()
+                .ok_or_else(|| JsValue::from_str("robot has no segments"))?
+                * tool;
             let p_ee = tool_pose.translation.vector;
             let target_v = nalgebra::Vector3::new(target_arr[0], target_arr[1], target_arr[2]);
             let error = (target_v - p_ee).norm();
 
-            let result = JsIkResult { q, converged: true, error };
+            let result = JsIkResult {
+                q,
+                converged: true,
+                error,
+            };
             to_js_value(&result)
         }
         Err(e) => match e {
@@ -226,7 +268,11 @@ pub fn solve_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> Result<Js
 /// Returns a `Result`; on malformed input a JS exception is thrown
 /// (never traps).
 #[wasm_bindgen]
-pub fn solve_drawing_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> Result<JsValue, JsValue> {
+pub fn solve_drawing_ik(
+    js_robot: &JsValue,
+    target: &[f64],
+    q_init: &[f64],
+) -> Result<JsValue, JsValue> {
     let js_robot = robot_from_js_value(js_robot)?;
     let robot = robot_from_js(&js_robot);
     let base = array_to_iso3(&js_robot.base_transform);
@@ -241,11 +287,23 @@ pub fn solve_drawing_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> R
     let orient_solver = OrientationSolver::new(1e-6);
 
     // 1. Intentar IK completa con orientación adaptativa
-    match solve_drawing(&pos_solver, &orient_solver, &target_arr, q_init, &robot, &base, &tool) {
+    match solve_drawing(
+        &pos_solver,
+        &orient_solver,
+        &target_arr,
+        q_init,
+        &robot,
+        &base,
+        &tool,
+    ) {
         Ok(q) => {
             // Éxito: devolver solución completa
             let error = compute_position_error(&robot, &q, &target_arr, &base, &tool)?;
-            let result = JsIkResult { q, converged: true, error };
+            let result = JsIkResult {
+                q,
+                converged: true,
+                error,
+            };
             to_js_value(&result)
         }
         Err(_) => {
@@ -253,7 +311,11 @@ pub fn solve_drawing_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> R
             match pos_solver.solve_position(&target_arr, q_init, &robot, &base, &tool) {
                 Ok(q) => {
                     let error = compute_position_error(&robot, &q, &target_arr, &base, &tool)?;
-                    let result = JsIkResult { q, converged: true, error };
+                    let result = JsIkResult {
+                        q,
+                        converged: true,
+                        error,
+                    };
                     to_js_value(&result)
                 }
                 Err(e) => match e {
@@ -282,7 +344,11 @@ pub fn solve_drawing_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> R
 /// Returns a `Result`; on malformed input a JS exception is thrown
 /// (never traps).
 #[wasm_bindgen]
-pub fn solve_drawing_ik_v2(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> Result<JsValue, JsValue> {
+pub fn solve_drawing_ik_v2(
+    js_robot: &JsValue,
+    target: &[f64],
+    q_init: &[f64],
+) -> Result<JsValue, JsValue> {
     let js_robot = robot_from_js_value(js_robot)?;
     let robot = robot_from_js(&js_robot);
     let base = array_to_iso3(&js_robot.base_transform);
@@ -296,32 +362,46 @@ pub fn solve_drawing_ik_v2(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -
     let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
     let orient_solver = OrientationSolver::new(1e-6);
 
-    match solve_drawing_v2(&pos_solver, &orient_solver, &target_arr, q_init, &robot, &base, &tool) {
+    match solve_drawing_v2(
+        &pos_solver,
+        &orient_solver,
+        &target_arr,
+        q_init,
+        &robot,
+        &base,
+        &tool,
+    ) {
         Ok(q) => {
             let error = compute_position_error(&robot, &q, &target_arr, &base, &tool)?;
-            let result = JsIkResult { q, converged: true, error };
+            let result = JsIkResult {
+                q,
+                converged: true,
+                error,
+            };
             to_js_value(&result)
         }
-        Err(_) => {
-            match pos_solver.solve_position(&target_arr, q_init, &robot, &base, &tool) {
-                Ok(q) => {
-                    let error = compute_position_error(&robot, &q, &target_arr, &base, &tool)?;
-                    let result = JsIkResult { q, converged: true, error };
+        Err(_) => match pos_solver.solve_position(&target_arr, q_init, &robot, &base, &tool) {
+            Ok(q) => {
+                let error = compute_position_error(&robot, &q, &target_arr, &base, &tool)?;
+                let result = JsIkResult {
+                    q,
+                    converged: true,
+                    error,
+                };
+                to_js_value(&result)
+            }
+            Err(e) => match e {
+                bombolab_core::kinematics::IkError::MaxIterationsReached { error } => {
+                    let result = JsIkResult {
+                        q: q_init.to_vec(),
+                        converged: false,
+                        error,
+                    };
                     to_js_value(&result)
                 }
-                Err(e) => match e {
-                    bombolab_core::kinematics::IkError::MaxIterationsReached { error } => {
-                        let result = JsIkResult {
-                            q: q_init.to_vec(),
-                            converged: false,
-                            error,
-                        };
-                        to_js_value(&result)
-                    }
-                    other => Err(JsValue::from_str(&other.to_string())),
-                },
-            }
-        }
+                other => Err(JsValue::from_str(&other.to_string())),
+            },
+        },
     }
 }
 
@@ -329,13 +409,29 @@ pub fn solve_drawing_ik_v2(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -
 ///
 /// Returns a `Result` so an empty robot chain surfaces as a JS error
 /// instead of trapping on `frames.last().unwrap()`.
-fn compute_position_error(robot: &Robot, q: &[f64], target: &[f64; 3], base: &Iso3, tool: &Iso3) -> Result<f64, JsValue> {
-    use bombolab_core::robot::{Joint, DHParams, Segment, Robot};
+fn compute_position_error(
+    robot: &Robot,
+    q: &[f64],
+    target: &[f64; 3],
+    base: &Iso3,
+    tool: &Iso3,
+) -> Result<f64, JsValue> {
+    use bombolab_core::robot::{Joint, Robot, Segment};
     let solved = {
-        let segments: Vec<_> = robot.segments.iter().zip(q.iter()).map(|(seg, &val)| {
-            let joint = Joint::new(seg.joint.joint_type, val, seg.joint.value_max, seg.joint.value_min);
-            Segment::new(joint, DHParams::new(seg.dh.theta, seg.dh.d, seg.dh.a, seg.dh.alpha))
-        }).collect();
+        let segments: Vec<_> = robot
+            .segments
+            .iter()
+            .zip(q.iter())
+            .map(|(seg, &val)| {
+                let joint = Joint::new(
+                    seg.joint.joint_type,
+                    val,
+                    seg.joint.value_max,
+                    seg.joint.value_min,
+                );
+                Segment::new(joint, seg.dh) // DHParams es Copy
+            })
+            .collect();
         Robot::new(segments)
     };
     let (frames, _) = fk(*base, &solved);
