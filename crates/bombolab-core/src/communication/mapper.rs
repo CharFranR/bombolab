@@ -176,4 +176,96 @@ mod tests {
                 .is_err()
         );
     }
+
+    /// INVARIANTE de límites del FABRI real: la imagen de q_min/q_max del
+    /// modelo debe caer EXACTAMENTE en [10°, 170°] — el rango que aceptan
+    /// ServoCommand y el firmware. Si este test falla, el modelo promete
+    /// configuraciones que el hardware no puede ejecutar (recorte silencioso).
+    #[test]
+    fn fabri_limits_map_exactly_to_servo_range() {
+        let robot = crate::robot::fabri_creator();
+        let mapper = ServoMapper::new(&robot);
+
+        // q = límites inferiores → servo debe ser exactamente 10° (o el
+        // límite superior del rango cuando la dirección es +1)
+        let mut q_min = [0.0; 5];
+        for (i, seg) in robot.segments.iter().enumerate() {
+            q_min[i] = seg.joint.value_min;
+        }
+        let cmd_min = mapper.map_q(&q_min, 90).unwrap();
+        let mut q_max = [0.0; 5];
+        for (i, seg) in robot.segments.iter().enumerate() {
+            q_max[i] = seg.joint.value_max;
+        }
+        let cmd_max = mapper.map_q(&q_max, 90).unwrap();
+
+        for i in 0..5 {
+            // q_to_servo zip-trunca al slice más corto: hay que pasar un
+            // vector completo y leer el índice i (offsets por joint).
+            let mut q_single = [0.0; 5];
+            q_single[i] = q_min[i];
+            let min_deg = robot.q_to_servo(&q_single)[i].to_degrees();
+            q_single[i] = q_max[i];
+            let max_deg = robot.q_to_servo(&q_single)[i].to_degrees();
+            // Tolerancia flotante: 60°−50° con offsets en radianes da
+            // 9.999999999999998, no 10.0 exacto.
+            const TOL: f64 = 1e-9;
+            assert!(
+                (10.0 - TOL..=170.0 + TOL).contains(&min_deg),
+                "J{}: q_min={:.2}° → servo {:.2}° FUERA de [10,170] (recorte silencioso)",
+                i + 1,
+                q_min[i].to_degrees(),
+                min_deg
+            );
+            assert!(
+                (10.0 - TOL..=170.0 + TOL).contains(&max_deg),
+                "J{}: q_max={:.2}° → servo {:.2}° FUERA de [10,170] (recorte silencioso)",
+                i + 1,
+                q_max[i].to_degrees(),
+                max_deg
+            );
+            // El comando mapeado no debe desviarse del valor pedido:
+            // el clamp no debe haber modificado nada.
+            assert!(
+                (cmd_min.joints[i] - min_deg).abs() < 1e-6,
+                "J{}: mapper modificó q_min ({:.2}° → {:.2}°)",
+                i + 1,
+                min_deg,
+                cmd_min.joints[i]
+            );
+            assert!(
+                (cmd_max.joints[i] - max_deg).abs() < 1e-6,
+                "J{}: mapper modificó q_max ({:.2}° → {:.2}°)",
+                i + 1,
+                max_deg,
+                cmd_max.joints[i]
+            );
+        }
+    }
+
+    /// Round-trip q → servo → q con el robot FABRI real (offsets y
+    /// direcciones de producción, no el robot de test con todo +1).
+    #[test]
+    fn fabri_q_servo_round_trip() {
+        let robot = crate::robot::fabri_creator();
+        let samples: [[f64; 5]; 3] = [
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.5, -0.8, 0.3, -0.6, 0.4],
+            [-0.7, 0.9, -0.5, 0.8, -0.3],
+        ];
+        for q in samples.iter() {
+            let servo = robot.q_to_servo(q);
+            let back = robot.servo_to_q(&servo);
+            for i in 0..5 {
+                assert!(
+                    (back[i] - q[i]).abs() < 1e-9,
+                    "J{}: round-trip q={:.6} → servo={:.6} → q={:.6}",
+                    i + 1,
+                    q[i],
+                    servo[i],
+                    back[i]
+                );
+            }
+        }
+    }
 }

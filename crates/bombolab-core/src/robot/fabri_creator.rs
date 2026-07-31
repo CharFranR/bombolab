@@ -12,43 +12,56 @@ use super::segment::{Robot, Segment};
 /// sin placa PCA9685 — nota de variante de hardware si se agrega un driver).
 /// Basado en la tabla de `docs/fabri-creator/table-definition.md`.
 pub fn fabri_creator() -> Robot {
-    let q_max = 85.0_f64.to_radians();
-    let q_min = (-85.0_f64).to_radians();
+    // Límites del modelo = imagen inversa exacta del rango de servo
+    // [10°, 170°] que aceptan firmware (main.cpp) y ServoCommand:
+    //   q_eff = dir · (servo − offset)  →  servo(q_min) = 10, servo(q_max) = 170
+    // Así el clamp del mapper NUNCA recorta q dentro del modelo (no hay
+    // configuraciones prometidas que el hardware no pueda ejecutar).
+    let q_j1_j2 = 80.0_f64.to_radians(); // servo = 90 − q → [10, 170] ⇒ q ∈ [−80, 80]
+    let q_j3_max = 85.0_f64.to_radians(); // servo = 81 + q → 170 ⇒ q ≤ 89; tope físico 85 (sin recorte: servo 166)
+    let q_j3_min = (-71.0_f64).to_radians(); // servo = 81 + q → 10 ⇒ q ≥ −71
+    let q_j4_max = 85.0_f64.to_radians(); // servo = 95 − q → 10 ⇒ q ≤ 85
+    let q_j4_min = (-75.0_f64).to_radians(); // servo = 95 − q → 170 ⇒ q ≥ −75
 
     let segments = vec![
         // Joint 1 — Base (Yaw)
         // θ=0,  d=85,  a=15,  α=-π/2  (d corregido: 7cm + 15mm = 85mm)
         Segment::new(
-            Joint::new(JointType::Revolute, 0.0, q_max, q_min),
+            Joint::new(JointType::Revolute, 0.0, q_j1_j2, -q_j1_j2),
             DHParams::new(0.0, 85.0, 15.0, -FRAC_PI_2),
         ),
         // Joint 2 — Shoulder (eleva el brazo)
         // θ=-π/2,  d=0,  a=120,  α=0  (a corregido: 12cm)
         Segment::new(
-            Joint::new(JointType::Revolute, 0.0, q_max, q_min),
+            Joint::new(JointType::Revolute, 0.0, q_j1_j2, -q_j1_j2),
             DHParams::new(-FRAC_PI_2, 0.0, 120.0, 0.0),
         ),
         // Joint 3 — Elbow (extiende el antebrazo)
         // θ=+π/2,  d=0,  a=90,  α=-π/2  (a corregido: 9cm)
         Segment::new(
-            Joint::new(JointType::Revolute, 0.0, q_max, q_min),
+            Joint::new(JointType::Revolute, 0.0, q_j3_max, q_j3_min),
             DHParams::new(FRAC_PI_2, 0.0, 90.0, -FRAC_PI_2),
         ),
         // Joint 4 — Wrist Roll (twist: rota sobre eje X)
         // θ=0,  d=15,  a=35,  α=+π/2
         Segment::new(
-            Joint::new(JointType::Twist, 0.0, q_max, q_min),
+            Joint::new(JointType::Twist, 0.0, q_j4_max, q_j4_min),
             DHParams::new(0.0, 15.0, 35.0, FRAC_PI_2),
         ),
         // Joint 5 — Wrist Pitch
         // θ=0,  d=0,  a=0,  α=0
-        // Límites asimétricos: offset 60°, dir=-1 → servo min 10°→ q=55°, servo max 170°→ q=-115°
+        // dir=-1, offset=60° → servo = 60° − q.
+        // Límites: servo 10°→ q=50°, servo 170°→ q=−110°  (q ∈ [−110, 50]).
+        // OJO: el comentario histórico decía q ∈ [−115, 55] ("servo min 10°→
+        // q=55°"), pero eso es matemáticamente falso con dir=−1/offset 60:
+        // q=55 → servo 5 (fuera de rango) y q=−115 → servo 175. Los límites
+        // se alinearon con la imagen inversa exacta de [10,170] → q ∈ [−110, 50].
         Segment::new(
             Joint::new(
                 JointType::Revolute,
                 0.0,
-                55.0_f64.to_radians(),
-                (-115.0_f64).to_radians(),
+                50.0_f64.to_radians(),
+                (-110.0_f64).to_radians(),
             ),
             DHParams::new(0.0, 0.0, 0.0, 0.0),
         ),
