@@ -20,6 +20,11 @@ pub enum IkError {
         r35_02: f64,
         tolerance: f64,
     },
+    /// El target está fuera del workspace de dibujo: la restricción
+    /// q5 = −(q2+q3) exige un ángulo de pitch de muñeca fuera de límites.
+    DrawingConstraintViolated {
+        q23: f64,
+    },
     /// `q_init` no coincide con el número de articulaciones del robot.
     InvalidInitLength {
         expected: usize,
@@ -39,6 +44,12 @@ impl fmt::Display for IkError {
                     f,
                     "orientation not reachable: R35[0,2] = {:.2e} exceeds tolerance {:.2e}",
                     r35_02, tolerance
+                )
+            }
+            IkError::DrawingConstraintViolated { q23 } => {
+                write!(
+                    f,
+                    "drawing constraint not reachable: q2+q3 = {q23:.3} rad (q5 = −q23) exceeds wrist pitch limits"
                 )
             }
             IkError::InvalidInitLength { expected, got } => {
@@ -537,6 +548,168 @@ pub fn solve_drawing_ik_v2(
 
     // 5. Solución completa
     Ok(vec![q1, q2, q3, q4, q5])
+}
+
+// ─── Restricted drawing solver (plane mode) ─────────────────────────────────
+
+/// Minimal configuration of the drawing-plane mode: only the three arm
+/// joints are independent. The wrist is FULLY determined by the drawing
+/// constraint (marker vertical, Y₅ = −Z):
+///
+///   q4 = 0
+///   q5 = −(q2 + q3)
+///
+/// (Exact, not approximate — derived from R35 = R03ᵀ·R_target for the v2
+/// pose; verified by finite differences of the constrained FK.)
+///
+/// Centralizing the constraint here means no other code ever manipulates
+/// q4/q5 for this mode: they are derived, not free.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrawingConfiguration {
+    pub q1: f64,
+    pub q2: f64,
+    pub q3: f64,
+}
+
+impl DrawingConfiguration {
+    pub fn new(q1: f64, q2: f64, q3: f64) -> Self {
+        Self { q1, q2, q3 }
+    }
+
+    /// Take the three arm joints from a full 5-joint q vector.
+    pub fn from_q(q: &[f64]) -> Self {
+        Self {
+            q1: q[0],
+            q2: q[1],
+            q3: q[2],
+        }
+    }
+
+    /// Materialize the full 5-joint configuration with the wrist constraint.
+    pub fn full_configuration(&self) -> [f64; 5] {
+        [self.q1, self.q2, self.q3, 0.0, -(self.q2 + self.q3)]
+    }
+
+    /// q2 + q3 — the arm pitch the wrist must compensate (q5 = −q23).
+    pub fn q23(&self) -> f64 {
+        self.q2 + self.q3
+    }
+}
+
+/// Solve the drawing-plane IK directly inside the constrained manifold
+///
+///   M = { q : q4 = 0, q5 = −(q2+q3) }.
+///
+/// The wrist is never free: every iteration is a physically valid drawing
+/// pose (marker vertical). This eliminates the bad wrist branches of the
+/// two-step pipeline (position solve with free wrist → q4/q5 replacement),
+/// which swept the TCP 60–75 mm off target through the 75 mm tool offset.
+///
+/// The reduced Jacobian follows from the chain rule (dq5/dq2 = dq5/dq3 = −1):
+///
+///   Jᵣ = [ J₁ | J₂ − J₅ | J₃ − J₅ ]
+///
+/// where Jᵢ are the full free-wrist position columns (the q4 column vanishes
+/// because dq4 = 0). Verified against finite differences of the constrained
+/// FK (see `test_reduced_jacobian_matches_fd`).
+///
+/// The drawing workspace is bounded by the J5 pitch limits: q5 = −q23 must
+/// stay inside [value_min, value_max] (q23 ∈ [−55°, 115°] for the FABRI
+/// Creator). Targets outside return [`IkError::DrawingConstraintViolated`].
+pub fn solve_drawing_plane_ik(
+    solver: &IkSolver,
+    target: &[f64; 3],
+    q_init: &[f64],
+    robot: &Robot,
+    base: &Iso3,
+    tool: &Iso3,
+) -> Result<[f64; 5], IkError> {
+    if q_init.len() < 3 {
+        return Err(IkError::InvalidInitLength {
+            expected: 3,
+            got: q_init.len(),
+        });
+    }
+    if robot.dof() < 3 {
+        return Err(IkError::DegenerateChain);
+    }
+    let n = robot.dof().min(3);
+    let j5_lo = robot.segments[4].joint.value_min;
+    let j5_hi = robot.segments[4].joint.value_max;
+
+    let mut cfg = DrawingConfiguration::from_q(q_init);
+    let target_v = Vec3::new(target[0], target[1], target[2]);
+    let damping_sq = solver.damping * solver.damping;
+
+    for _iter in 0..solver.max_iterations {
+        let q_full = cfg.full_configuration();
+        let robot_q = build_robot(robot, &q_full);
+        let (frames, _) = forward_kinematics(*base, &robot_q);
+        let p_ee = (frames.last().unwrap() * tool).translation.vector;
+
+        let error = target_v - p_ee;
+        let err_norm = error.norm();
+        if err_norm < solver.tolerance {
+            return Ok(q_full);
+        }
+
+        // Reduced Jacobian via chain rule: [J1, J2−J5, J3−J5].
+        let j_full = position_jacobian(&robot_q, &frames, &p_ee, base, robot.dof().min(5));
+        let mut jr = SMatrix::<f64, 3, 3>::zeros();
+        for r in 0..3 {
+            jr[(r, 0)] = j_full[(r, 0)];
+            jr[(r, 1)] = j_full[(r, 1)] - j_full[(r, 4)];
+            jr[(r, 2)] = j_full[(r, 2)] - j_full[(r, 4)];
+        }
+
+        // DLS: Δq = Jᵣᵀ · (Jᵣ·Jᵣᵀ + λ²·I)⁻¹ · error
+        let jjt = jr * jr.transpose();
+        let reg = jjt + SMatrix::<f64, 3, 3>::identity() * damping_sq;
+        if let Some(inv) = reg.try_inverse() {
+            let delta_x = inv * error;
+            let delta_q = jr.transpose() * delta_x;
+
+            let dq_norm = delta_q.norm();
+            let scale = if dq_norm > solver.step_size {
+                solver.step_size / dq_norm
+            } else {
+                1.0
+            };
+
+            let mut vals = [
+                cfg.q1 + delta_q[0] * scale,
+                cfg.q2 + delta_q[1] * scale,
+                cfg.q3 + delta_q[2] * scale,
+            ];
+            for (i, v) in vals.iter_mut().enumerate().take(n) {
+                *v = v.clamp(
+                    robot.segments[i].joint.value_min,
+                    robot.segments[i].joint.value_max,
+                );
+            }
+            cfg.q1 = vals[0];
+            cfg.q2 = vals[1];
+            cfg.q3 = vals[2];
+        } else {
+            // Jacobiana reducida singular — devolver la mejor pose actual
+            return Ok(q_full);
+        }
+
+        // La restricción de dibujo debe seguir siendo satisfacible:
+        // q5 = −(q2+q3) dentro de los límites de pitch de la muñeca.
+        let q23 = cfg.q23();
+        let q5 = -q23;
+        if q5 < j5_lo || q5 > j5_hi {
+            return Err(IkError::DrawingConstraintViolated { q23 });
+        }
+    }
+
+    // Último error para reporte
+    let robot_q = build_robot(robot, &cfg.full_configuration());
+    let (frames, _) = forward_kinematics(*base, &robot_q);
+    let p_ee = (frames.last().unwrap() * tool).translation.vector;
+    let final_err = (target_v - p_ee).norm();
+    Err(IkError::MaxIterationsReached { error: final_err })
 }
 
 #[cfg(test)]
@@ -1599,5 +1772,130 @@ mod full_ik_tests {
         );
 
         eprintln!("✅ Constante ✗, Adaptativa ✓ para (200, 80, 80)");
+    }
+
+    // ─── Restricted drawing solver (plane mode) ────────────────────────────
+
+    /// TCP of the CONSTRAINED FK: q = [q1,q2,q3] → wrist pinned q4=0,
+    /// q5=−(q2+q3). This is the map the reduced Jacobian must match.
+    fn constrained_tcp(robot: &Robot, base: Iso3, q13: &[f64; 3]) -> Vec3 {
+        let q = [q13[0], q13[1], q13[2], 0.0, -(q13[1] + q13[2])];
+        let robot_q = build_robot(robot, &q);
+        let (frames, _) = forward_kinematics(base, &robot_q);
+        let tool = crate::robot::tool_transform();
+        (frames.last().unwrap() * tool).translation.vector
+    }
+
+    #[test]
+    fn test_reduced_jacobian_matches_fd() {
+        // The chain-rule reduced Jacobian Jᵣ = [J₁, J₂−J₅, J₃−J₅] must match
+        // finite differences of the CONSTRAINED FK. The naive column removal
+        // [J₁, J₂, J₃] is the gradient of the frozen-wrist FK and is WRONG
+        // for this problem (verified: |diff| ≈ 75 mm/rad — the tool length).
+        let robot = make_robot();
+        let base = make_base();
+        let tool = make_tool();
+        let q13 = [
+            (-3.36_f64).to_radians(),
+            26.99_f64.to_radians(),
+            28.37_f64.to_radians(),
+        ];
+
+        let q_full = [q13[0], q13[1], q13[2], 0.0, -(q13[1] + q13[2])];
+        let robot_q = build_robot(&robot, &q_full);
+        let (frames, _) = forward_kinematics(base, &robot_q);
+        let p_ee = (frames.last().unwrap() * tool).translation.vector;
+
+        let j_full = position_jacobian(&robot_q, &frames, &p_ee, &base, 5);
+
+        let mut jr_analytic = [Vec3::zeros(); 3];
+        for r in 0..3 {
+            jr_analytic[0][r] = j_full[(r, 0)];
+            jr_analytic[1][r] = j_full[(r, 1)] - j_full[(r, 4)];
+            jr_analytic[2][r] = j_full[(r, 2)] - j_full[(r, 4)];
+        }
+
+        let d = 1e-6;
+        for i in 0..3 {
+            let mut qp = q13;
+            qp[i] += d;
+            let mut qm = q13;
+            qm[i] -= d;
+            let fd = (constrained_tcp(&robot, base, &qp) - constrained_tcp(&robot, base, &qm)) / (2.0 * d);
+            let diff = (Vec3::new(jr_analytic[i][0], jr_analytic[i][1], jr_analytic[i][2]) - fd).norm();
+            assert!(
+                diff < 1e-5,
+                "reduced jacobian col {i} mismatch vs FD: |diff| = {diff:.2e}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_drawing_plane_demo_corner() {
+        // The demo corner that previously deviated 77 mm (free wrist → q4/q5
+        // replacement): (175, −25, 80) from home must now converge on-target
+        // with the marker vertical.
+        let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+        let robot = make_robot();
+        let base = make_base();
+        let tool = make_tool();
+        let target = [175.0, -25.0, 80.0];
+
+        let q = solve_drawing_plane_ik(&solver, &target, &[0.0; 5], &robot, &base, &tool)
+            .expect("demo corner must be solvable in the drawing manifold");
+
+        // q5 = −(q2+q3) exact (constraint materialized by construction)
+        assert!((q[3]).abs() < 1e-12, "q4 must be 0, got {}", q[3]);
+        assert!(
+            (q[4] + (q[1] + q[2])).abs() < 1e-12,
+            "q5 must be −(q2+q3), got q5={} q23={}",
+            q[4],
+            q[1] + q[2]
+        );
+
+        // TCP on target (within solver tolerance)
+        let robot_q = build_robot(&robot, &q);
+        let (frames, _) = forward_kinematics(base, &robot_q);
+        let p = (frames.last().unwrap() * tool).translation.vector;
+        let err = (Vec3::new(target[0], target[1], target[2]) - p).norm();
+        assert!(err < 2.0, "TCP error must be < 2mm, got {err:.3}mm");
+
+        // Marker vertical: Y5 ≈ [0, 0, −1] in world
+        let y5 = frames[4].rotation * Vec3::y();
+        assert!(
+            (y5 - Vec3::new(0.0, 0.0, -1.0)).norm() < 1e-9,
+            "marker must point down, got Y5 = {y5}"
+        );
+    }
+
+    #[test]
+    fn test_drawing_plane_outside_workspace() {
+        // A target that forces q23 > 115° (q5 = −q23 < −115°, J5 limit)
+        // must be reported as unreachable, not silently degraded.
+        let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+        let robot = make_robot();
+        let base = make_base();
+        let tool = make_tool();
+
+        // Folded arm pose: q2 = q3 = 60° → q23 = 120° > 115°. FK of that pose
+        // gives a target only reachable inside the violated region.
+        let folded = [
+            0.0_f64,
+            60.0_f64.to_radians(),
+            60.0_f64.to_radians(),
+            0.0,
+            -120.0_f64.to_radians(),
+        ];
+        let robot_q = build_robot(&robot, &folded);
+        let (frames, _) = forward_kinematics(base, &robot_q);
+        let p = (frames.last().unwrap() * tool).translation.vector;
+        let target = [p.x, p.y, p.z];
+
+        let result = solve_drawing_plane_ik(&solver, &target, &[0.0; 5], &robot, &base, &tool);
+        assert!(
+            matches!(result, Err(IkError::DrawingConstraintViolated { .. }))
+                || matches!(result, Err(IkError::MaxIterationsReached { .. })),
+            "folded target must not converge in the drawing manifold, got {result:?}"
+        );
     }
 }
