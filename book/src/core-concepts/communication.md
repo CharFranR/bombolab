@@ -183,7 +183,7 @@ use bombolab_core::communication::InterpolationConfig;
 
 let config = InterpolationConfig {
     step_size: 5,   // degrees per step
-    delay_ms: 40,   // milliseconds between steps
+    delay_ms: 100,  // milliseconds between steps (default)
 };
 ```
 
