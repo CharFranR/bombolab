@@ -26,7 +26,7 @@ fn main() {
         eprintln!("an interactive REPL for sending servo angles.");
         eprintln!();
         eprintln!("Commands:");
-        eprintln!("  <servo> <angle>       Move single servo (1-6, angle 10-170)");
+        eprintln!("  <servo> <angle>       Move single servo (1-6, angle 5-175)");
         eprintln!("  all <a1> <a2> ... <a6>  Move all servos");
         eprintln!("  quit / exit           Disconnect and exit");
         std::process::exit(1);
@@ -112,10 +112,11 @@ fn main() {
 
     // REPL
     let config = InterpolationConfig::default();
-    let mut current_angles = [90i32; JOINT_COUNT];
+    // Start from the verified home pose (J3=81°, J4=95°, J5=60°).
+    let mut current_angles = [90, 90, 81, 95, 60, 90];
 
     println!("\nCommands:");
-    println!("  <servo> <angle>       Move single servo (1-6, angle 10-170)");
+    println!("  <servo> <angle>       Move single servo (1-6, angle 5-175)");
     println!("  all <a1> <a2> ... <a6>  Move all servos");
     println!("  quit / exit           Disconnect and exit\n");
 
