@@ -18,11 +18,19 @@ export function qToServoDeg(q: number[]): number[] {
 // ─── Wire format ────────────────────────────────────────────────────────
 // Formato: "a1,a2,a3,a4,a5,g\n" — igual que ArduinoNano
 
-export function buildWire(jointsDeg: number[], gripperPct: number): Uint8Array {
-  // Gripper servo: 170° (abierto) – 50° (cerrado)
-  const g = Math.round(170 - (gripperPct / 100) * 120);
-  const str = `${jointsDeg[0]},${jointsDeg[1]},${jointsDeg[2]},${jointsDeg[3]},${jointsDeg[4]},${g}\n`;
+/** Gripper percent (0–100, 100 = closed) → servo degrees [50, 170]. */
+export function gripperToServo(gripperPct: number): number {
+  return Math.round(170 - (gripperPct / 100) * 120);
+}
+
+/** Encode a full 6-value servo frame (5 joints + gripper, degrees). */
+export function encodeWire(servoDeg: number[]): Uint8Array {
+  const str = `${Math.round(servoDeg[0])},${Math.round(servoDeg[1])},${Math.round(servoDeg[2])},${Math.round(servoDeg[3])},${Math.round(servoDeg[4])},${Math.round(servoDeg[5])}\n`;
   return new TextEncoder().encode(str);
+}
+
+export function buildWire(jointsDeg: number[], gripperPct: number): Uint8Array {
+  return encodeWire([...jointsDeg, gripperToServo(gripperPct)]);
 }
 
 // ─── WebSerial ──────────────────────────────────────────────────────────

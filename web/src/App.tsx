@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
-import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2 } from './wasm';
-import { qToServoDeg, buildWire, requestSerialPort, openPort, sendSerial } from './serial';
+import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk } from './wasm';
+import { qToServoDeg, gripperToServo, requestSerialPort, openPort, sendSerial } from './serial';
+import { ServoInterpolator } from './interpolation';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
@@ -38,6 +39,7 @@ export default function App() {
   const [demoRunning, setDemoRunning] = useState(false);
   const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const portRef = useRef<SerialPort | null>(null);
+  const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
   const [fidelityMode, setFidelityMode] = useState<FidelityMode>('low');
   const [debugToggles, setDebugToggles] = useState<DebugToggles>({
     showJointFrames: false,
@@ -137,13 +139,12 @@ export default function App() {
   }, []);
 
   const sendQ = useCallback((segments: Segment[], g: number) => {
-    const port = portRef.current;
-    if (!port) return;
-    const q = segments.map(s => s.q);
-    const servoDeg = qToServoDeg(q);
-    const wire = buildWire(servoDeg, g);
-    console.log('[serial] enviando:', new TextDecoder().decode(wire).trim());
-    sendSerial(port, wire);
+    const interp = servoInterpolatorRef.current;
+    if (!interp) return;
+    const servoDeg = qToServoDeg(segments.map(s => s.q));
+    const target = [...servoDeg, gripperToServo(g)];
+    console.log('[serial] target:', target.join(','));
+    interp.moveTo(target);
   }, []);
 
   const sendQRef = useRef(sendQ);
@@ -156,17 +157,23 @@ export default function App() {
       const port = await requestSerialPort();
       await openPort(port);
       portRef.current = port;
+      // Start the interpolation scheduler from the current pose and push
+      // one frame so the firmware leaves its boot/home state.
+      const initial = [...qToServoDeg(robot.segments.map(s => s.q)), gripperToServo(gripper)];
+      servoInterpolatorRef.current = new ServoInterpolator((wire) => sendSerial(port, wire), initial);
+      servoInterpolatorRef.current.keepAlive();
       setConnected(true);
-      sendQ(robot.segments, gripper);
     } catch (e: any) {
       setSerialError(e.message ?? 'Error al conectar');
     }
-  }, [robot, gripper, sendQ]);
+  }, [robot, gripper]);
 
   const handleDisconnect = useCallback(async () => {
     try {
       await portRef.current?.close();
     } catch {}
+    servoInterpolatorRef.current?.stop();
+    servoInterpolatorRef.current = null;
     portRef.current = null;
     setConnected(false);
   }, []);
@@ -180,7 +187,7 @@ export default function App() {
 
   useEffect(() => {
     if (!ikMode || !ikTarget || !robot) return;
-    const solver = drawingMode === 2 ? solveDrawingIkV2
+    const solver = drawingMode === 2 ? solveDrawingPlaneIk
                  : drawingMode === 1 ? solveDrawingIk
                  : solveIk;
     const qInit = robot.segments.map(s => s.q);
@@ -213,6 +220,18 @@ export default function App() {
     if (!robot) return;
     sendQ(robot.segments, gripper);
   }, [robot, gripper, sendQ]);
+
+  // Heartbeat — the firmware failsafe parks the arm at home after 5s
+  // without a valid frame. Re-send the last-sent pose every second while
+  // connected so an idle robot holds its commanded position instead of
+  // returning to home (keeps working during in-flight interpolation).
+  useEffect(() => {
+    if (!connected) return;
+    const id = setInterval(() => {
+      servoInterpolatorRef.current?.keepAlive();
+    }, 1000);
+    return () => clearInterval(id);
+  }, [connected]);
 
   const handleReset = useCallback(() => {
     const home = fabriCreator();
@@ -415,6 +434,14 @@ export default function App() {
                 onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
               />
               Show Calibration Axes
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+              <input
+                type="checkbox"
+                checked={debugToggles.showCandidates ?? false}
+                onChange={(e) => setDebugToggles(prev => ({ ...prev, showCandidates: e.target.checked }))}
+              />
+              Show Calibrator Candidates
             </label>
           </div>
         )}

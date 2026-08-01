@@ -7,6 +7,7 @@ import type { RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES, STL_META } from './stlMapping';
 import DebugAxes from './debugAxes';
 import IkTarget from '../components/IkTarget';
+import CandidatesOverlay from '../calibration/CandidatesOverlay';
 
 // ─── STL paths ──────────────────────────────────────────────────────────────
 
@@ -281,6 +282,16 @@ export default function StlRobotScene({
         toggles={toggles}
         scaleRef={stlScaleRef}
       />
+      {/* Calibrator candidates overlay (debug) */}
+      {toggles.showCandidates && (
+        <CandidatesOverlay
+          frames={frames}
+          gripper={gripper}
+          calibrationConfigRef={calibrationConfigRef}
+          calibrationOverridesRef={calibrationOverridesRef}
+          stlScaleRef={stlScaleRef}
+        />
+      )}
       {/* Workspace point cloud — Float32Array memoizado (P3, Stage 3C):
           antes se reconstruía por render (24KB + flat() por interacción) */}
       {workspacePoints && workspacePoints.length > 0 && (
