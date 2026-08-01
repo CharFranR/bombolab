@@ -76,7 +76,7 @@ pub fn fabri_creator() -> Robot {
     // Ajustes para el robot físico:
     // J3 (Codo): dir=+1 → offset = 90° - 9° = 81°
     // J4 (Roll): dir=-1 → offset = 90° + 5° = 95°
-    // J5 (Pitch): dir=-1 → offset = 90° + 8° = 98°
+    // J5 (Pitch): dir=-1 → offset = 60° (home calibrado del robot físico)
     let home_pose = vec![
         90.0_f64.to_radians(),
         90.0_f64.to_radians(),

@@ -1,4 +1,4 @@
-import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2 } from './pkg/bombolab_wasm';
+import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk } from './pkg/bombolab_wasm';
 import type { RobotDef, Segment, Mat4 } from './kinematics/types';
 
 let initialized = false;
@@ -152,5 +152,15 @@ export function solveDrawingIkV2(
 ): { q: number[]; converged: boolean; error: number } {
   const wasmRobot = robotToWasm(robot);
   const result = wasmSolveDrawingIkV2(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
+  return result;
+}
+
+export function solveDrawingPlaneIk(
+  robot: RobotDef,
+  target: [number, number, number],
+  qInit: number[],
+): { q: number[]; converged: boolean; error: number } {
+  const wasmRobot = robotToWasm(robot);
+  const result = wasmSolveDrawingPlaneIk(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
   return result;
 }

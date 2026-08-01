@@ -2,7 +2,7 @@
 #include <Servo.h>
 
 // Failsafe (watchdog): if no valid frame is received within HOLD_TIMEOUT_MS,
-// the servos are parked at the home pose (90,90,90,90,90,90) once per timeout
+// the servos are parked at the home pose (90,90,81,95,60,90) once per timeout
 // period. A new accepted frame resumes normal control. This prevents the arm
 // from holding torque forever if the host dies or the cable is unplugged.
 
@@ -23,7 +23,8 @@ const int SERVO_PINS[NUM_SERVOS] = {A1, A0, A2, A4, 13, A5};
 
 Servo servos[NUM_SERVOS];
 
-int actual_positions[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
+// Home pose (verified on the physical robot): J3=81°, J4=95°, J5=60°.
+int actual_positions[NUM_SERVOS] = {90, 90, 81, 95, 60, 90};
 
 // Last accepted frame timestamp + failsafe parking state (see loop()).
 unsigned long last_command_ms = 0;
@@ -136,7 +137,7 @@ void loop() {
     // Failsafe: park at home pose once per timeout period when no valid
     // frame has arrived (host died, cable unplugged, etc.).
     if (millis() - last_command_ms > HOLD_TIMEOUT_MS && !parked) {
-        int park_positions[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
+        int park_positions[NUM_SERVOS] = {90, 90, 81, 95, 60, 90};
         apply_movement(park_positions);
         parked = true;
     }

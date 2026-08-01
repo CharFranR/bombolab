@@ -405,6 +405,69 @@ pub fn solve_drawing_ik_v2(
     }
 }
 
+/// Inverse kinematics for the drawing-plane mode (marker vertical).
+///
+/// Solves directly inside the constrained manifold
+/// `M = { q : q4 = 0, q5 = −(q2+q3) }` with the chain-rule reduced
+/// Jacobian `[J₁, J₂−J₅, J₃−J₅]` — the wrist is never free, so every
+/// iterate is a valid drawing pose and the TCP lands on target with the
+/// marker vertical (no post-hoc q4/q5 correction, no bad wrist branches).
+///
+/// Targets outside the drawing workspace (J5 pitch limit on q5 = −q23)
+/// return `converged: false` — a normal non-convergence, not an exception.
+#[wasm_bindgen]
+pub fn solve_drawing_plane_ik(
+    js_robot: &JsValue,
+    target: &[f64],
+    q_init: &[f64],
+) -> Result<JsValue, JsValue> {
+    let js_robot = robot_from_js_value(js_robot)?;
+    let robot = robot_from_js(&js_robot);
+    let base = array_to_iso3(&js_robot.base_transform);
+    let tool = array_to_iso3(&js_robot.tool_transform);
+
+    if target.len() < 3 {
+        return Err(JsValue::from_str("target must have at least 3 values"));
+    }
+    let target_arr = [target[0], target[1], target[2]];
+
+    let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+
+    match bombolab_core::kinematics::solve_drawing_plane_ik(
+        &solver,
+        &target_arr,
+        q_init,
+        &robot,
+        &base,
+        &tool,
+    ) {
+        Ok(q) => {
+            let error = compute_position_error(&robot, &q, &target_arr, &base, &tool)?;
+            let result = JsIkResult {
+                q: q.to_vec(),
+                converged: true,
+                error,
+            };
+            to_js_value(&result)
+        }
+        Err(e) => match e {
+            bombolab_core::kinematics::IkError::MaxIterationsReached { .. }
+            | bombolab_core::kinematics::IkError::DrawingConstraintViolated { .. } => {
+                // Out of the drawing workspace or no convergence: report the
+                // current pose's error as a normal non-convergence.
+                let error = compute_position_error(&robot, q_init, &target_arr, &base, &tool)?;
+                let result = JsIkResult {
+                    q: q_init.to_vec(),
+                    converged: false,
+                    error,
+                };
+                to_js_value(&result)
+            }
+            other => Err(JsValue::from_str(&other.to_string())),
+        },
+    }
+}
+
 /// Helper: compute FK position error for solved q values.
 ///
 /// Returns a `Result` so an empty robot chain surfaces as a JS error
