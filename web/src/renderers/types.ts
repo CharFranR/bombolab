@@ -18,6 +18,8 @@ export interface DebugToggles {
   showJointFrames: boolean;
   showStlOrigins: boolean;
   showCalibrationAxes: boolean;
+  /** Calibrator circle candidates overlay (debug/authoring tool). */
+  showCandidates?: boolean;
 }
 
 // ─── Calibration config shape ────────────────────────────────────────────────
