@@ -506,3 +506,142 @@ fn compute_position_error(
     let target_v = nalgebra::Vector3::new(target[0], target[1], target[2]);
     Ok((target_v - p_ee).norm())
 }
+
+// ─── Motion player (trajectory execution) ─────────────────────────────────
+// Pure-logic trajectory engine from bombolab-core, exposed to the web app.
+// Players live in an id registry; the app drives them with frame deltas.
+
+use bombolab_core::trajectory::{MotionCommand, MotionPlayer, PlayerState, TrajectoryPlanner};
+
+static PLAYERS: std::sync::Mutex<Vec<Option<MotionPlayer>>> = std::sync::Mutex::new(Vec::new());
+
+fn cmd_field(obj: &JsValue, key: &str) -> Result<JsValue, JsValue> {
+    js_sys::Reflect::get(obj, &JsValue::from_str(key))
+        .map_err(|e| JsValue::from_str(&format!("bad command field '{key}': {e:?}")))
+}
+
+/// Parse the JS command list:
+/// `[{type:"move",target:[x,y,z],speed}, {type:"penUp"|"penDown"}, {type:"wait",duration}]`
+fn parse_commands(js: &JsValue) -> Result<Vec<MotionCommand>, JsValue> {
+    let arr = js_sys::Array::from(js);
+    let mut out = Vec::with_capacity(arr.length() as usize);
+    for item in arr.iter() {
+        let ty = cmd_field(&item, "type")?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("motion command missing 'type'"))?;
+        let cmd = match ty.as_str() {
+            "move" => {
+                let target = js_sys::Array::from(&cmd_field(&item, "target")?);
+                let t = [
+                    target.get(0).as_f64().ok_or_else(|| JsValue::from_str("move target[0]"))?,
+                    target.get(1).as_f64().ok_or_else(|| JsValue::from_str("move target[1]"))?,
+                    target.get(2).as_f64().ok_or_else(|| JsValue::from_str("move target[2]"))?,
+                ];
+                let speed = cmd_field(&item, "speed")?
+                    .as_f64()
+                    .ok_or_else(|| JsValue::from_str("move speed"))?;
+                MotionCommand::MoveLinear { target: t, speed }
+            }
+            "penUp" => MotionCommand::PenUp,
+            "penDown" => MotionCommand::PenDown,
+            "wait" => {
+                let duration = cmd_field(&item, "duration")?
+                    .as_f64()
+                    .ok_or_else(|| JsValue::from_str("wait duration"))?;
+                MotionCommand::Wait { duration }
+            }
+            other => return Err(JsValue::from_str(&format!("unknown motion command type: {other}"))),
+        };
+        out.push(cmd);
+    }
+    Ok(out)
+}
+
+fn with_player<T>(id: usize, f: impl FnOnce(&mut MotionPlayer) -> T) -> Result<T, JsValue> {
+    let mut reg = PLAYERS.lock().unwrap();
+    let p = reg
+        .get_mut(id)
+        .and_then(|p| p.as_mut())
+        .ok_or_else(|| JsValue::from_str("motion player not found"))?;
+    Ok(f(p))
+}
+
+/// Create a player from the planned command list, starting at `start` (mm).
+/// Returns the player id for the other calls.
+#[wasm_bindgen]
+pub fn motion_player_new(commands: &JsValue, start: &[f64]) -> Result<usize, JsValue> {
+    if start.len() < 3 {
+        return Err(JsValue::from_str("start must have at least 3 values"));
+    }
+    let planned = TrajectoryPlanner::new().plan(parse_commands(commands)?);
+    let player = MotionPlayer::new(planned, [start[0], start[1], start[2]]);
+    let mut reg = PLAYERS.lock().unwrap();
+    let id = reg
+        .iter()
+        .position(|p| p.is_none())
+        .unwrap_or_else(|| {
+            reg.push(None);
+            reg.len() - 1
+        });
+    reg[id] = Some(player);
+    Ok(id)
+}
+
+#[wasm_bindgen]
+pub fn motion_player_play(id: usize) -> Result<(), JsValue> {
+    with_player(id, |p| p.play())
+}
+
+#[wasm_bindgen]
+pub fn motion_player_pause(id: usize) -> Result<(), JsValue> {
+    with_player(id, |p| p.pause())
+}
+
+#[wasm_bindgen]
+pub fn motion_player_resume(id: usize) -> Result<(), JsValue> {
+    with_player(id, |p| p.resume())
+}
+
+#[wasm_bindgen]
+pub fn motion_player_stop(id: usize) -> Result<(), JsValue> {
+    with_player(id, |p| p.stop())
+}
+
+/// Advance the trajectory by `dt` seconds (frame delta).
+#[wasm_bindgen]
+pub fn motion_player_update(id: usize, dt: f64) -> Result<(), JsValue> {
+    with_player(id, |p| p.update(dt))
+}
+
+/// One of: idle | running | paused | completed | stopped
+#[wasm_bindgen]
+pub fn motion_player_state(id: usize) -> Result<String, JsValue> {
+    with_player(id, |p| match p.state() {
+        PlayerState::Idle => "idle".to_string(),
+        PlayerState::Running => "running".to_string(),
+        PlayerState::Paused => "paused".to_string(),
+        PlayerState::Completed => "completed".to_string(),
+        PlayerState::Stopped => "stopped".to_string(),
+    })
+}
+
+/// Current commanded TCP position (mm).
+#[wasm_bindgen]
+pub fn motion_player_target(id: usize) -> Result<Vec<f64>, JsValue> {
+    with_player(id, |p| p.current_target().to_vec())
+}
+
+/// Fraction of commands consumed, 0..=1.
+#[wasm_bindgen]
+pub fn motion_player_progress(id: usize) -> Result<f64, JsValue> {
+    with_player(id, |p| p.progress())
+}
+
+/// Release the player slot.
+#[wasm_bindgen]
+pub fn motion_player_drop(id: usize) {
+    let mut reg = PLAYERS.lock().unwrap();
+    if let Some(slot) = reg.get_mut(id) {
+        *slot = None;
+    }
+}

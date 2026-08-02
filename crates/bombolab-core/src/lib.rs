@@ -4,6 +4,7 @@ pub mod communication;
 pub mod kinematics;
 pub mod math;
 pub mod robot;
+pub mod trajectory;
 
 #[cfg(feature = "serial")]
 pub use communication::{ServoCommand, ServoMapper};
@@ -20,3 +21,4 @@ pub use robot::{
     DHParams, Error, Joint, JointType, Result, Robot, Segment, base_transform, fabri_creator,
     tool_transform,
 };
+pub use trajectory::{MAX_DT, MotionCommand, MotionPlayer, PlayerState, TrajectoryPlanner};

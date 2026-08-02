@@ -21,10 +21,22 @@ const unsigned long HOLD_TIMEOUT_MS = 5000;
 // VERIFICAR contra el cableado físico real
 const int SERVO_PINS[NUM_SERVOS] = {A1, A0, A2, A4, 13, A5};
 
+// Wire units (auto-detected per frame):
+//   all values in [5, 175]     → degrees, written with servo.write()
+//   all values in [500, 2400]  → microseconds, written with
+//                                writeMicroseconds() (0.1° resolution —
+//                                the web viewer sends µs so the drawing
+//                                granularity is not limited to 1°)
+// Mixed frames are rejected.
+const int DEG_MIN = 5;
+const int DEG_MAX = 175;
+const int US_MIN = 500;
+const int US_MAX = 2400;
+
 Servo servos[NUM_SERVOS];
 
-// Home pose (verified on the physical robot): J3=81°, J4=95°, J5=60°.
-int actual_positions[NUM_SERVOS] = {90, 90, 81, 95, 60, 90};
+// Home pose (µs): 90°, 90°, 81°, 95°, 60°, 90°
+int actual_positions[NUM_SERVOS] = {1472, 1472, 1379, 1524, 1163, 1472};
 
 // Last accepted frame timestamp + failsafe parking state (see loop()).
 unsigned long last_command_ms = 0;
@@ -72,11 +84,15 @@ bool read_positions_serial(int positions[6]) {
             if (!has_digit || idx != 5) return false;
             positions[5] = value;
 
-            // Range validation: [5, 175] — full SG90 travel with 5°
-            // safety margin at each end (was [10,170] before Jul 2026).
+            // Range validation: all values in ONE unit mode —
+            // degrees [5,175] OR microseconds [500,2400]; mixed frames fail.
+            bool all_deg = true;
+            bool all_us = true;
             for (int i = 0; i < NUM_SERVOS; i++) {
-                if (positions[i] < 5 || positions[i] > 175) return false;
+                if (positions[i] < DEG_MIN || positions[i] > DEG_MAX) all_deg = false;
+                if (positions[i] < US_MIN || positions[i] > US_MAX) all_us = false;
             }
+            if (!all_deg && !all_us) return false;
             return true;
         }
 
@@ -88,9 +104,9 @@ bool read_positions_serial(int positions[6]) {
             value = value * 10 + (c - '0');
             has_digit = true;
             digit_count++;
-            // No angle can have more than 3 digits (max 175). Rejecting here
+            // No value can have more than 4 digits (max 2400). Rejecting here
             // also prevents a 5-digit field from wrapping the 16-bit range.
-            if (digit_count > 3) {
+            if (digit_count > 4) {
                 drain_rx_until_newline();
                 return false;
             }
@@ -113,8 +129,18 @@ bool read_positions_serial(int positions[6]) {
 
 
 void apply_movement(int positions[]) {
+    // Auto-detect units per frame: degrees (all ≤175) or microseconds
+    // (all ≥500). Mixed frames never reach here (rejected by the parser).
+    bool all_deg = true;
     for (int i = 0; i < NUM_SERVOS; i++) {
-        servos[i].write(positions[i]);
+        if (positions[i] > DEG_MAX) { all_deg = false; break; }
+    }
+    for (int i = 0; i < NUM_SERVOS; i++) {
+        if (all_deg) {
+            servos[i].write(positions[i]);
+        } else {
+            servos[i].writeMicroseconds(positions[i]);
+        }
     }
 }
 
@@ -137,7 +163,7 @@ void loop() {
     // Failsafe: park at home pose once per timeout period when no valid
     // frame has arrived (host died, cable unplugged, etc.).
     if (millis() - last_command_ms > HOLD_TIMEOUT_MS && !parked) {
-        int park_positions[NUM_SERVOS] = {90, 90, 81, 95, 60, 90};
+        int park_positions[NUM_SERVOS] = {1472, 1472, 1379, 1524, 1163, 1472};
         apply_movement(park_positions);
         parked = true;
     }

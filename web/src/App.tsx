@@ -1,15 +1,17 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
-import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk } from './wasm';
-import { qToServoDeg, gripperToServo, requestSerialPort, openPort, sendSerial } from './serial';
-import { ServoInterpolator } from './interpolation';
+import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, type PlayerStateJs } from './wasm';
+import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type MotionCommandJS } from './motion/commands';
+import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
+import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
+import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
@@ -36,10 +38,39 @@ export default function App() {
   const [drawingActive, setDrawingActive] = useState(false);
   const [ikTarget, setIkTarget] = useState<[number, number, number] | null>(null);
   const [ikError, setIkError] = useState<number | null>(null);
-  const [demoRunning, setDemoRunning] = useState(false);
-  const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Robot operating mode: the enum has more variants (Teaching, Calibration,
+  // EmergencyStop) but only Normal and Drawing are implemented (slice 1).
+  const [robotMode, setRobotMode] = useState<'normal' | 'drawing'>('normal');
+  const [transitioning, setTransitioning] = useState(false);
+  const [playerId, setPlayerId] = useState<number | null>(null);
+  const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
+  const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
+  const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
+  const [activeDemo, setActiveDemo] = useState<string | null>(null);
+  const gripperBeforeModeRef = useRef(50);
+  const lastFrameRef = useRef(0);
+  const lastTrajectoryTargetRef = useRef<[number, number, number] | null>(null);
+  // Calibración de servos (deadband/backlash) — manual, a paso del usuario.
+  // Cada pulso envía un frame crudo (bypasa el interpolador); el usuario
+  // marca "se movió / no se movió" y la app arma el log CSV.
+  const [calibRunning, setCalibRunning] = useState(false);
+  const [calibStatus, setCalibStatus] = useState('');
+  const calibRunningRef = useRef(false);
+  const [calibJoint, setCalibJoint] = useState(0);
+  const [calibPose, setCalibPose] = useState<number[]>([90, 90, 81, 95, 60, 110]);
+  const calibPoseRef = useRef<number[]>([90, 90, 81, 95, 60, 110]);
+  const [calibAnalyzerOpen, setCalibAnalyzerOpen] = useState(false);
+  const [calibLastMove, setCalibLastMove] = useState<{ joint: number; from: number; to: number } | null>(null);
+  const [calibLog, setCalibLog] = useState<{ joint: number; from: number; to: number; moved: boolean }[]>([]);
   const portRef = useRef<SerialPort | null>(null);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
+
+  // Backlash take-up per channel — EXPERIMENTAL and DISABLED by default:
+  // the A/B test showed a fixed 2°/1° compensation made the drawing WORSE
+  // (over-compensation: the play is not constant). Values are in µs
+  // (10.31 µs ≈ 1°): [2,2,2,1,1,0]° → [20.6, 20.6, 20.6, 10.3, 10.3, 0] µs.
+  const BACKLASH_US: InterpolationConfig['backlash'] = [20.6, 20.6, 20.6, 10.3, 10.3, 0];
+  const [backlashEnabled, setBacklashEnabled] = useState(false);
   const [fidelityMode, setFidelityMode] = useState<FidelityMode>('low');
   const [debugToggles, setDebugToggles] = useState<DebugToggles>({
     showJointFrames: false,
@@ -98,7 +129,7 @@ export default function App() {
       })
       .catch((e) => setLoadError(e.message ?? String(e)));
   return () => {
-    if (demoTimerRef.current) clearInterval(demoTimerRef.current);
+    // nothing to clean up on unmount (players are dropped with the UI)
   };
 }, []);
 
@@ -141,8 +172,8 @@ export default function App() {
   const sendQ = useCallback((segments: Segment[], g: number) => {
     const interp = servoInterpolatorRef.current;
     if (!interp) return;
-    const servoDeg = qToServoDeg(segments.map(s => s.q));
-    const target = [...servoDeg, gripperToServo(g)];
+    const servoUs = qToServoUs(segments.map(s => s.q));
+    const target = [...servoUs, gripperToServoUs(g)];
     console.log('[serial] target:', target.join(','));
     interp.moveTo(target);
   }, []);
@@ -159,14 +190,18 @@ export default function App() {
       portRef.current = port;
       // Start the interpolation scheduler from the current pose and push
       // one frame so the firmware leaves its boot/home state.
-      const initial = [...qToServoDeg(robot.segments.map(s => s.q)), gripperToServo(gripper)];
-      servoInterpolatorRef.current = new ServoInterpolator((wire) => sendSerial(port, wire), initial);
+      const initial = [...qToServoUs(robot.segments.map(s => s.q)), gripperToServoUs(gripper)];
+      servoInterpolatorRef.current = new ServoInterpolator(
+        (wire) => sendSerial(port, wire),
+        initial,
+        { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
+      );
       servoInterpolatorRef.current.keepAlive();
       setConnected(true);
     } catch (e: any) {
       setSerialError(e.message ?? 'Error al conectar');
     }
-  }, [robot, gripper]);
+  }, [robot, gripper, backlashEnabled]);
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -187,9 +222,9 @@ export default function App() {
 
   useEffect(() => {
     if (!ikMode || !ikTarget || !robot) return;
-    const solver = drawingMode === 2 ? solveDrawingPlaneIk
-                 : drawingMode === 1 ? solveDrawingIk
-                 : solveIk;
+    const solver = robotMode === 'drawing'
+      ? (drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk)
+      : solveIk;
     const qInit = robot.segments.map(s => s.q);
     const result = solver(robot, ikTarget, qInit);
     setIkError(result.error);
@@ -198,7 +233,7 @@ export default function App() {
       if (!prev) return prev;
       return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
     });
-  }, [ikTarget, ikMode, drawingMode]);
+  }, [ikTarget, ikMode, drawingMode, robotMode]);
 
   // Scroll wheel → ajustar Z del target IK
   useEffect(() => {
@@ -225,10 +260,18 @@ export default function App() {
   // without a valid frame. Re-send the last-sent pose every second while
   // connected so an idle robot holds its commanded position instead of
   // returning to home (keeps working during in-flight interpolation).
+  // During calibration the heartbeat re-sends the last RAW calibration
+  // pose instead — otherwise the failsafe would park mid-calibration.
   useEffect(() => {
     if (!connected) return;
     const id = setInterval(() => {
-      servoInterpolatorRef.current?.keepAlive();
+      if (calibRunningRef.current) {
+        const port = portRef.current;
+        const pose = calibPoseRef.current;
+        if (port && pose) sendSerial(port, encodeWire(pose.map(servoDegToUs)));
+      } else {
+        servoInterpolatorRef.current?.keepAlive();
+      }
     }, 1000);
     return () => clearInterval(id);
   }, [connected]);
@@ -239,6 +282,225 @@ export default function App() {
     setGripper(50);
     sendQRef.current(home.segments, 50);
   }, []);
+
+  // ─── Robot modes: Normal / Drawing ─────────────────────────────────────
+  // Entering Drawing commands the gripper to hold the marker (logical intent
+  // interpreted by the controller) and waits for the interpolator queue to
+  // drain — deterministic (frames × delay), not servo feedback.
+  const enterDrawingMode = useCallback(async () => {
+    if (robotMode === 'drawing' || transitioning) return;
+    if (!window.confirm('¿El marcador ya está en el gripper? Apretá OK para cerrar la pinza y entrar en modo dibujo.')) return;
+    gripperBeforeModeRef.current = gripper;
+    setTransitioning(true);
+    setRobotMode('drawing');
+    setIkMode(true);
+    setDrawingMode(2); // marcador vertical (solver restringido)
+    setGripper(90);    // HoldMarker: pinza cerrada al 90%
+    await servoInterpolatorRef.current?.whenIdle();
+    setTransitioning(false);
+  }, [robotMode, transitioning, gripper]);
+
+  const exitDrawingMode = useCallback(() => {
+    if (playerId !== null) {
+      try { motionPlayerDrop(playerId); } catch {}
+      setPlayerId(null);
+    }
+    setPlayerState('idle');
+    lastTrajectoryTargetRef.current = null;
+    setTracePath([]);
+    setActiveDemo(null);
+    setRobotMode('normal');
+    setIkMode(false);
+    setIkTarget(null);
+    setGripper(gripperBeforeModeRef.current); // restaurar pinza
+  }, [playerId]);
+
+  // ─── Trajectory playback ───────────────────────────────────────────────
+  // Drives the wasm motion player with frame deltas (rAF). Only pushes IK
+  // targets when the commanded TCP moved enough to avoid solver/React churn.
+  useEffect(() => {
+    if (playerId === null) return;
+    lastFrameRef.current = 0;
+    let raf = 0;
+    const loop = (now: number) => {
+      const dt = lastFrameRef.current > 0 ? Math.min((now - lastFrameRef.current) / 1000, 0.1) : 0.016;
+      lastFrameRef.current = now;
+      try {
+        motionPlayerUpdate(playerId, dt);
+        const st = motionPlayerState(playerId);
+        setPlayerState(st);
+        if (st === 'running' || st === 'paused') {
+          const target = motionPlayerTarget(playerId);
+          const last = lastTrajectoryTargetRef.current;
+          if (!last || Math.hypot(target[0] - last[0], target[1] - last[1], target[2] - last[2]) > 0.5) {
+            lastTrajectoryTargetRef.current = target;
+            setIkTarget(target);
+          }
+        }
+      } catch (e) {
+        console.error('[motion]', e);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playerId]);
+
+  const startTrajectory = useCallback((cmds: MotionCommandJS[], key: string) => {
+    if (transitioning || !robot || robotMode !== 'drawing') return;
+    // Replace any running/completed trajectory — the demo buttons must
+    // always work; starting a new demo drops the previous player.
+    if (playerId !== null) {
+      try { motionPlayerDrop(playerId); } catch {}
+    }
+    const fk = forwardKinematics(robot.segments, robot.baseTransform);
+    const ee = fk.frames[fk.frames.length - 1];
+    const start: [number, number, number] = [ee[12], ee[13], ee[14]];
+    setTracePath(drawingPath(cmds));
+    setActiveDemo(key);
+    const id = motionPlayerNew(cmds, start);
+    setPlayerId(id);
+    motionPlayerPlay(id);
+    setPlayerState('running');
+    setIkTarget(start); // mantener la pose actual hasta el primer waypoint
+  }, [playerId, transitioning, robot, robotMode]);
+
+  const handleStartDemo = useCallback(() => {
+    const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
+    startTrajectory(squareCommands(200, 0, 80, half), 'square');
+  }, [startTrajectory, demoSizeCm]);
+
+  const handleStartDiagnostic = useCallback(() => {
+    startTrajectory(diagnosticLinesCommands(), 'lines');
+  }, [startTrajectory]);
+
+  const handleStartArc = useCallback(() => {
+    startTrajectory(arcCommands(), 'arc');
+  }, [startTrajectory]);
+
+  const handleBacklashToggle = useCallback((enabled: boolean) => {
+    setBacklashEnabled(enabled);
+    servoInterpolatorRef.current?.setBacklash(enabled ? BACKLASH_US : undefined);
+  }, []);
+
+  const handlePlaybackControl = useCallback(() => {
+    if (playerId === null) return;
+    try {
+      if (playerState === 'running') {
+        motionPlayerPause(playerId);
+        setPlayerState('paused');
+      } else if (playerState === 'paused') {
+        motionPlayerResume(playerId);
+        setPlayerState('running');
+      } else {
+        motionPlayerPlay(playerId);
+        setPlayerState('running');
+      }
+    } catch (e) {
+      console.error('[motion]', e);
+    }
+  }, [playerId, playerState]);
+
+  const handleStopDemo = useCallback(() => {
+    if (playerId === null) return;
+    try {
+      motionPlayerStop(playerId);
+      setPlayerState('stopped');
+    } catch (e) {
+      console.error('[motion]', e);
+    }
+  }, [playerId]);
+
+  // ─── Servo calibration (deadband / backlash) — manual mode ─────────────
+  // User-paced: each button press sends ONE raw 1° step (bypassing the
+  // interpolator, heartbeat paused); the user watches and marks whether the
+  // servo moved. The app records the verdicts into a CSV log.
+  const SERVO_NAMES = ['J1 yaw', 'J2 shoulder', 'J3 elbow', 'J4 roll', 'J5 pitch', 'Gripper'];
+  const stepBtn: React.CSSProperties = {
+    padding: '6px 10px',
+    background: '#3a3a3a',
+    border: 'none',
+    borderRadius: 4,
+    color: '#ccc',
+    fontSize: 12,
+    cursor: 'pointer',
+  };
+
+  const enterCalibration = useCallback(async () => {
+    const port = portRef.current;
+    if (!port || calibRunning) return;
+    // Stop any running trajectory.
+    if (playerId !== null) {
+      try { motionPlayerDrop(playerId); } catch {}
+      setPlayerId(null);
+      setPlayerState('idle');
+    }
+    // Smooth return to home first (the calibration pose holds the others there).
+    const home = fabriCreator();
+    setRobot(home);
+    setGripper(50);
+    sendQRef.current(home.segments, 50);
+    await servoInterpolatorRef.current?.whenIdle();
+
+    const homeServo = [90, 90, 81, 95, 60, 110]; // degrees (calibration UI)
+    calibRunningRef.current = true;
+    setCalibRunning(true);
+    setCalibPose(homeServo);
+    calibPoseRef.current = homeServo;
+    setCalibLog([]);
+    setCalibLastMove(null);
+    setCalibStatus('Modo calibración: elegí joint, pulsá ±1° y marcá si se movió.');
+    sendSerial(port, encodeWire(homeServo.map(servoDegToUs)));
+    servoInterpolatorRef.current?.sync(homeServo.map(servoDegToUs));
+  }, [calibRunning, playerId]);
+
+  const exitCalibration = useCallback(() => {
+    const port = portRef.current;
+    const homeServo = [90, 90, 81, 95, 60, 110]; // degrees
+    if (port) sendSerial(port, encodeWire(homeServo.map(servoDegToUs)));
+    servoInterpolatorRef.current?.sync(homeServo.map(servoDegToUs));
+    calibRunningRef.current = false;
+    setCalibRunning(false);
+    setCalibLastMove(null);
+    setCalibStatus('');
+  }, []);
+
+  const calibStep = useCallback((delta: number) => {
+    const port = portRef.current;
+    if (!port || !calibRunning) return;
+    const pose = [...calibPose];
+    const from = pose[calibJoint];
+    const to = Math.max(5, Math.min(175, from + delta));
+    if (to === from) return;
+    pose[calibJoint] = to;
+    setCalibPose(pose);
+    calibPoseRef.current = pose;
+    setCalibLastMove({ joint: calibJoint, from, to });
+    setCalibStatus(`${SERVO_NAMES[calibJoint]}: ${from}° → ${to}° — ¿se movió?`);
+    sendSerial(port, encodeWire(pose.map(servoDegToUs)));
+    servoInterpolatorRef.current?.sync(pose.map(servoDegToUs));
+  }, [calibRunning, calibPose, calibJoint]);
+
+  const calibRecord = useCallback((moved: boolean) => {
+    if (!calibLastMove) return;
+    setCalibLog((prev) => [...prev, { ...calibLastMove, moved }]);
+    setCalibLastMove(null);
+    setCalibStatus('Anotado. Mandá el siguiente paso.');
+  }, [calibLastMove]);
+
+  const downloadCalibLog = useCallback(() => {
+    const lines = ['joint,from,to,moved'];
+    for (const e of calibLog) {
+      lines.push(`${e.joint + 1},${e.from},${e.to},${e.moved ? 'si' : 'no'}`);
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'servo-calibration.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [calibLog]);
 
   // ─── Calibration save handler ──────────────────────────────────────────
   // Merges overrides into config, serializes as calibration.json, triggers
@@ -477,7 +739,100 @@ export default function App() {
           )}
         </div>
 
-        {/* Drawing mode selector */}
+        {/* Calibración de servos (deadband/backlash) — manual */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          {!calibRunning ? (
+            <button
+              onClick={() => { void enterCalibration(); }}
+              disabled={!connected}
+              style={{
+                width: '100%',
+                padding: 8,
+                background: '#444',
+                border: 'none',
+                borderRadius: 4,
+                color: '#ccc',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Calibrar servos (manual)
+            </button>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, color: '#aa8', marginBottom: 6 }}>{calibStatus}</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+                {SERVO_NAMES.map((n, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCalibJoint(i)}
+                    style={{
+                      flex: 1,
+                      minWidth: 60,
+                      padding: '4px 2px',
+                      fontSize: 10,
+                      background: calibJoint === i ? '#553' : '#3a3a3a',
+                      border: '1px solid ' + (calibJoint === i ? '#885' : '#444'),
+                      borderRadius: 3,
+                      color: calibJoint === i ? '#ddc' : '#888',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                <button
+                  onClick={() => calibStep(-5)}
+                  style={stepBtn}
+                >
+                  −5°
+                </button>
+                <button onClick={() => calibStep(-1)} style={stepBtn}>−1°</button>
+                <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#ccc', minWidth: 40, textAlign: 'center' }}>
+                  {calibPose[calibJoint]}°
+                </span>
+                <button onClick={() => calibStep(1)} style={stepBtn}>+1°</button>
+                <button onClick={() => calibStep(5)} style={stepBtn}>+5°</button>
+              </div>
+              {calibLastMove && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <button
+                    onClick={() => calibRecord(true)}
+                    style={{ ...stepBtn, background: '#464', flex: 1, padding: 8 }}
+                  >
+                    ✓ Se movió
+                  </button>
+                  <button
+                    onClick={() => calibRecord(false)}
+                    style={{ ...stepBtn, background: '#633', flex: 1, padding: 8 }}
+                  >
+                    ✗ No se movió
+                  </button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={downloadCalibLog}
+                  disabled={calibLog.length === 0}
+                  style={{ ...stepBtn, flex: 1 }}
+                >
+                  Descargar CSV ({calibLog.length})
+                </button>
+                <button
+                  onClick={() => setCalibAnalyzerOpen(!calibAnalyzerOpen)}
+                  style={{ ...stepBtn, flex: 1, background: calibAnalyzerOpen ? '#553' : '#3a3a3a' }}
+                >
+                  {calibAnalyzerOpen ? 'Ocultar análisis' : 'Analizar'}
+                </button>
+                <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
+                <button onClick={exitCalibration} style={{ ...stepBtn, background: '#633' }}>Salir</button>
+              </div>
+            </>
+          )}
+          {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
+        </div>
         {ikMode && (
           <>
             <div style={{ padding: '4px 16px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -586,55 +941,160 @@ export default function App() {
           </button>
         </div>
 
-        {/* Demo cuadrado */}
+        {/* Modo dibujo */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <button
-            onClick={() => {
-              if (demoRunning) {
-                setDemoRunning(false);
-                if (demoTimerRef.current) clearInterval(demoTimerRef.current);
-                return;
-              }
-              // Cerrar gripper completamente
-              setGripper(100);
-
-              // Preguntar antes de empezar
-              if (!window.confirm('¿El marcador ya está en el gripper? Apretá OK para empezar a dibujar.')) {
-                return;
-              }
-
-              setIkMode(true);
-              setDrawingMode(2); // modo 2: marcador vertical
-
-              // Cuadrado 50x50mm centrado en (200, 0), z=80mm
-              const cx = 200, cy = 0, z = 80, half = 25;
-              const pts: [number, number, number][] = [
-                [cx - half, cy - half, z],
-                [cx + half, cy - half, z],
-                [cx + half, cy + half, z],
-                [cx - half, cy + half, z],
-              ];
-              let idx = 0;
-              setIkTarget(pts[0]);
-              setDemoRunning(true);
-              demoTimerRef.current = setInterval(() => {
-                idx = (idx + 1) % pts.length;
-                setIkTarget(pts[idx]);
-              }, 2000);
-            }}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: demoRunning ? '#533' : '#444',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            {demoRunning ? 'Detener demo' : 'Demo: cuadrado 5×5cm'}
-          </button>
+          {robotMode === 'normal' ? (
+            <button
+              onClick={() => { void enterDrawingMode(); }}
+              disabled={transitioning}
+              style={{
+                width: '100%',
+                padding: 8,
+                background: '#464',
+                border: 'none',
+                borderRadius: 4,
+                color: '#ccc',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
+            </button>
+          ) : (
+            <>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#aa8', marginBottom: 6, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={backlashEnabled}
+                  onChange={(e) => handleBacklashToggle(e.target.checked)}
+                />
+                Compensación de backlash (experimental, 2°/1°)
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, color: '#777' }}>Tamaño:</span>
+                {[5, 7, 8].map((cm) => (
+                  <button
+                    key={cm}
+                    onClick={() => setDemoSizeCm(cm)}
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      background: demoSizeCm === cm ? '#553' : '#3a3a3a',
+                      border: '1px solid ' + (demoSizeCm === cm ? '#885' : '#444'),
+                      borderRadius: 3,
+                      color: demoSizeCm === cm ? '#ddc' : '#888',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {cm}×{cm}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
+                  onClick={handleStartDemo}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: 8,
+                    background: activeDemo === 'square' ? '#553' : '#3a3a3a',
+                    border: '1px solid ' + (activeDemo === 'square' ? '#885' : '#444'),
+                    borderRadius: 4,
+                    color: activeDemo === 'square' ? '#ddc' : '#888',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Demo: cuadrado {demoSizeCm}×{demoSizeCm}cm
+                </button>
+                <button
+                  onClick={handleStartDiagnostic}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: 8,
+                    background: activeDemo === 'lines' ? '#553' : '#3a3a3a',
+                    border: '1px solid ' + (activeDemo === 'lines' ? '#885' : '#444'),
+                    borderRadius: 4,
+                    color: activeDemo === 'lines' ? '#ddc' : '#888',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Diagnóstico: líneas
+                </button>
+                <button
+                  onClick={handleStartArc}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: 8,
+                    background: activeDemo === 'arc' ? '#553' : '#3a3a3a',
+                    border: '1px solid ' + (activeDemo === 'arc' ? '#885' : '#444'),
+                    borderRadius: 4,
+                    color: activeDemo === 'arc' ? '#ddc' : '#888',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Arco (sin reversiones)
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
+                  onClick={handlePlaybackControl}
+                  disabled={playerId === null}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#3a3a3a',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#ccc',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {playerState === 'running' ? 'Pausa' : playerState === 'paused' ? 'Reanudar' : 'Replay'}
+                </button>
+                <button
+                  onClick={handleStopDemo}
+                  disabled={playerId === null}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#633',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#ccc',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Stop
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
+                Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
+                {playerId !== null && playerState !== 'idle' && (
+                  <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
+                )}
+              </div>
+              <button
+                onClick={exitDrawingMode}
+                style={{
+                  width: '100%',
+                  padding: 6,
+                  background: '#333',
+                  border: 'none',
+                  borderRadius: 4,
+                  color: '#a99',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                Salir de modo dibujo (restaura pinza)
+              </button>
+            </>
+          )}
         </div>
 
         {/* Reset */}
@@ -664,6 +1124,7 @@ export default function App() {
           rawFrames={rawFrames}
           gripper={gripper}
           workspacePoints={workspacePoints}
+          tracePath={tracePath}
           ikTarget={ikTarget}
           onIkTargetChange={setIkTarget}
           fidelityMode={fidelityMode}
