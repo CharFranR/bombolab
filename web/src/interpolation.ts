@@ -16,6 +16,15 @@ export interface InterpolationConfig {
   stepSize: number;
   /** Delay between steps in milliseconds. */
   delayMs: number;
+  /**
+   * Backlash take-up per channel (degrees, 6 values: J1..J5, gripper).
+   * When a channel reverses direction, the commanded value is offset by
+   * ±backlash in the new direction so the gear play is taken up immediately
+   * and the arm lands where commanded. Persistent offset, flipped on each
+   * reversal. 0 disables the channel. This is a HARDWARE-layer correction
+   * (RobotController), not a trajectory concern.
+   */
+  backlash?: number[];
 }
 
 /** Viewer pacing: 5° per step, 50 ms between steps (user-tuned; the Rust
@@ -76,23 +85,95 @@ export function interpolateAll(current: number[], target: number[], stepSize: nu
  * firmware failsafe (5 s watchdog) never parks the arm while connected.
  */
 export class ServoInterpolator {
-  private current: number[]; // last sent [j1..j5, gripper] in servo degrees
+  private current: number[]; // commanded pose in FLOAT servo degrees
+  private lastSent: number[]; // last frame actually written (integer degrees)
+  private residue: number[]; // fractional leftover per channel (quantization)
   private steps: number[][] = [];
   private stepIdx = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private idleResolver: (() => void) | null = null;
+  // Backlash take-up state (per channel).
+  private lastTarget: number[] = [];
+  private lastDir: number[] = [];
+  private playOffset: number[] = [];
 
   constructor(
     private readonly send: (wire: Uint8Array) => void,
     initialPose: number[],
-    private readonly config: InterpolationConfig = DEFAULT_INTERPOLATION,
+    private config: InterpolationConfig = DEFAULT_INTERPOLATION,
   ) {
     this.current = [...initialPose];
+    this.residue = new Array(initialPose.length).fill(0);
+    this.lastSent = this.quantize(initialPose);
+    this.lastTarget = [...initialPose];
+    this.lastDir = new Array(initialPose.length).fill(0);
+    this.playOffset = new Array(initialPose.length).fill(0);
+  }
+
+  /** Enable/disable backlash take-up at runtime (A/B testing without reconnect). */
+  setBacklash(backlash: number[] | undefined): void {
+    this.config.backlash = backlash;
+    if (!backlash) {
+      this.playOffset = new Array(this.lastTarget.length).fill(0);
+      this.lastDir = new Array(this.lastTarget.length).fill(0);
+    }
+  }
+
+  /**
+   * Backlash take-up: command `target + playOffset` where the offset flips
+   * sign when the channel reverses direction. The gear play absorbs the
+   * offset, so the arm ends where commanded while the play is taken up
+   * immediately instead of releasing as a jump at the next corner.
+   */
+  private applyBacklash(target: number[]): number[] {
+    const b = this.config.backlash;
+    if (!b) {
+      this.lastTarget = [...target];
+      return target;
+    }
+    const eff = new Array(target.length);
+    for (let i = 0; i < target.length; i++) {
+      const d = Math.sign(target[i] - this.lastTarget[i]);
+      if (d !== 0 && d !== this.lastDir[i]) {
+        this.lastDir[i] = d;
+        this.playOffset[i] = d * (b[i] ?? 0);
+      }
+      eff[i] = target[i] + this.playOffset[i];
+    }
+    this.lastTarget = [...target];
+    return eff;
+  }
+
+  /**
+   * Quantize a float pose to whole degrees, carrying the fractional residue
+   * per channel: 0.3, 0.6, 0.9, 1.2 → sends 1° and keeps 0.2. This avoids
+   * systematically losing sub-degree motion (the wire protocol only accepts
+   * integers). The measured servo deadband is a SEPARATE concern — do not
+   * fold it into this accumulator.
+   */
+  private quantize(pose: number[]): number[] {
+    const out = new Array(pose.length);
+    for (let i = 0; i < pose.length; i++) {
+      const v = pose[i] + this.residue[i];
+      const q = Math.round(v);
+      this.residue[i] = v - q;
+      // Wide safety clamp (µs wire: 544..2400; degrees legacy: 5..175):
+      // the firmware rejects out-of-range frames, so never leave either band.
+      out[i] = Math.max(0, Math.min(5000, q));
+    }
+    return out;
+  }
+
+  private sendFrame(pose: number[]): void {
+    this.lastSent = this.quantize(pose);
+    this.send(encodeWire(this.lastSent));
   }
 
   /** Plan and start a smooth move from the last-sent pose to `target`. */
   moveTo(target: number[]): void {
     this.stopTimer();
-    const steps = interpolateAll(this.current, target, this.config.stepSize);
+    const eff = this.applyBacklash(target);
+    const steps = interpolateAll(this.current, eff, this.config.stepSize);
     if (steps.length === 0) return;
     this.steps = steps;
     this.stepIdx = 0;
@@ -104,7 +185,38 @@ export class ServoInterpolator {
 
   /** Re-send the last-sent pose (failsafe heartbeat). */
   keepAlive(): void {
-    this.send(encodeWire(this.current));
+    this.send(encodeWire(this.lastSent));
+  }
+
+  /**
+   * Rebase the tracked pose to `pose` WITHOUT sending. Used after raw
+   * calibration writes that bypassed the interpolator: the next moveTo
+   * continues from where the arm actually is.
+   */
+  sync(pose: number[]): void {
+    this.stopTimer();
+    this.steps = [];
+    this.current = [...pose];
+    this.lastSent = this.quantize(pose);
+    this.lastTarget = [...pose];
+    this.lastDir = new Array(pose.length).fill(0);
+    this.playOffset = new Array(pose.length).fill(0);
+  }
+
+  /**
+   * Resolves when the current interpolation queue is fully drained — i.e.
+   * every scheduled frame has been SENT over serial. Deterministic (queue
+   * length × delay), NOT physical servo feedback: the arm may still be
+   * moving. Retargeting (a new moveTo) supersedes the awaited plan and
+   * resolves the promise early.
+   */
+  whenIdle(): Promise<void> {
+    if (this.steps.length === 0 || this.stepIdx >= this.steps.length) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.idleResolver = resolve;
+    });
   }
 
   /** Cancel any in-flight interpolation and timers. */
@@ -119,7 +231,15 @@ export class ServoInterpolator {
       return;
     }
     this.current = this.steps[this.stepIdx++];
-    this.send(encodeWire(this.current));
+    this.sendFrame(this.current);
+  }
+
+  private resolveIdle(): void {
+    if (this.idleResolver !== null) {
+      const resolve = this.idleResolver;
+      this.idleResolver = null;
+      resolve();
+    }
   }
 
   private stopTimer(): void {
@@ -127,5 +247,7 @@ export class ServoInterpolator {
       clearInterval(this.timer);
       this.timer = null;
     }
+    // Queue drained or plan superseded: anyone awaiting whenIdle may proceed.
+    this.resolveIdle();
   }
 }

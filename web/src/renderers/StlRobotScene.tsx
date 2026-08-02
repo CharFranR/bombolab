@@ -49,6 +49,7 @@ export default function StlRobotScene({
   frames,
   gripper,
   workspacePoints,
+  tracePath,
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -306,6 +307,20 @@ export default function StlRobotScene({
           </bufferGeometry>
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
+      )}
+      {/* Preview of the selected trajectory shape (drawing plane z) */}
+      {tracePath && tracePath.length > 1 && (
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={tracePath.length}
+              array={new Float32Array(tracePath.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff8866" linewidth={2} />
+        </line>
       )}
       {/* IK target */}
       {ikTarget && onIkTargetChange && (

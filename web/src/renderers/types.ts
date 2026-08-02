@@ -42,6 +42,8 @@ export interface RobotRendererProps {
   frames: FramePose[];
   gripper: number;
   workspacePoints?: [number, number, number][];
+  /** Preview of the commanded drawing path (shape the selected demo draws). */
+  tracePath?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;
