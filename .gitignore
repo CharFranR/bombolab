@@ -33,3 +33,7 @@ target
 
 # IDE workspace files
 *.code-workspace
+
+# Dev-server log artifacts
+_*_out.log
+_*_err.log
