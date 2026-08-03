@@ -14,3 +14,8 @@
 
 /// Parser for the CIPRA G-code dialect.
 pub mod parser;
+
+/// Reachable drawing workspace of the FABRI Creator.
+pub mod workspace;
+
+pub use workspace::DrawingBounds;
