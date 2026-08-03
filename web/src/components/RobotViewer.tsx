@@ -35,7 +35,7 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints = [], trajectoryPoints = [], trajectoryReveal = 0, ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints = [], trajectoryPoints = [], trajectoryReveal = 0, tracePath, ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   rawFrames?: Mat4[];
   gripper?: number;
@@ -43,6 +43,7 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints =
   trajectoryPoints?: [number, number, number][];
   /** How many polyline points have been drawn so far (progressive reveal). */
   trajectoryReveal?: number;
+  tracePath?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;
@@ -95,6 +96,7 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints =
     workspacePoints,
     trajectoryPoints,
     trajectoryReveal,
+    tracePath,
     ikTarget,
     onIkTargetChange,
     onDragStart,
@@ -125,13 +127,14 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints =
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints = [], trajectoryPoints = [], trajectoryReveal = 0, ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints = [], trajectoryPoints = [], trajectoryReveal = 0, tracePath, ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: [number, number, number][];
   trajectoryPoints?: [number, number, number][];
   trajectoryReveal?: number;
+  tracePath?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   fidelityMode: FidelityMode;
@@ -168,6 +171,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           workspacePoints={workspacePoints}
           trajectoryPoints={trajectoryPoints}
           trajectoryReveal={trajectoryReveal}
+          tracePath={tracePath}
           ikTarget={ikTarget}
           onIkTargetChange={onIkTargetChange}
           onDragStart={() => setIkDragging(true)}

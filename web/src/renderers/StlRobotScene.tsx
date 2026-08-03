@@ -51,6 +51,7 @@ export default function StlRobotScene({
   workspacePoints,
   trajectoryPoints = [],
   trajectoryReveal,
+  tracePath,
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -362,6 +363,20 @@ export default function StlRobotScene({
             <meshStandardMaterial color="#ffb432" emissive="#ff8820" emissiveIntensity={0.6} />
           </mesh>
         </>
+      )}
+      {/* Preview of the selected trajectory shape (drawing plane z) */}
+      {tracePath && tracePath.length > 1 && (
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={tracePath.length}
+              array={new Float32Array(tracePath.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff8866" linewidth={2} />
+        </line>
       )}
       {/* IK target */}
       {ikTarget && onIkTargetChange && (

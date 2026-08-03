@@ -1,5 +1,6 @@
-import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk } from './pkg/bombolab_wasm';
+import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk, motion_player_new as wasmMotionPlayerNew, motion_player_play as wasmMotionPlayerPlay, motion_player_pause as wasmMotionPlayerPause, motion_player_resume as wasmMotionPlayerResume, motion_player_stop as wasmMotionPlayerStop, motion_player_update as wasmMotionPlayerUpdate, motion_player_state as wasmMotionPlayerState, motion_player_target as wasmMotionPlayerTarget, motion_player_progress as wasmMotionPlayerProgress, motion_player_drop as wasmMotionPlayerDrop } from './pkg/bombolab_wasm';
 import type { RobotDef, Segment, Mat4 } from './kinematics/types';
+import type { MotionCommandJS } from './motion/commands';
 
 let initialized = false;
 
@@ -163,4 +164,53 @@ export function solveDrawingPlaneIk(
   const wasmRobot = robotToWasm(robot);
   const result = wasmSolveDrawingPlaneIk(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
   return result;
+}
+
+// ─── Motion player (trajectory execution) ──────────────────────────────────
+
+export type PlayerStateJs = 'idle' | 'running' | 'paused' | 'completed' | 'stopped';
+
+/** Create a player for the planned commands, starting at `start` (mm). */
+export function motionPlayerNew(
+  commands: MotionCommandJS[],
+  start: [number, number, number],
+): number {
+  return wasmMotionPlayerNew(commands as unknown as object, new Float64Array(start)) as number;
+}
+
+export function motionPlayerPlay(id: number): void {
+  wasmMotionPlayerPlay(id);
+}
+
+export function motionPlayerPause(id: number): void {
+  wasmMotionPlayerPause(id);
+}
+
+export function motionPlayerResume(id: number): void {
+  wasmMotionPlayerResume(id);
+}
+
+export function motionPlayerStop(id: number): void {
+  wasmMotionPlayerStop(id);
+}
+
+/** Advance the trajectory by `dt` seconds (frame delta). */
+export function motionPlayerUpdate(id: number, dt: number): void {
+  wasmMotionPlayerUpdate(id, dt);
+}
+
+export function motionPlayerState(id: number): PlayerStateJs {
+  return wasmMotionPlayerState(id) as PlayerStateJs;
+}
+
+export function motionPlayerTarget(id: number): [number, number, number] {
+  return Array.from(wasmMotionPlayerTarget(id) as unknown as number[]) as [number, number, number];
+}
+
+export function motionPlayerProgress(id: number): number {
+  return wasmMotionPlayerProgress(id) as number;
+}
+
+export function motionPlayerDrop(id: number): void {
+  wasmMotionPlayerDrop(id);
 }

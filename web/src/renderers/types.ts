@@ -49,6 +49,8 @@ export interface RobotRendererProps {
    *  the line grows as the robot draws. Defaults to showing all points. */
   trajectoryReveal?: number;
   workspacePoints?: [number, number, number][];
+  /** Preview of the commanded drawing path (shape the selected demo draws). */
+  tracePath?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;
