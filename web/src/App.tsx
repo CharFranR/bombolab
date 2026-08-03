@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
-import type { TrajectoryFile } from './types';
 import { parseGcode, mapPoint, drawingBoundingBox, defaultMapping, fitScale } from './lib/gcodeCipra';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk } from './wasm';
 import { qToServoDeg, gripperToServo, requestSerialPort, openPort, sendSerial } from './serial';
@@ -305,46 +304,6 @@ export default function App() {
         console.warn('[App] Reload: failed to fetch calibration.json:', err.message);
       });
   }, []);
-
-  // Upload: user selects a trajectory JSON, resolves every step's tool-tip
-  // position (FK + DH→THREE [x,z,y] swap) and stores the polyline points.
-  const handleLoadTrajectory = useCallback(() => {
-    if (!robot) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = JSON.parse(reader.result as string) as TrajectoryFile;
-          if (!data || !Array.isArray(data.steps)) {
-            throw new Error('Trajectory file must contain a `steps` array');
-          }
-          const points: [number, number, number][] = data.steps.map((step) => {
-            if (!Array.isArray(step.q) || step.q.length !== robot.segments.length) {
-              throw new Error('Each step needs a q array matching the number of joints');
-            }
-            // Solve FK for this step's angles. fk.ee is the tool-tip frame in
-            // DH (Z-up) convention; extract its translation and apply the same
-            // DH → THREE swap the rest of the viewer uses: [x, z, y].
-            const segs = robot.segments.map((s, i) => ({ ...s, q: step.q[i] }));
-            const fk = forwardKinematics(segs, robot.baseTransform);
-            return [fk.ee[3], fk.ee[11], fk.ee[7]] as [number, number, number];
-          });
-          setTrajectoryPoints(points);
-          console.log(`[App] Loaded trajectory — ${points.length} tool-tip points`);
-        } catch (err) {
-          console.error('Failed to parse trajectory file:', err);
-          setTrajectoryPoints([]);
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  }, [robot]);
 
   // Upload: user selects a CIPRA `.gcode` file and the browser resolves the
   // whole pipeline (parse → map/auto-scale → drawing-mode IK → FK tool-tip),
@@ -688,27 +647,6 @@ export default function App() {
             }}
           >
             {showWorkspace ? 'Ocultar workspace' : 'Mostrar workspace'}
-          </button>
-        </div>
-
-        {/* Cargar trayectoria de dibujo */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <button
-            onClick={handleLoadTrajectory}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: trajectoryPoints.length > 0 ? '#355' : '#444',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            {trajectoryPoints.length > 0
-              ? `Trayectoria (${trajectoryPoints.length} pts)`
-              : 'Cargar trayectoria .json'}
           </button>
         </div>
 
