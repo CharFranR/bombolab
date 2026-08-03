@@ -1,7 +1,206 @@
 //! Command-line interface for the G-code bridge.
 //!
-//! Usage is wired up by the orchestrator; this binary is a thin entry point.
+//! Reads a CIPRA G-code file, maps it, validates reachability with a dry-run
+//! IK solve, and executes the drawing either in simulation (default, no
+//! hardware) or against a real Arduino Nano over serial.
+//!
+//! # Default is safe
+//!
+//! Without `--port` the plan is only simulated; pass `--port` only when a
+//! FABRI Creator is actually connected and ready to draw.
+
+use std::path::PathBuf;
+
+use bombolab_core::communication::ArduinoNano;
+
+use gcode_bridge::{GcodeBridge, MappingConfig, SerialSink, SimulationSink};
+
+struct CliArgs {
+    input: PathBuf,
+    port: Option<String>,
+    scale: Option<f64>,
+    z_draw: Option<f64>,
+    z_travel: Option<f64>,
+    gripper: Option<u8>,
+}
+
+fn usage() -> String {
+    format!(
+        "gcode-bridge — dibuja G-code de CIPRA con el FABRI Creator
+
+Usage:
+  gcode-bridge <input.gcode> [options]
+
+Options:
+  --port <name>    Conectar al Arduino Nano por serial (por defecto: SIMULA).
+  --scale <s>      Escala explícita (0..1). Omisión: auto-escala para caber.
+  --z-draw <mm>    Altura de dibujo (por defecto: {}).
+  --z-travel <mm>  Altura de viaje / pluma arriba (por defecto: {}).
+  --gripper <0-255> Valor del gripper a enviar (por defecto: 90).
+  -h, --help       Muestra esta ayuda.
+",
+        MappingConfig::default().z_draw,
+        MappingConfig::default().z_travel
+    )
+}
+
+fn parse_args(args: &[String]) -> Result<CliArgs, String> {
+    if args.is_empty() {
+        return Err("falta el archivo .gcode".into());
+    }
+    let input = args[0].as_str();
+    if input == "-h" || input == "--help" {
+        return Err("help".into());
+    }
+    let mut port = None;
+    let mut scale = None;
+    let mut z_draw = None;
+    let mut z_travel = None;
+    let mut gripper = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" => {
+                i += 1;
+                port = args.get(i).cloned();
+            }
+            "--scale" => {
+                i += 1;
+                scale = Some(
+                    args.get(i)
+                        .ok_or("--scale requiere un valor")?
+                        .parse::<f64>()
+                        .map_err(|_| "--scale debe ser un número")?,
+                );
+            }
+            "--z-draw" => {
+                i += 1;
+                z_draw = Some(
+                    args.get(i)
+                        .ok_or("--z-draw requiere un valor")?
+                        .parse::<f64>()
+                        .map_err(|_| "--z-draw debe ser un número")?,
+                );
+            }
+            "--z-travel" => {
+                i += 1;
+                z_travel = Some(
+                    args.get(i)
+                        .ok_or("--z-travel requiere un valor")?
+                        .parse::<f64>()
+                        .map_err(|_| "--z-travel debe ser un número")?,
+                );
+            }
+            "--gripper" => {
+                i += 1;
+                gripper = Some(
+                    args.get(i)
+                        .ok_or("--gripper requiere un valor")?
+                        .parse::<u8>()
+                        .map_err(|_| "--gripper debe ser un byte (0-255)")?,
+                );
+            }
+            other => return Err(format!("argumento desconocido: {other}")),
+        }
+        i += 1;
+    }
+
+    Ok(CliArgs {
+        input: PathBuf::from(input),
+        port,
+        scale,
+        z_draw,
+        z_travel,
+        gripper,
+    })
+}
 
 fn main() {
-    println!("gcode-bridge: not yet wired");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let cli = match parse_args(&args) {
+        Ok(c) => c,
+        Err(m) if m == "help" => {
+            print!("{}", usage());
+            return;
+        }
+        Err(m) => {
+            eprintln!("error: {m}");
+            eprintln!();
+            eprint!("{}", usage());
+            std::process::exit(1);
+        }
+    };
+
+    // Build the mapping config with any user overrides.
+    let def = MappingConfig::default();
+    let config = MappingConfig {
+        scale: cli.scale,
+        z_draw: cli.z_draw.unwrap_or(def.z_draw),
+        z_travel: cli.z_travel.unwrap_or(def.z_travel),
+        ..def
+    };
+
+    let bridge = GcodeBridge::new(config);
+
+    // Read the drawing.
+    let gcode = match std::fs::read_to_string(&cli.input) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: no se pudo leer {}: {e}", cli.input.display());
+            std::process::exit(1);
+        }
+    };
+
+    // Plan (this dry-runs IK on every point, strict reachability).
+    let plan = match bridge.plan(&gcode) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error al planificar: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let strokes = plan.strokes.len();
+    println!(
+        "Plan: {strokes} trazos, {} comandos, escala efectiva {:.4}",
+        plan.target_count(),
+        plan.scale
+    );
+
+    // Execute on hardware or simulate.
+    let gripper = cli.gripper.unwrap_or(90);
+    match cli.port {
+        Some(port) => {
+            print!("Conectando a {port} ... ");
+            match ArduinoNano::connect(&port) {
+                Ok(nano) => {
+                    println!("ok");
+                    let mut sink = SerialSink { arduino: nano };
+                    match bridge.execute(&plan, &mut sink, gripper) {
+                        Ok(n) => println!("Dibujado: {n} comandos enviados y verificados."),
+                        Err(e) => {
+                            eprintln!("\nerror durante la ejecución: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("falló: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        None => {
+            println!("(simulación — conéctate con --port para dibujar en hardware)");
+            let mut sink = SimulationSink::default();
+            match bridge.execute(&plan, &mut sink, gripper) {
+                Ok(n) => println!("Simulación completa: {n} comandos generados."),
+                Err(e) => {
+                    eprintln!("error durante la simulación: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
 }

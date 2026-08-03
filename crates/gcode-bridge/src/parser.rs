@@ -88,7 +88,7 @@ pub fn parse_gcode(input: &str) -> Result<Vec<Stroke>, ParseError> {
 
         match key {
             "G0" | "G1" => {
-                let (x, y) = parse_xy(&trimmed, i + 1)?;
+                let (x, y) = parse_xy(trimmed, i + 1)?;
                 pos = (x, y);
                 if pen_down {
                     current.push(pos);
@@ -101,15 +101,13 @@ pub fn parse_gcode(input: &str) -> Result<Vec<Stroke>, ParseError> {
                     current.push(pos);
                 }
             }
-            "M5" => {
+            "M5" if pen_down => {
                 // Tool off: end of the current stroke.
-                if pen_down {
-                    pen_down = false;
-                    if !current.is_empty() {
-                        strokes.push(Stroke { points: current });
-                    }
-                    current = Vec::new();
+                pen_down = false;
+                if !current.is_empty() {
+                    strokes.push(Stroke { points: current });
                 }
+                current = Vec::new();
             }
             // G21 (units mm) and G90 (absolute positioning) are preamble;
             // unknown M/G codes are tolerated to future-proof the dialect.

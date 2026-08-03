@@ -138,8 +138,10 @@ impl GcodeBridge {
         let (w, h) = (bb.2 - bb.0, bb.3 - bb.1);
         let scale = self.config.target.fit_scale(w, h);
 
-        let mut plan = DrawingPlan::default();
-        plan.scale = scale;
+        let mut plan = DrawingPlan {
+            scale,
+            ..Default::default()
+        };
 
         for stroke in &strokes {
             let first = &stroke.points[0];

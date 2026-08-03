@@ -84,17 +84,15 @@ impl DrawingValidator {
 
     /// Check a single target for reachability under the drawing constraint.
     pub fn is_reachable(&self, target: (f64, f64, f64)) -> bool {
-        match solve_drawing_plane_ik(
+        solve_drawing_plane_ik(
             &self.solver,
             &[target.0, target.1, target.2],
             &self.q_init,
             &self.robot,
             &self.base,
             &self.tool,
-        ) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        )
+        .is_ok()
     }
 
     /// Dry-run every target and collect the unreachable ones.
