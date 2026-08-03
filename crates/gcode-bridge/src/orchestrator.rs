@@ -163,11 +163,18 @@ impl GcodeBridge {
 
             let mut resolved: Vec<ResolvedTarget> = Vec::new();
             let travel_target = travel;
-            resolved.push(self.resolve(travel_target).map_err(|e| extract(e, 0))?);
+            let r = self
+                .resolve(travel_target)
+                .map_err(|e| extract(e, 0))?;
+            self.servo_check(&r.q)
+                .map_err(|e| with_index(e, 0))?;
+            resolved.push(r);
 
             for (i, &(x, y)) in stroke.points.iter().enumerate() {
                 let t = map_point(x, y, w, h, &self.config, MoveZ::Draw);
-                resolved.push(self.resolve(t).map_err(|e| extract(e, i + 1))?);
+                let r = self.resolve(t).map_err(|e| extract(e, i + 1))?;
+                self.servo_check(&r.q).map_err(|e| with_index(e, i + 1))?;
+                resolved.push(r);
             }
             plan.strokes.push(resolved);
         }
@@ -241,6 +248,18 @@ fn extract(e: BridgeError, index: usize) -> BridgeError {
             index,
             target,
             reason,
+        },
+        other => other,
+    }
+}
+
+/// Stamp the failing target index onto a servo-range error.
+fn with_index(e: BridgeError, index: usize) -> BridgeError {
+    match e {
+        BridgeError::ServoOutOfRange { joint, servo_deg, .. } => BridgeError::ServoOutOfRange {
+            index,
+            joint,
+            servo_deg,
         },
         other => other,
     }
