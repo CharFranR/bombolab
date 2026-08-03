@@ -23,6 +23,8 @@ pub struct MappingConfig {
     pub target: DrawingBounds,
     /// Drawing height in mm (a horizontal plane the tool tip stays on).
     pub z_draw: f64,
+    /// Lift height in mm for travel moves (pen up between strokes).
+    pub z_travel: f64,
     /// Optional explicit scale. `None` → auto-scale to fit [`target`](DrawingBounds).
     pub scale: Option<f64>,
 }
@@ -32,7 +34,25 @@ impl Default for MappingConfig {
         Self {
             target: DrawingBounds::default_for_fabri(),
             z_draw: 80.0,
+            z_travel: 86.0,
             scale: None,
+        }
+    }
+}
+
+/// The z-height of a given move: drawing points sit at `z_draw`, travel moves
+/// (pen up) at `z_travel`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MoveZ {
+    Draw,
+    Travel,
+}
+
+impl MoveZ {
+    pub fn height(self, config: &MappingConfig) -> f64 {
+        match self {
+            MoveZ::Draw => config.z_draw,
+            MoveZ::Travel => config.z_travel,
         }
     }
 }
@@ -65,6 +85,7 @@ pub fn map_point(
     drawing_w: f64,
     drawing_h: f64,
     config: &MappingConfig,
+    z: MoveZ,
 ) -> (f64, f64, f64) {
     let scale = effective_scale(drawing_w, drawing_h, config);
     let t = &config.target;
@@ -74,11 +95,9 @@ pub fn map_point(
     let offset_y = t.y_min + (t.height() - drawing_h * scale) / 2.0;
 
     let rx = offset_x + x * scale;
-    // Flip y so increasing A4 height maps to forward-of-base sweep direction
-    // consistent with the target rectangle's y orientation.
     let ry = offset_y + y * scale;
 
-    (rx, ry, config.z_draw)
+    (rx, ry, z.height(config))
 }
 
 /// Map an entire drawing (a list of A4 points) onto robot targets.
@@ -88,16 +107,10 @@ pub fn map_drawing(
     drawing_h: f64,
     config: &MappingConfig,
 ) -> MappingResult {
-    if points.is_empty() {
-        return MappingResult {
-            targets: Vec::new(),
-            scale: effective_scale(drawing_w, drawing_h, config),
-        };
-    }
     let scale = effective_scale(drawing_w, drawing_h, config);
     let targets = points
         .iter()
-        .map(|&(x, y)| map_point(x, y, drawing_w, drawing_h, config))
+        .map(|&(x, y)| map_point(x, y, drawing_w, drawing_h, config, MoveZ::Draw))
         .collect();
     MappingResult { targets, scale }
 }
@@ -129,6 +142,7 @@ mod tests {
                 y_max: 50.0,
             },
             z_draw: 80.0,
+            z_travel: 86.0,
             scale: None,
         }
     }
@@ -140,8 +154,8 @@ mod tests {
         let s = c.target.fit_scale(210.0, 297.0);
         assert!(s < 1.0 && s > 0.0);
         // Mapped extremes must land inside the rectangle.
-        let tl = map_point(0.0, 0.0, 210.0, 297.0, &c);
-        let br = map_point(210.0, 297.0, 210.0, 297.0, &c);
+        let tl = map_point(0.0, 0.0, 210.0, 297.0, &c, MoveZ::Draw);
+        let br = map_point(210.0, 297.0, 210.0, 297.0, &c, MoveZ::Draw);
         assert!(c.target.contains(tl.0, tl.1));
         assert!(c.target.contains(br.0, br.1));
         assert_eq!(tl.2, 80.0);
@@ -154,7 +168,7 @@ mod tests {
             scale: Some(0.5),
             ..config()
         };
-        let (rx, ry, z) = map_point(10.0, 20.0, 210.0, 297.0, &c);
+        let (rx, ry, z) = map_point(10.0, 20.0, 210.0, 297.0, &c, MoveZ::Draw);
         // offset_x = 150 + (100 − 105)/2 = 147.5 → 147.5 + 10*0.5 = 152.5
         assert!((rx - 152.5).abs() < 1e-9);
         // offset_y = −50 + (100 − 148.5)/2 = −74.25 → −74.25 + 20*0.5 = −64.25
@@ -163,11 +177,18 @@ mod tests {
     }
 
     #[test]
+    fn travel_move_uses_lift_height() {
+        let c = config();
+        let (_, _, z) = map_point(5.0, 5.0, 210.0, 297.0, &c, MoveZ::Travel);
+        assert_eq!(z, 86.0);
+    }
+
+    #[test]
     fn auto_fit_keeps_mapped_points_contained() {
         let c = config();
         let corners = [(0.0, 0.0), (210.0, 0.0), (0.0, 297.0), (210.0, 297.0)];
         for (x, y) in corners {
-            let (rx, ry, _) = map_point(x, y, 210.0, 297.0, &c);
+            let (rx, ry, _) = map_point(x, y, 210.0, 297.0, &c, MoveZ::Draw);
             assert!(c.target.contains(rx, ry), "({x},{y}) → ({rx:.2},{ry:.2})");
         }
     }

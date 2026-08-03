@@ -24,6 +24,12 @@ pub mod mapper;
 /// Dry-run IK reachability validation (strict mode).
 pub mod validate;
 
+/// Orchestrator: pipeline and hardware/simulation execution.
+pub mod orchestrator;
+
 pub use mapper::{MappingConfig, MappingResult, map_drawing, map_point};
+pub use orchestrator::{
+    BridgeError, DrawingPlan, GcodeBridge, MotionSink, ResolvedTarget, SerialSink, SimulationSink,
+};
 pub use validate::{DrawingValidator, ReachabilityFailure, Validation};
 pub use workspace::DrawingBounds;
