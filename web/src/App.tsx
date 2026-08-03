@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
 import type { TrajectoryFile } from './types';
+import { parseGcode, mapPoint, drawingBoundingBox, defaultMapping, fitScale } from './lib/gcodeCipra';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk } from './wasm';
 import { qToServoDeg, gripperToServo, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator } from './interpolation';
@@ -345,6 +346,68 @@ export default function App() {
     input.click();
   }, [robot]);
 
+  // Upload: user selects a CIPRA `.gcode` file and the browser resolves the
+  // whole pipeline (parse → map/auto-scale → drawing-mode IK → FK tool-tip),
+  // mirroring the gcode-bridge crate's algorithm for identical results.
+  const handleLoadGcode = useCallback(() => {
+    if (!robot) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.gcode,.nc,.txt';
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const { strokes, error } = parseGcode(reader.result as string);
+        if (error || strokes.length === 0) {
+          console.error('[App] Failed to parse gcode:', error ?? 'no strokes');
+          setTrajectoryPoints([]);
+          return;
+        }
+        const bbox = drawingBoundingBox(strokes);
+        if (!bbox) {
+          setTrajectoryPoints([]);
+          return;
+        }
+        const config = defaultMapping();
+        const drawingW = bbox.maxX - bbox.minX;
+        const drawingH = bbox.maxY - bbox.minY;
+        const scale = config.scale ?? fitScale(config.target, drawingW, drawingH);
+
+        const points: [number, number, number][] = [];
+        let convergedCount = 0;
+        let totalTargets = 0;
+        for (const stroke of strokes) {
+          if (stroke.length === 0) continue;
+          const first = stroke[0];
+          const travel = mapPoint(first[0], first[1], drawingW, drawingH, config, 'travel');
+          for (const [mx, my, mz] of [travel, ...stroke.map((p) => mapPoint(p[0], p[1], drawingW, drawingH, config, 'draw'))]) {
+            totalTargets += 1;
+            const target: [number, number, number] = [mx, my, mz];
+            const res = solveDrawingPlaneIk(robot, target, [0, 0, 0, 0, 0]);
+            if (!res.converged) {
+              console.warn(`[App] IK no converge en target (${mx},${my},${mz}): error ${res.error.toFixed(2)}mm`);
+              continue;
+            }
+            convergedCount += 1;
+            // Resolve FK for this step and extract the tool-tip position with
+            // the same DH→THREE [x,z,y] swap the JSON loader uses.
+            const segs = robot.segments.map((s, i) => ({ ...s, q: res.q[i] }));
+            const fk = forwardKinematics(segs, robot.baseTransform);
+            points.push([fk.ee[3], fk.ee[11], fk.ee[7]]);
+          }
+        }
+        setTrajectoryPoints(points);
+        console.log(
+          `[App] Loaded gcode — ${strokes.length} strokes, ${points.length} tool-tip points (IK ${convergedCount}/${totalTargets} converged), scale ${scale.toFixed(4)}`,
+        );
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [robot]);
+
   const workspacePoints = useMemo(
     () => showWorkspace ? generateWorkspace(2000) : [],
     [showWorkspace],
@@ -646,6 +709,25 @@ export default function App() {
             {trajectoryPoints.length > 0
               ? `Trayectoria (${trajectoryPoints.length} pts)`
               : 'Cargar trayectoria .json'}
+          </button>
+        </div>
+
+        {/* Cargar G-code directamente (dialecto CIPRA) */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <button
+            onClick={handleLoadGcode}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: trajectoryPoints.length > 0 ? '#355' : '#444',
+              border: 'none',
+              borderRadius: 4,
+              color: '#ccc',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Cargar trayectoria .gcode
           </button>
         </div>
 
