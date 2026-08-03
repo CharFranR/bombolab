@@ -35,11 +35,12 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints = [], trajectoryPoints = [], ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: [number, number, number][];
+  trajectoryPoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;
@@ -90,6 +91,7 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints =
     frames: poses,
     gripper,
     workspacePoints,
+    trajectoryPoints,
     ikTarget,
     onIkTargetChange,
     onDragStart,
@@ -120,11 +122,12 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints =
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints = [], trajectoryPoints = [], ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: [number, number, number][];
+  trajectoryPoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   fidelityMode: FidelityMode;
@@ -159,6 +162,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           rawFrames={rawFrames}
           gripper={gripper}
           workspacePoints={workspacePoints}
+          trajectoryPoints={trajectoryPoints}
           ikTarget={ikTarget}
           onIkTargetChange={onIkTargetChange}
           onDragStart={() => setIkDragging(true)}

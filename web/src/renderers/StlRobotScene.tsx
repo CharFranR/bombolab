@@ -1,6 +1,6 @@
 import { useMemo, useRef, useCallback } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
-import { TransformControls } from '@react-three/drei';
+import { TransformControls, Line } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
@@ -49,6 +49,7 @@ export default function StlRobotScene({
   frames,
   gripper,
   workspacePoints,
+  trajectoryPoints = [],
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -95,6 +96,31 @@ export default function StlRobotScene({
       : undefined),
     [workspacePoints],
   );
+
+  // Drawing trajectory: polyline + an optional dot that wanders the curve.
+  // Points are pre-converted to THREE coords by the caller (DH → [x,z,y]).
+  const trajectoryVecs = useMemo(
+    () => trajectoryPoints.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
+    [trajectoryPoints],
+  );
+  const trajectoryVecsRef = useRef(trajectoryVecs);
+  trajectoryVecsRef.current = trajectoryVecs;
+  const trajectoryDotRef = useRef<THREE.Mesh>(null);
+  const trajectoryStepRef = useRef(0); // continuous index over the polyline
+  const TRAVERSE_SECONDS = 12; // full traversal of the path
+
+  // Advance the dot along the polyline each frame (static Line, moving dot).
+  useFrame((_, delta) => {
+    const pts = trajectoryVecsRef.current;
+    const dot = trajectoryDotRef.current;
+    if (!pts || pts.length < 2 || !dot) return;
+    const lastSegment = pts.length - 1;
+    trajectoryStepRef.current =
+      (trajectoryStepRef.current + delta * (lastSegment / TRAVERSE_SECONDS)) % lastSegment;
+    const seg = Math.floor(trajectoryStepRef.current);
+    const frac = trajectoryStepRef.current - seg;
+    dot.position.lerpVectors(pts[seg], pts[Math.min(seg + 1, lastSegment)], frac);
+  });
 
   // Find target entry for TransformControls
   const targetEntry = useMemo(() => {
@@ -306,6 +332,23 @@ export default function StlRobotScene({
           </bufferGeometry>
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
+      )}
+      {/* Drawing trajectory — static blue polyline of the tool-tip path */}
+      {trajectoryPoints && trajectoryPoints.length > 1 && (
+        <>
+          <Line
+            points={trajectoryPoints}
+            color="#4488ff"
+            lineWidth={2}
+            transparent
+            opacity={0.9}
+          />
+          {/* Dot wandering the curve (optional animation) */}
+          <mesh ref={trajectoryDotRef} position={trajectoryPoints[0]}>
+            <sphereGeometry args={[3, 12, 12]} />
+            <meshStandardMaterial color="#ffb432" emissive="#ff8820" emissiveIntensity={0.6} />
+          </mesh>
+        </>
       )}
       {/* IK target */}
       {ikTarget && onIkTargetChange && (

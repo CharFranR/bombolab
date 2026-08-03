@@ -41,6 +41,10 @@ export interface CalibrationConfig {
 export interface RobotRendererProps {
   frames: FramePose[];
   gripper: number;
+  /** Tool-tip positions along the drawing trajectory, already converted
+   *  to THREE coords (DH → [x,z,y] swap applied by the caller). Rendered
+   *  as a static blue polyline. */
+  trajectoryPoints?: [number, number, number][];
   workspacePoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;

@@ -144,6 +144,7 @@ export default function SimpleRobotScene({
   frames: poses,
   gripper = 0,
   workspacePoints = [],
+  trajectoryPoints = [],
   ikTarget,
   onIkTargetChange,
   onDragStart,
@@ -256,6 +257,17 @@ export default function SimpleRobotScene({
           </bufferGeometry>
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
+      )}
+
+      {/* Drawing trajectory — static blue polyline of the tool-tip path */}
+      {trajectoryPoints.length > 1 && (
+        <Line
+          points={trajectoryPoints}
+          color="#4488ff"
+          lineWidth={2}
+          transparent
+          opacity={0.9}
+        />
       )}
     </group>
   );
