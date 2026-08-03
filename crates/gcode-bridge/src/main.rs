@@ -22,6 +22,7 @@ struct CliArgs {
     z_draw: Option<f64>,
     z_travel: Option<f64>,
     gripper: Option<u8>,
+    export: Option<PathBuf>,
 }
 
 fn usage() -> String {
@@ -37,6 +38,7 @@ Options:
   --z-draw <mm>    Altura de dibujo (por defecto: {}).
   --z-travel <mm>  Altura de viaje / pluma arriba (por defecto: {}).
   --gripper <0-255> Valor del gripper a enviar (por defecto: 90).
+  --export <file>  Volcar el plan a JSON de pasos 'steps' para la web y salir.
   -h, --help       Muestra esta ayuda.
 ",
         MappingConfig::default().z_draw,
@@ -57,6 +59,7 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
     let mut z_draw = None;
     let mut z_travel = None;
     let mut gripper = None;
+    let mut export = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -64,6 +67,10 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
             "--port" => {
                 i += 1;
                 port = args.get(i).cloned();
+            }
+            "--export" => {
+                i += 1;
+                export = args.get(i).map(PathBuf::from);
             }
             "--scale" => {
                 i += 1;
@@ -113,6 +120,7 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
         z_draw,
         z_travel,
         gripper,
+        export,
     })
 }
 
@@ -167,6 +175,22 @@ fn main() {
         plan.target_count(),
         plan.scale
     );
+
+    // Export the plan to the web viewer's JSON document and exit.
+    if let Some(path) = &cli.export {
+        let gripper = cli.gripper.unwrap_or(90);
+        let json = plan.to_trajectory_json(Some(gripper));
+        match std::fs::write(path, json) {
+            Ok(()) => {
+                println!("Trayectoria exportada a {}", path.display());
+                return;
+            }
+            Err(e) => {
+                eprintln!("error: no se pudo escribir {}: {e}", path.display());
+                std::process::exit(1);
+            }
+        }
+    }
 
     // Execute on hardware or simulate.
     let gripper = cli.gripper.unwrap_or(90);

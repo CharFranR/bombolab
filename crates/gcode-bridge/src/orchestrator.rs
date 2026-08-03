@@ -72,10 +72,51 @@ pub struct DrawingPlan {
     pub strokes: Vec<Vec<ResolvedTarget>>,
 }
 
+/// One step of a trajectory consumed by the web viewer.
+///
+/// `q` are joint angles in **radians**, already resolved by IK. The web app
+/// resolves each step's tool-tip position with forward kinematics and renders
+/// the polyline, so no Cartesian data needs to be embedded here.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TrajectoryStep {
+    pub q: [f64; 5],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gripper: Option<u8>,
+}
+
+/// The full serializable trajectory document: `{ "steps": [ ... ] }`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TrajectoryFile {
+    pub steps: Vec<TrajectoryStep>,
+}
+
 impl DrawingPlan {
     /// Total number of servo commands the plan would emit.
     pub fn target_count(&self) -> usize {
         self.strokes.iter().map(|s| s.len()).sum()
+    }
+
+    /// Flatten every stroke into an ordered list of trajectory steps.
+    ///
+    /// `gripper` is threaded into every step (when given) so the web viewer can
+    /// reflect pen-engaging values; it is omitted when `None`.
+    pub fn to_trajectory(&self, gripper: Option<u8>) -> TrajectoryFile {
+        let steps = self
+            .strokes
+            .iter()
+            .flat_map(|s| s.iter())
+            .map(|r| TrajectoryStep {
+                q: r.q,
+                gripper,
+            })
+            .collect();
+        TrajectoryFile { steps }
+    }
+
+    /// Serialize the plan to the web-viewer JSON document.
+    pub fn to_trajectory_json(&self, gripper: Option<u8>) -> String {
+        serde_json::to_string_pretty(&self.to_trajectory(gripper))
+            .expect("trajectory JSON serialization cannot fail")
     }
 }
 
@@ -328,5 +369,32 @@ mod tests {
         let out_of_range = b.robot.q_to_servo(&[0.0, 0.0, 3.0, 0.0, 0.0]);
         let joints: [f64; 5] = std::array::from_fn(|i| out_of_range[i].to_degrees());
         assert!(bombolab_core::ServoCommand::new(joints, 90).is_err());
+    }
+
+    #[test]
+    fn to_trajectory_flattens_strokes_with_gripper() {
+        let b = bridge();
+        let plan = b.plan(SQUARE).unwrap();
+        let traj = plan.to_trajectory(Some(90));
+        assert_eq!(traj.steps.len(), plan.target_count());
+        assert!(traj.steps.iter().all(|s| s.gripper == Some(90)));
+    }
+
+    #[test]
+    fn to_trajectory_omits_gripper_when_none() {
+        let b = bridge();
+        let plan = b.plan(SQUARE).unwrap();
+        let traj = plan.to_trajectory(None);
+        assert!(traj.steps.iter().all(|s| s.gripper.is_none()));
+    }
+
+    #[test]
+    fn to_trajectory_json_is_valid_and_matches_shape() {
+        let b = bridge();
+        let plan = b.plan(SQUARE).unwrap();
+        let json = plan.to_trajectory_json(Some(90));
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.get("steps").unwrap().is_array());
+        assert_eq!(parsed["steps"].as_array().unwrap().len(), plan.target_count());
     }
 }
