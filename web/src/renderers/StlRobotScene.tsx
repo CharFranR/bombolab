@@ -50,6 +50,7 @@ export default function StlRobotScene({
   gripper,
   workspacePoints,
   trajectoryPoints = [],
+  trajectoryReveal,
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -97,29 +98,41 @@ export default function StlRobotScene({
     [workspacePoints],
   );
 
-  // Drawing trajectory: polyline + an optional dot that wanders the curve.
+  // Drawing trajectory: polyline + a dot at the current drawing tip.
   // Points are pre-converted to THREE coords by the caller (DH → [x,z,y]).
+  // trajectoryReveal controls how much of the line is drawn; when it is
+  // set, the dot sits at the tip of the revealed portion (the robot's
+  // current drawing point). When unset, the full path is shown.
   const trajectoryVecs = useMemo(
     () => trajectoryPoints.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
     [trajectoryPoints],
   );
+  const reveal = trajectoryReveal ?? trajectoryPoints.length;
+  const visibleVecs = useMemo(
+    () => trajectoryVecs.slice(0, Math.max(0, reveal)),
+    [trajectoryVecs, reveal],
+  );
   const trajectoryVecsRef = useRef(trajectoryVecs);
   trajectoryVecsRef.current = trajectoryVecs;
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
   const trajectoryDotRef = useRef<THREE.Mesh>(null);
-  const trajectoryStepRef = useRef(0); // continuous index over the polyline
-  const TRAVERSE_SECONDS = 12; // full traversal of the path
+  const visibleVecsRef = useRef(visibleVecs);
+  visibleVecsRef.current = visibleVecs;
 
-  // Advance the dot along the polyline each frame (static Line, moving dot).
-  useFrame((_, delta) => {
-    const pts = trajectoryVecsRef.current;
+  // Keep the dot anchored to the tip of the revealed polyline when the
+  // trajectory is being drawn progressively; otherwise hide it.
+  useFrame(() => {
     const dot = trajectoryDotRef.current;
-    if (!pts || pts.length < 2 || !dot) return;
-    const lastSegment = pts.length - 1;
-    trajectoryStepRef.current =
-      (trajectoryStepRef.current + delta * (lastSegment / TRAVERSE_SECONDS)) % lastSegment;
-    const seg = Math.floor(trajectoryStepRef.current);
-    const frac = trajectoryStepRef.current - seg;
-    dot.position.lerpVectors(pts[seg], pts[Math.min(seg + 1, lastSegment)], frac);
+    const visible = visibleVecsRef.current;
+    if (!dot) return;
+    if (visible.length === 0) {
+      dot.visible = false;
+      return;
+    }
+    dot.visible = true;
+    const head = visible[visible.length - 1];
+    dot.position.copy(head);
   });
 
   // Find target entry for TransformControls
@@ -333,17 +346,17 @@ export default function StlRobotScene({
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
       )}
-      {/* Drawing trajectory — static blue polyline of the tool-tip path */}
-      {trajectoryPoints && trajectoryPoints.length > 1 && (
+      {/* Drawing trajectory — blue polyline, revealed progressively as the
+          robot draws; dot anchors the current drawing tip. */}
+      {trajectoryVecs.length > 1 && visibleVecs.length > 1 && (
         <>
           <Line
-            points={trajectoryPoints}
+            points={visibleVecs}
             color="#4488ff"
             lineWidth={2}
             transparent
             opacity={0.9}
           />
-          {/* Dot wandering the curve (optional animation) */}
           <mesh ref={trajectoryDotRef} position={trajectoryPoints[0]}>
             <sphereGeometry args={[3, 12, 12]} />
             <meshStandardMaterial color="#ffb432" emissive="#ff8820" emissiveIntensity={0.6} />

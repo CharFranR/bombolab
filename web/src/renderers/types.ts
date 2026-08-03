@@ -43,8 +43,11 @@ export interface RobotRendererProps {
   gripper: number;
   /** Tool-tip positions along the drawing trajectory, already converted
    *  to THREE coords (DH → [x,z,y] swap applied by the caller). Rendered
-   *  as a static blue polyline. */
+   *  as a blue polyline. */
   trajectoryPoints?: [number, number, number][];
+  /** How many polyline points are drawn (progressive reveal). When playing,
+   *  the line grows as the robot draws. Defaults to showing all points. */
+  trajectoryReveal?: number;
   workspacePoints?: [number, number, number][];
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;

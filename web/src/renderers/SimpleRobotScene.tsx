@@ -145,6 +145,7 @@ export default function SimpleRobotScene({
   gripper = 0,
   workspacePoints = [],
   trajectoryPoints = [],
+  trajectoryReveal,
   ikTarget,
   onIkTargetChange,
   onDragStart,
@@ -259,10 +260,10 @@ export default function SimpleRobotScene({
         </points>
       )}
 
-      {/* Drawing trajectory — static blue polyline of the tool-tip path */}
-      {trajectoryPoints.length > 1 && (
+      {/* Drawing trajectory — blue polyline, revealed progressively */}
+      {trajectoryPoints.length > 1 && (trajectoryReveal == null || trajectoryReveal > 1) && (
         <Line
-          points={trajectoryPoints}
+          points={trajectoryReveal != null ? trajectoryPoints.slice(0, trajectoryReveal) : trajectoryPoints}
           color="#4488ff"
           lineWidth={2}
           transparent

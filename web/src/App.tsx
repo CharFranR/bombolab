@@ -33,6 +33,12 @@ export default function App() {
   const [serialError, setSerialError] = useState<string | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [trajectoryPoints, setTrajectoryPoints] = useState<[number, number, number][]>([]);
+  const [trajectoryTargets, setTrajectoryTargets] = useState<[number, number, number][]>([]);
+  const [trajectoryPlaying, setTrajectoryPlaying] = useState(false);
+  const [trajectoryReveal, setTrajectoryReveal] = useState(0); // polyline points drawn so far
+  const trajectoryIdxRef = useRef(0);
+  const trajectoryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const revealAtTargetRef = useRef<number[]>([]); // points revealed after each target
   const [ikMode, setIkMode] = useState(false);
   const [drawingMode, setDrawingMode] = useState(0); // 0=off, 1=modo1, 2=modo2
   const [drawingActive, setDrawingActive] = useState(false);
@@ -236,6 +242,7 @@ export default function App() {
   }, [connected]);
 
   const handleReset = useCallback(() => {
+    stopTrajectoryRef.current();
     const home = fabriCreator();
     setRobot(home);
     setGripper(50);
@@ -322,11 +329,13 @@ export default function App() {
         if (error || strokes.length === 0) {
           console.error('[App] Failed to parse gcode:', error ?? 'no strokes');
           setTrajectoryPoints([]);
+          setTrajectoryTargets([]);
           return;
         }
         const bbox = drawingBoundingBox(strokes);
         if (!bbox) {
           setTrajectoryPoints([]);
+          setTrajectoryTargets([]);
           return;
         }
         const config = defaultMapping();
@@ -335,6 +344,8 @@ export default function App() {
         const scale = config.scale ?? fitScale(config.target, drawingW, drawingH);
 
         const points: [number, number, number][] = [];
+        const targets: [number, number, number][] = [];
+        const revealAfter: number[] = [];
         let convergedCount = 0;
         let totalTargets = 0;
         for (const stroke of strokes) {
@@ -344,9 +355,11 @@ export default function App() {
           for (const [mx, my, mz] of [travel, ...stroke.map((p) => mapPoint(p[0], p[1], drawingW, drawingH, config, 'draw'))]) {
             totalTargets += 1;
             const target: [number, number, number] = [mx, my, mz];
+            targets.push(target);
             const res = solveDrawingPlaneIk(robot, target, [0, 0, 0, 0, 0]);
             if (!res.converged) {
               console.warn(`[App] IK no converge en target (${mx},${my},${mz}): error ${res.error.toFixed(2)}mm`);
+              revealAfter.push(points.length); // no new point for this target
               continue;
             }
             convergedCount += 1;
@@ -355,8 +368,19 @@ export default function App() {
             const segs = robot.segments.map((s, i) => ({ ...s, q: res.q[i] }));
             const fk = forwardKinematics(segs, robot.baseTransform);
             points.push([fk.ee[3], fk.ee[11], fk.ee[7]]);
+            revealAfter.push(points.length); // after pushing, count is inclusive
           }
         }
+        // Stop any in-flight playback before loading a new trajectory.
+        if (trajectoryTimerRef.current) {
+          clearInterval(trajectoryTimerRef.current);
+          trajectoryTimerRef.current = null;
+        }
+        revealAtTargetRef.current = revealAfter;
+        setTrajectoryPlaying(false);
+        setTrajectoryIdx(0);
+        setTrajectoryReveal(0); // drawing appears as the robot draws
+        setTrajectoryTargets(targets);
         setTrajectoryPoints(points);
         console.log(
           `[App] Loaded gcode — ${strokes.length} strokes, ${points.length} tool-tip points (IK ${convergedCount}/${totalTargets} converged), scale ${scale.toFixed(4)}`,
@@ -366,6 +390,56 @@ export default function App() {
     };
     input.click();
   }, [robot]);
+
+  // Stop trajectory playback (shared by stop/clear/reset paths).
+  const stopTrajectory = useCallback(() => {
+    if (trajectoryTimerRef.current) {
+      clearInterval(trajectoryTimerRef.current);
+      trajectoryTimerRef.current = null;
+    }
+    setTrajectoryPlaying(false);
+  }, []);
+
+  const stopTrajectoryRef = useRef(stopTrajectory);
+  stopTrajectoryRef.current = stopTrajectory;
+
+  const setTrajectoryIdx = useCallback((i: number) => { trajectoryIdxRef.current = i; }, []);
+
+  // Play: iterate the drawing targets through IK so the robot actually
+  // follows the trajectory. Setting ikTarget each tick re-runs the IK
+  // effect loop (same mechanism the square demo uses) and moves the arm.
+  const handlePlayTrajectory = useCallback(() => {
+    if (trajectoryPlaying) { stopTrajectory(); return; }
+    const targets = trajectoryTargetsRef.current;
+    const reveal = revealAtTargetRef.current;
+    if (!robot || targets.length === 0) return;
+
+    setIkMode(true);
+    setDrawingMode(2); // marcador vertical (same as demo / gcode loader IK)
+    setTrajectoryPlaying(true);
+    setTrajectoryIdx(0);
+    setTrajectoryReveal(reveal[0] ?? 0);
+    setIkTarget(targets[0]);
+
+    trajectoryTimerRef.current = setInterval(() => {
+      const next = trajectoryIdxRef.current + 1;
+      if (next >= targets.length) {
+        // Finished: keep the full drawing, stop the arm.
+        setTrajectoryReveal(reveal[reveal.length - 1] ?? 0);
+        stopTrajectory();
+        return;
+      }
+      setTrajectoryIdx(next);
+      setTrajectoryReveal(reveal[next] ?? 0);
+      setIkTarget(targets[next]);
+    }, 60);
+  }, [robot, trajectoryPlaying, stopTrajectory, setTrajectoryIdx]);
+
+  const trajectoryTargetsRef = useRef(trajectoryTargets);
+  trajectoryTargetsRef.current = trajectoryTargets;
+
+  // Only enable the play button when a trajectory is loaded.
+  const hasTrajectory = trajectoryPoints.length > 0 && trajectoryTargets.length > 0;
 
   const workspacePoints = useMemo(
     () => showWorkspace ? generateWorkspace(2000) : [],
@@ -651,7 +725,7 @@ export default function App() {
         </div>
 
         {/* Cargar G-code directamente (dialecto CIPRA) */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             onClick={handleLoadGcode}
             style={{
@@ -667,6 +741,46 @@ export default function App() {
           >
             Cargar trayectoria .gcode
           </button>
+          {hasTrajectory && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={handlePlayTrajectory}
+                style={{
+                  flex: 1,
+                  padding: 8,
+                  background: trajectoryPlaying ? '#533' : '#364',
+                  border: 'none',
+                  borderRadius: 4,
+                  color: '#ccc',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                {trajectoryPlaying ? 'Detener trayectoria' : 'Reproducir trayectoria'}
+              </button>
+              <button
+                onClick={() => {
+                  stopTrajectory();
+                  setTrajectoryPoints([]);
+                  setTrajectoryTargets([]);
+                  setTrajectoryReveal(0);
+                  setIkTarget(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: 8,
+                  background: '#633',
+                  border: 'none',
+                  borderRadius: 4,
+                  color: '#ccc',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Limpiar trayectoria
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Demo cuadrado */}
@@ -748,6 +862,7 @@ export default function App() {
           gripper={gripper}
           workspacePoints={workspacePoints}
           trajectoryPoints={trajectoryPoints}
+          trajectoryReveal={trajectoryReveal}
           ikTarget={ikTarget}
           onIkTargetChange={setIkTarget}
           fidelityMode={fidelityMode}
