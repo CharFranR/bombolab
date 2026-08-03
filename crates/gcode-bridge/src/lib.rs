@@ -18,4 +18,8 @@ pub mod parser;
 /// Reachable drawing workspace of the FABRI Creator.
 pub mod workspace;
 
+/// Mapping of A4 drawing coordinates onto the robot drawing plane.
+pub mod mapper;
+
+pub use mapper::{MappingConfig, MappingResult, map_drawing, map_point};
 pub use workspace::DrawingBounds;
