@@ -1,0 +1,13 @@
+[package]
+name = "gcode-bridge"
+version = "0.1.0"
+edition = "2024"
+description = "Bridge G-code (CIPRA) → movimientos del FABRI Creator"
+license = "MIT"
+
+[[bin]]
+name = "gcode-bridge"
+path = "src/main.rs"
+
+[dependencies]
+bombolab-core = { path = "../bombolab-core", features = ["serial"] }
