@@ -89,6 +89,11 @@ pub enum BridgeError {
         target: (f64, f64, f64),
         reason: String,
     },
+    ServoOutOfRange {
+        index: usize,
+        joint: usize,
+        servo_deg: f64,
+    },
     Execution(String),
 }
 
@@ -100,6 +105,15 @@ impl std::fmt::Display for BridgeError {
             BridgeError::Unreachable {
                 target, reason, ..
             } => write!(f, "unreachable target {target:?}: {reason}"),
+            BridgeError::ServoOutOfRange {
+                index,
+                joint,
+                servo_deg,
+            } => write!(
+                f,
+                "target #{index}: joint J{} resolved to {servo_deg:.2}° servo angle outside [5,175]°",
+                joint + 1
+            ),
             BridgeError::Execution(m) => write!(f, "execution error: {m}"),
         }
     }
@@ -177,6 +191,23 @@ impl GcodeBridge {
         }
     }
 
+    /// Validate that the resolved joints map to servo angles within the
+    /// physical range. Returns the index of the offending joint (1-based J).
+    fn servo_check(&self, q: &[f64; 5]) -> Result<(), BridgeError> {
+        let servo = self.robot.q_to_servo(q);
+        for (i, v) in servo.iter().enumerate().take(5) {
+            let deg = v.to_degrees();
+            if !deg.is_finite() || !(5.0..=175.0).contains(&deg) {
+                return Err(BridgeError::ServoOutOfRange {
+                    index: 0,
+                    joint: i,
+                    servo_deg: deg,
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Execute a plan through a sink, returning the number of commands sent.
     pub fn execute<S: MotionSink>(
         &self,
@@ -187,10 +218,11 @@ impl GcodeBridge {
         let mut count = 0;
         for stroke in &plan.strokes {
             for resolved in stroke {
+                self.servo_check(&resolved.q)?;
                 let servo = self.robot.q_to_servo(&resolved.q);
                 let mut joints = [0.0_f64; 5];
                 for (i, v) in servo.iter().enumerate().take(5) {
-                    joints[i] = v.to_degrees().clamp(5.0, 175.0);
+                    joints[i] = v.to_degrees();
                 }
                 let cmd = ServoCommand::new(joints, gripper)
                     .map_err(|e| BridgeError::Execution(e.to_string()))?;
@@ -259,5 +291,23 @@ mod tests {
         let b = bridge();
         let bad = "G0 X10000 Y10000\nM3\nG1 X10500 Y10500\nM5\n";
         assert!(b.plan(bad).is_err());
+    }
+
+    #[test]
+    fn servo_check_accepts_in_range_pose() {
+        let b = bridge();
+        // Home pose (all q = 0) maps to the physical home servo angles (in range).
+        let home = [0.0_f64; 5];
+        assert!(b.servo_check(&home).is_ok());
+    }
+
+    #[test]
+    fn servo_command_rejects_out_of_range_pose() {
+        let b = bridge();
+        // A pose that forces a servo angle far out of range is rejected by
+        // ServoCommand (strict), not clamped into range.
+        let out_of_range = b.robot.q_to_servo(&[0.0, 0.0, 3.0, 0.0, 0.0]);
+        let joints: [f64; 5] = std::array::from_fn(|i| out_of_range[i].to_degrees());
+        assert!(bombolab_core::ServoCommand::new(joints, 90).is_err());
     }
 }
