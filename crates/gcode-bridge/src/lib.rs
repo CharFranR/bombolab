@@ -21,5 +21,9 @@ pub mod workspace;
 /// Mapping of A4 drawing coordinates onto the robot drawing plane.
 pub mod mapper;
 
+/// Dry-run IK reachability validation (strict mode).
+pub mod validate;
+
 pub use mapper::{MappingConfig, MappingResult, map_drawing, map_point};
+pub use validate::{DrawingValidator, ReachabilityFailure, Validation};
 pub use workspace::DrawingBounds;
