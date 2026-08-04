@@ -46,6 +46,15 @@ Options:
     )
 }
 
+/// Return the value consumed by a value-taking flag, or an error when the
+/// value is missing or the next token is itself another flag.
+fn take_value<'a>(args: &'a [String], i: usize, flag: &str) -> Result<&'a str, String> {
+    match args.get(i) {
+        Some(value) if !value.starts_with("--") => Ok(value.as_str()),
+        _ => Err(format!("{flag} requiere un valor")),
+    }
+}
+
 fn parse_args(args: &[String]) -> Result<CliArgs, String> {
     if args.is_empty() {
         return Err("falta el archivo .gcode".into());
@@ -66,26 +75,27 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
         match args[i].as_str() {
             "--port" => {
                 i += 1;
-                port = args.get(i).cloned();
+                port = Some(take_value(args, i, "--port")?.to_string());
             }
             "--export" => {
                 i += 1;
-                export = args.get(i).map(PathBuf::from);
+                export = Some(PathBuf::from(take_value(args, i, "--export")?));
             }
             "--scale" => {
                 i += 1;
-                scale = Some(
-                    args.get(i)
-                        .ok_or("--scale requiere un valor")?
-                        .parse::<f64>()
-                        .map_err(|_| "--scale debe ser un número")?,
-                );
+                let raw = take_value(args, i, "--scale")?;
+                let value = raw
+                    .parse::<f64>()
+                    .map_err(|_| "--scale debe ser un número")?;
+                if !value.is_finite() || value <= 0.0 {
+                    return Err("--scale debe ser un número finito positivo".into());
+                }
+                scale = Some(value);
             }
             "--z-draw" => {
                 i += 1;
                 z_draw = Some(
-                    args.get(i)
-                        .ok_or("--z-draw requiere un valor")?
+                    take_value(args, i, "--z-draw")?
                         .parse::<f64>()
                         .map_err(|_| "--z-draw debe ser un número")?,
                 );
@@ -93,8 +103,7 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
             "--z-travel" => {
                 i += 1;
                 z_travel = Some(
-                    args.get(i)
-                        .ok_or("--z-travel requiere un valor")?
+                    take_value(args, i, "--z-travel")?
                         .parse::<f64>()
                         .map_err(|_| "--z-travel debe ser un número")?,
                 );
@@ -102,8 +111,7 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
             "--gripper" => {
                 i += 1;
                 gripper = Some(
-                    args.get(i)
-                        .ok_or("--gripper requiere un valor")?
+                    take_value(args, i, "--gripper")?
                         .parse::<u8>()
                         .map_err(|_| "--gripper debe ser un byte (0-255)")?,
                 );
@@ -226,5 +234,59 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn parses_valid_args() {
+        let cli = parse_args(&args(&["draw.gcode", "--scale", "0.5", "--port", "COM3"]))
+            .expect("valid args");
+        assert_eq!(cli.input, PathBuf::from("draw.gcode"));
+        assert_eq!(cli.scale, Some(0.5));
+        assert_eq!(cli.port.as_deref(), Some("COM3"));
+        assert_eq!(cli.export, None);
+    }
+
+    #[test]
+    fn scale_rejects_zero_and_negative() {
+        assert!(parse_args(&args(&["d.gcode", "--scale", "0"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--scale", "-1"])).is_err());
+    }
+
+    #[test]
+    fn scale_rejects_non_numeric_and_non_finite() {
+        assert!(parse_args(&args(&["d.gcode", "--scale", "abc"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--scale", "NaN"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--scale", "inf"])).is_err());
+    }
+
+    #[test]
+    fn scale_accepts_positive_value() {
+        let cli = parse_args(&args(&["d.gcode", "--scale", "0.25"])).expect("positive scale");
+        assert_eq!(cli.scale, Some(0.25));
+    }
+
+    #[test]
+    fn value_flags_require_a_value() {
+        assert!(parse_args(&args(&["d.gcode", "--port"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--export"])).is_err());
+    }
+
+    #[test]
+    fn value_flag_consuming_next_flag_is_rejected() {
+        let err = match parse_args(&args(&["d.gcode", "--port", "--export", "out.json"])) {
+            Err(e) => e,
+            Ok(_) => panic!("missing value must be reported"),
+        };
+        assert!(err.contains("--port"));
+        assert!(parse_args(&args(&["d.gcode", "--scale", "--port", "COM3"])).is_err());
     }
 }
