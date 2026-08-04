@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-use bombolab_core::communication::ArduinoNano;
+use bombolab_core::communication::{ArduinoNano, ANGLE_MAX, ANGLE_MIN};
 
 use gcode_bridge::{GcodeBridge, MappingConfig, SerialSink, SimulationSink};
 
@@ -34,10 +34,10 @@ Usage:
 
 Options:
   --port <name>    Conectar al Arduino Nano por serial (por defecto: SIMULA).
-  --scale <s>      Escala explícita (0..1). Omisión: auto-escala para caber.
+  --scale <s>      Escala explícita (> 0). Omisión: auto-escala para caber.
   --z-draw <mm>    Altura de dibujo (por defecto: {}).
   --z-travel <mm>  Altura de viaje / pluma arriba (por defecto: {}).
-  --gripper <0-255> Valor del gripper a enviar (por defecto: 90).
+  --gripper <5-175> Valor del gripper a enviar en grados (por defecto: 90).
   --export <file>  Volcar el plan a JSON de pasos 'steps' para la web y salir.
   -h, --help       Muestra esta ayuda.
 ",
@@ -94,27 +94,38 @@ fn parse_args(args: &[String]) -> Result<CliArgs, String> {
             }
             "--z-draw" => {
                 i += 1;
-                z_draw = Some(
-                    take_value(args, i, "--z-draw")?
-                        .parse::<f64>()
-                        .map_err(|_| "--z-draw debe ser un número")?,
-                );
+                let raw = take_value(args, i, "--z-draw")?;
+                let value = raw
+                    .parse::<f64>()
+                    .map_err(|_| "--z-draw debe ser un número")?;
+                if !value.is_finite() {
+                    return Err("--z-draw debe ser un número finito".into());
+                }
+                z_draw = Some(value);
             }
             "--z-travel" => {
                 i += 1;
-                z_travel = Some(
-                    take_value(args, i, "--z-travel")?
-                        .parse::<f64>()
-                        .map_err(|_| "--z-travel debe ser un número")?,
-                );
+                let raw = take_value(args, i, "--z-travel")?;
+                let value = raw
+                    .parse::<f64>()
+                    .map_err(|_| "--z-travel debe ser un número")?;
+                if !value.is_finite() {
+                    return Err("--z-travel debe ser un número finito".into());
+                }
+                z_travel = Some(value);
             }
             "--gripper" => {
                 i += 1;
-                gripper = Some(
-                    take_value(args, i, "--gripper")?
-                        .parse::<u8>()
-                        .map_err(|_| "--gripper debe ser un byte (0-255)")?,
-                );
+                let raw = take_value(args, i, "--gripper")?;
+                let value = raw
+                    .parse::<u8>()
+                    .map_err(|_| "--gripper debe ser un número entero (5-175)")?;
+                // Wire contract: the serial protocol only accepts servo angles
+                // within [ANGLE_MIN, ANGLE_MAX] degrees (bombolab-core).
+                if value < ANGLE_MIN as u8 || value > ANGLE_MAX as u8 {
+                    return Err("--gripper debe estar entre 5 y 175 grados".into());
+                }
+                gripper = Some(value);
             }
             other => return Err(format!("argumento desconocido: {other}")),
         }
@@ -278,6 +289,47 @@ mod tests {
     fn scale_accepts_positive_value() {
         let cli = parse_args(&args(&["d.gcode", "--scale", "0.25"])).expect("positive scale");
         assert_eq!(cli.scale, Some(0.25));
+    }
+
+    #[test]
+    fn gripper_accepts_range_bounds() {
+        let cli = parse_args(&args(&["d.gcode", "--gripper", "5"])).expect("min gripper");
+        assert_eq!(cli.gripper, Some(5));
+        let cli = parse_args(&args(&["d.gcode", "--gripper", "175"])).expect("max gripper");
+        assert_eq!(cli.gripper, Some(175));
+        let cli = parse_args(&args(&["d.gcode", "--gripper", "90"])).expect("default gripper");
+        assert_eq!(cli.gripper, Some(90));
+    }
+
+    #[test]
+    fn gripper_rejects_out_of_range() {
+        assert!(parse_args(&args(&["d.gcode", "--gripper", "4"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--gripper", "176"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--gripper", "0"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--gripper", "255"])).is_err());
+    }
+
+    #[test]
+    fn gripper_rejects_non_numeric() {
+        assert!(parse_args(&args(&["d.gcode", "--gripper", "abc"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--gripper", "-5"])).is_err());
+    }
+
+    #[test]
+    fn z_flags_reject_non_finite() {
+        assert!(parse_args(&args(&["d.gcode", "--z-draw", "NaN"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--z-draw", "inf"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--z-draw", "-inf"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--z-travel", "NaN"])).is_err());
+        assert!(parse_args(&args(&["d.gcode", "--z-travel", "Infinity"])).is_err());
+    }
+
+    #[test]
+    fn z_flags_accept_finite_values() {
+        let cli = parse_args(&args(&["d.gcode", "--z-draw", "-10.5", "--z-travel", "86"]))
+            .expect("finite z values");
+        assert_eq!(cli.z_draw, Some(-10.5));
+        assert_eq!(cli.z_travel, Some(86.0));
     }
 
     #[test]
