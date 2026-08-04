@@ -59,6 +59,21 @@
       "name": "signed exponent accepted",
       "gcode": "M3\nG1 X-1.5e+2 Y2\nM5\n",
       "strokes": [[[0.0, 0.0], [-150.0, 2.0]]]
+    },
+    {
+      "name": "spaced axis values",
+      "gcode": "M3\nG1 X 10 Y 20\nM5\n",
+      "strokes": [[[0.0, 0.0], [10.0, 20.0]]]
+    },
+    {
+      "name": "spaced value with paren comment",
+      "gcode": "M3\nG1 X 5.5 Y -3 (comment) X 7\nM5\n",
+      "strokes": [[[0.0, 0.0], [7.0, -3.0]]]
+    },
+    {
+      "name": "spaced exponent",
+      "gcode": "M3\nG1 X 1e3 Y 0\nM5\n",
+      "strokes": [[[0.0, 0.0], [1000.0, 0.0]]]
     }
   ],
   "errorCases": [

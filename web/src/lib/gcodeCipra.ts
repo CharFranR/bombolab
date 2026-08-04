@@ -99,10 +99,11 @@ function normalizeCommand(token: string): { cmd: string; rest: string | null } |
 }
 
 /**
- * Parse `X<..>` / `Y<..>` values from a motion command. Works for both spaced
- * (`X10 Y20`) and compact (`X10Y20`) forms: a value is the leading numeric
- * part of its token, so the next axis letter terminates it. Values must be
- * strict numbers (shared grammar with the Rust port, which rejects `.5`,
+ * Parse `X<..>` / `Y<..>` values from a motion command. Works for spaced
+ * (`X10 Y20`), spaced-value (`X 10 Y 20`) and compact (`X10Y20`) forms: a
+ * value is the leading numeric part of the first whitespace-delimited token
+ * after the axis letter, so the next axis letter terminates it. Values must
+ * be strict numbers (shared grammar with the Rust port, which rejects `.5`,
  * `5.`, `+5`, `-.5` and similar forms); anything else raises
  * `GcodeParseError`.
  */
@@ -115,7 +116,10 @@ function parseXY(command: string): GPoint {
     if (!m) break;
     const axis = m[0];
     const after = rest.slice(m.index + 1);
-    const token = after.split(/\s+/)[0];
+    // The value is the first token after the axis letter, mirroring Rust's
+    // `split_whitespace().next()`: whitespace between the letter and the
+    // value (`X 10`) is tolerated by trimming the leading space first.
+    const token = after.trimStart().split(/\s+/)[0];
     if (token === undefined || token === '') {
       throw new GcodeParseError(`malformed command: ${command}`);
     }
@@ -304,6 +308,24 @@ export function runParserSelfTests(): { ok: boolean; failures: string[] } {
     [
       [0, 0],
       [-150, 2],
+    ],
+  ]);
+  expect('spaced axis values', parseGcode('M3\nG1 X 10 Y 20\nM5\n').strokes, [
+    [
+      [0, 0],
+      [10, 20],
+    ],
+  ]);
+  expect('spaced value with paren comment', parseGcode('M3\nG1 X 5.5 Y -3 (comment) X 7\nM5\n').strokes, [
+    [
+      [0, 0],
+      [7, -3],
+    ],
+  ]);
+  expect('spaced exponent', parseGcode('M3\nG1 X 1e3 Y 0\nM5\n').strokes, [
+    [
+      [0, 0],
+      [1000, 0],
     ],
   ]);
   expectError('invalid number with trailing garbage', parseGcode('M3\nG1 X10abc Y20\nM5\n'));
