@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, type PlayerStateJs } from './wasm';
 import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type MotionCommandJS } from './motion/commands';
+import { parseGcode } from './motion/gcode';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
@@ -46,7 +47,12 @@ export default function App() {
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
+  const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
+  const [gcodeName, setGcodeName] = useState<string | null>(null);
+  const [gcodeWarnings, setGcodeWarnings] = useState<string[]>([]);
+  const [gcodeError, setGcodeError] = useState<string | null>(null);
+  const gcodeInputRef = useRef<HTMLInputElement | null>(null);
   const gripperBeforeModeRef = useRef(50);
   const lastFrameRef = useRef(0);
   const lastTrajectoryTargetRef = useRef<[number, number, number] | null>(null);
@@ -309,6 +315,9 @@ export default function App() {
     lastTrajectoryTargetRef.current = null;
     setTracePath([]);
     setActiveDemo(null);
+    setGcodeName(null);
+    setGcodeWarnings([]);
+    setGcodeError(null);
     setRobotMode('normal');
     setIkMode(false);
     setIkTarget(null);
@@ -329,6 +338,9 @@ export default function App() {
         motionPlayerUpdate(playerId, dt);
         const st = motionPlayerState(playerId);
         setPlayerState(st);
+        // Ref, not state: the renderer reads it in useFrame, so the heavy R3F
+        // scene is NOT re-rendered on every frame delta.
+        traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
         if (st === 'running' || st === 'paused') {
           const target = motionPlayerTarget(playerId);
           const last = lastTrajectoryTargetRef.current;
@@ -356,7 +368,8 @@ export default function App() {
     const fk = forwardKinematics(robot.segments, robot.baseTransform);
     const ee = fk.frames[fk.frames.length - 1];
     const start: [number, number, number] = [ee[12], ee[13], ee[14]];
-    setTracePath(drawingPath(cmds));
+    setTracePath(drawingPath(cmds).map(robotToThree));
+    traceProgressRef.current = 0;
     setActiveDemo(key);
     const id = motionPlayerNew(cmds, start);
     setPlayerId(id);
@@ -376,6 +389,27 @@ export default function App() {
 
   const handleStartArc = useCallback(() => {
     startTrajectory(arcCommands(), 'arc');
+  }, [startTrajectory]);
+
+  const handleGcodeFile = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const result = parseGcode(String(reader.result));
+        if (result.commands.length === 0) {
+          setGcodeError('El archivo no contiene movimientos dibujables (G0/G1 con lápiz).');
+          return;
+        }
+        setGcodeError(null);
+        setGcodeWarnings(result.warnings);
+        setGcodeName(file.name);
+        startTrajectory(result.commands, 'gcode');
+      } catch (err: any) {
+        setGcodeError(err?.message ?? 'Error al leer el archivo .gcode');
+      }
+    };
+    reader.onerror = () => setGcodeError('Error al leer el archivo');
+    reader.readAsText(file);
   }, [startTrajectory]);
 
   const handleBacklashToggle = useCallback((enabled: boolean) => {
@@ -1042,6 +1076,50 @@ export default function App() {
               </div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                 <button
+                  onClick={() => gcodeInputRef.current?.click()}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: 8,
+                    background: activeDemo === 'gcode' ? '#553' : '#3a3a3a',
+                    border: '1px solid ' + (activeDemo === 'gcode' ? '#885' : '#444'),
+                    borderRadius: 4,
+                    color: activeDemo === 'gcode' ? '#ddc' : '#888',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {gcodeName ? `G-code: ${gcodeName}` : 'Cargar .gcode'}
+                </button>
+                <input
+                  ref={gcodeInputRef}
+                  type="file"
+                  accept=".gcode,.gco,.nc,.txt"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleGcodeFile(file);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+              {gcodeError && (
+                <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>
+                  ⚠ {gcodeError}
+                </div>
+              )}
+              {gcodeWarnings.length > 0 && (
+                <div style={{ fontSize: 10, color: '#aa8', marginBottom: 6 }}>
+                  {gcodeWarnings.slice(0, 5).map((w, i) => (
+                    <div key={i}>{w}</div>
+                  ))}
+                  {gcodeWarnings.length > 5 && (
+                    <div>… y {gcodeWarnings.length - 5} más</div>
+                  )}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
                   onClick={handlePlaybackControl}
                   disabled={playerId === null}
                   style={{
@@ -1125,6 +1203,7 @@ export default function App() {
           gripper={gripper}
           workspacePoints={workspacePoints}
           tracePath={tracePath}
+          traceProgressRef={traceProgressRef}
           ikTarget={ikTarget}
           onIkTargetChange={setIkTarget}
           fidelityMode={fidelityMode}
@@ -1156,6 +1235,12 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+/** Robot DH coordinates (x, y, z) → three.js scene coordinates (x, z, y).
+ *  Same mapping used by framePose() in renderers/types.ts and IkTarget. */
+function robotToThree(p: [number, number, number]): [number, number, number] {
+  return [p[0], p[2], p[1]];
 }
 
 function generateWorkspace(samples: number): [number, number, number][] {
