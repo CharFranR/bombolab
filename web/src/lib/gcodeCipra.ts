@@ -328,12 +328,39 @@ export function runParserSelfTests(): { ok: boolean; failures: string[] } {
       [1000, 0],
     ],
   ]);
+  expect('zero coordinates', parseGcode('M3\nG1 X0 Y0\nM5\n').strokes, [
+    [
+      [0, 0],
+      [0, 0],
+    ],
+  ]);
+  expect('negative zero accepted', parseGcode('M3\nG1 X-0 Y1\nM5\n').strokes, [
+    [
+      [0, 0],
+      [-0, 1],
+    ],
+  ]);
+  expect('uppercase exponent accepted', parseGcode('M3\nG1 X1E-3 Y2\nM5\n').strokes, [
+    [
+      [0, 0],
+      [0.001, 2],
+    ],
+  ]);
   expectError('invalid number with trailing garbage', parseGcode('M3\nG1 X10abc Y20\nM5\n'));
   expectError('bad number', parseGcode('M3\nG0 Xabc Y10\n'));
   expectError('leading dot number', parseGcode('M3\nG1 X.5 Y1\nM5\n'));
   expectError('trailing dot number', parseGcode('M3\nG1 X5. Y1\nM5\n'));
   expectError('explicit plus number', parseGcode('M3\nG1 X+5 Y1\nM5\n'));
   expectError('negative leading dot number', parseGcode('M3\nG1 X-.5 Y1\nM5\n'));
+  expectError('trailing dot exponent rejected', parseGcode('M3\nG1 X5.e2 Y1\nM5\n'));
+  expectError('double dot rejected', parseGcode('M3\nG1 X1.2.3 Y1\nM5\n'));
+  expectError('double minus rejected', parseGcode('M3\nG1 X--5 Y1\nM5\n'));
+  // The strict number grammar rejects the empty token at the validator level;
+  // blank lines themselves are skipped by both parsers before validation, so
+  // this is asserted here, not as a fixture line (which would be skipped).
+  if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test('')) {
+    failures.push('empty token: strict number regex must reject empty string');
+  }
 
   return { ok: failures.length === 0, failures };
 }

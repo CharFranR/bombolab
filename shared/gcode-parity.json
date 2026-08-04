@@ -74,6 +74,21 @@
       "name": "spaced exponent",
       "gcode": "M3\nG1 X 1e3 Y 0\nM5\n",
       "strokes": [[[0.0, 0.0], [1000.0, 0.0]]]
+    },
+    {
+      "name": "zero coordinates",
+      "gcode": "M3\nG1 X0 Y0\nM5\n",
+      "strokes": [[[0.0, 0.0], [0.0, 0.0]]]
+    },
+    {
+      "name": "negative zero accepted",
+      "gcode": "M3\nG1 X-0 Y1\nM5\n",
+      "strokes": [[[0.0, 0.0], [-0.0, 1.0]]]
+    },
+    {
+      "name": "uppercase exponent accepted",
+      "gcode": "M3\nG1 X1E-3 Y2\nM5\n",
+      "strokes": [[[0.0, 0.0], [0.001, 2.0]]]
     }
   ],
   "errorCases": [
@@ -100,6 +115,21 @@
     {
       "name": "negative leading dot number",
       "gcode": "M3\nG1 X-.5 Y1\nM5\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "trailing dot exponent rejected",
+      "gcode": "M3\nG1 X5.e2 Y1\nM5\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "double dot rejected",
+      "gcode": "M3\nG1 X1.2.3 Y1\nM5\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "double minus rejected",
+      "gcode": "M3\nG1 X--5 Y1\nM5\n",
       "error": "InvalidNumber"
     }
   ]
