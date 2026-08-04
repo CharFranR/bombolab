@@ -628,6 +628,9 @@ export default function App() {
         const revealAfter: number[] = [];
         let skippedCount = 0;
         let totalTargets = 0;
+        // Warm-start IK: chain the previous converged solution as the next
+        // initial guess so long drawings converge reliably and faster.
+        let warmStart: number[] = [0, 0, 0, 0, 0];
         for (const stroke of strokes) {
           if (stroke.length === 0) continue;
           const first = stroke[0];
@@ -635,13 +638,14 @@ export default function App() {
           for (const [mx, my, mz] of [travel, ...stroke.map((p) => mapPoint(p[0], p[1], drawingW, drawingH, config, 'draw'))]) {
             totalTargets += 1;
             const target: [number, number, number] = [mx, my, mz];
-            const res = solveDrawingPlaneIk(robot, target, [0, 0, 0, 0, 0]);
+            const res = solveDrawingPlaneIk(robot, target, warmStart);
             if (!res.converged) {
               // Never play a target IK cannot reach: skip it and report below.
               skippedCount += 1;
               console.warn(`[App] IK no converge en target (${mx},${my},${mz}): error ${res.error.toFixed(2)}mm — omitido`);
               continue;
             }
+            warmStart = res.q;
             targets.push(target);
             // Resolve FK for this step and extract the tool-tip position with
             // the same DH→THREE [x,z,y] swap the JSON loader uses.

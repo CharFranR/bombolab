@@ -198,23 +198,29 @@ impl GcodeBridge {
             ..Default::default()
         };
 
+        // Warm-start IK: each target is solved from the previous target's
+        // converged joints; the first target starts from the home pose. For
+        // long drawings this keeps the solver near the previous branch,
+        // improving both convergence and solve time.
+        let mut q_init = [0.0_f64; 5];
         for stroke in &strokes {
             let first = &stroke.points[0];
             let travel = map_point(first.0, first.1, w, h, &self.config, MoveZ::Travel);
 
             let mut resolved: Vec<ResolvedTarget> = Vec::new();
-            let travel_target = travel;
             let r = self
-                .resolve(travel_target)
+                .resolve(travel, &q_init)
                 .map_err(|e| extract(e, 0))?;
             self.servo_check(&r.q)
                 .map_err(|e| with_index(e, 0))?;
+            q_init = r.q;
             resolved.push(r);
 
             for (i, &(x, y)) in stroke.points.iter().enumerate() {
                 let t = map_point(x, y, w, h, &self.config, MoveZ::Draw);
-                let r = self.resolve(t).map_err(|e| extract(e, i + 1))?;
+                let r = self.resolve(t, &q_init).map_err(|e| extract(e, i + 1))?;
                 self.servo_check(&r.q).map_err(|e| with_index(e, i + 1))?;
+                q_init = r.q;
                 resolved.push(r);
             }
             plan.strokes.push(resolved);
@@ -224,10 +230,16 @@ impl GcodeBridge {
     }
 
     /// Resolve a single robot target with IK (strict: error if unreachable).
-    fn resolve(&self, target: (f64, f64, f64)) -> Result<ResolvedTarget, BridgeError> {
-        let q_init = [0.0_f64; 5];
+    ///
+    /// `q_init` seeds the solver; the caller threads the previous converged
+    /// solution through consecutive targets to warm-start each solve.
+    fn resolve(
+        &self,
+        target: (f64, f64, f64),
+        q_init: &[f64; 5],
+    ) -> Result<ResolvedTarget, BridgeError> {
         match solve_drawing_plane_ik(
-            &self.solver, &[target.0, target.1, target.2], &q_init,
+            &self.solver, &[target.0, target.1, target.2], q_init,
             &self.robot, &self.base, &self.tool,
         ) {
             Ok(q) => Ok(ResolvedTarget { target, q }),
@@ -323,6 +335,64 @@ mod tests {
         // 1 travel + 2 drawing points.
         assert_eq!(plan.target_count(), 3);
         assert_eq!(plan.strokes.len(), 1);
+    }
+
+    #[test]
+    fn plan_warm_starts_ik_across_long_stroke() {
+        // A long zigzag across the whole A4 plane (~400 draw points). Each
+        // target is solved from the previous target's converged q, so the
+        // whole stroke must resolve and stay on one continuous branch.
+        let mut gcode = String::from("G21 G90\nG0 X10.00 Y10.00\nM3\n");
+        let mut y = 10.0_f64;
+        for row in 0..20 {
+            let (x1, x2) = if row % 2 == 0 { (10.0, 200.0) } else { (200.0, 10.0) };
+            gcode.push_str(&format!("G1 X{x1:.2} Y{y:.2}\nG1 X{x2:.2} Y{y:.2}\n"));
+            y += 15.0;
+        }
+        gcode.push_str("M5\n");
+
+        let b = bridge();
+        let plan = b.plan(&gcode).expect("long zigzag must fully resolve");
+        // 1 travel + 41 draw points (M3 start point + 2 per row).
+        assert_eq!(plan.target_count(), 42);
+        assert_eq!(plan.strokes.len(), 1);
+    }
+
+    #[test]
+    fn plan_warm_start_reaches_target_unreachable_from_home() {
+        // Target B=(150, -10, 80) is NOT reachable from the home pose [0;5],
+        // but IS reachable from the solution of A=(260, -45, 80). Warm-starting
+        // chains the previous converged q into the next solve, so the stroke
+        // A→B plans cleanly; a fresh [0;5]-init solve per target would reject B.
+        let config = MappingConfig {
+            target: crate::workspace::DrawingBounds {
+                x_min: 100.0,
+                x_max: 300.0,
+                y_min: -70.0,
+                y_max: 70.0,
+            },
+            z_draw: 80.0,
+            z_travel: 80.0,
+            scale: Some(1.0),
+        };
+        let b = GcodeBridge::new(config);
+        let a = (260.0, -45.0, 80.0);
+        let bpt = (150.0, -10.0, 80.0);
+        let a_sol = b.resolve(a, &[0.0; 5]).expect("A reachable from home");
+        assert!(
+            b.resolve(bpt, &[0.0; 5]).is_err(),
+            "B must be out of reach from a fresh [0;5] init"
+        );
+        assert!(
+            b.resolve(bpt, &a_sol.q).is_ok(),
+            "B must be reachable warm-started from A's solution"
+        );
+
+        // A4 (110, 25) → (260, -45) and A4 (0, 60) → (150, -10) under the
+        // forced 1:1 mapping above: travel A, then draw A, then draw B.
+        let gcode = "G21 G90\nG0 X110.00 Y25.00\nM3\nG1 X0.00 Y60.00\nM5\n";
+        let plan = b.plan(gcode).expect("stroke A→B must plan with warm start");
+        assert_eq!(plan.target_count(), 3); // 1 travel + 2 draw points
     }
 
     #[test]
