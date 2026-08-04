@@ -324,6 +324,7 @@ export default function App() {
   }, [robotMode, transitioning, gripper]);
 
   const exitDrawingMode = useCallback(() => {
+    stopTrajectoryRef.current();
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
       setPlayerId(null);
@@ -604,6 +605,7 @@ export default function App() {
         const { strokes, error } = parseGcode(reader.result as string);
         if (error || strokes.length === 0) {
           console.error('[App] Failed to parse gcode:', error ?? 'no strokes');
+          stopTrajectoryRef.current();
           setTrajectoryPoints([]);
           setTrajectoryTargets([]);
           setTrajectorySkipped(0);
@@ -612,6 +614,7 @@ export default function App() {
         }
         const bbox = drawingBoundingBox(strokes);
         if (!bbox) {
+          stopTrajectoryRef.current();
           setTrajectoryPoints([]);
           setTrajectoryTargets([]);
           setTrajectorySkipped(0);
