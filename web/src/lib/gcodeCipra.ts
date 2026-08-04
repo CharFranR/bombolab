@@ -4,7 +4,8 @@
 //
 // CIPRA emits a purely geometric dialect over an A4 portrait plane
 // (210×297 mm): G21 (mm), G90 (absolute), G0/G1 (rapid/draw with X Y), M3
-// (pen down), M5 (pen up).
+// (pen down), M5 (pen up). Codes may be zero-padded (`G00`, `G01`) and motion
+// lines may be compact (`G1X50Y20`); both are normalized to `G0`/`G1`.
 
 export type GPoint = [number, number];
 
@@ -60,13 +61,65 @@ function stripComment(line: string): string {
   return cut >= 0 ? line.slice(0, cut) : line;
 }
 
-/** Parse `X<..>` / `Y<..>` tokens from a command line. Returns [x, y]. */
-function parseXY(tokens: string[]): GPoint {
+/** Error raised by the strict parser; `message` mirrors the Rust ParseError. */
+class GcodeParseError extends Error {}
+
+/**
+ * Normalize a command word: strip the leading `G`/`M` letter and any leading
+ * zeros from the numeric part, then re-prefix the letter, so `G01` → `G1`,
+ * `G00` → `G0`, `M05` → `M5`. Returns the normalized command plus, for
+ * compact forms like `G1X50Y20` (no whitespace), the remaining coordinate
+ * text. Returns `null` when the word is not a command.
+ */
+function normalizeCommand(token: string): { cmd: string; rest: string | null } | null {
+  const letter = token[0];
+  if (letter !== 'G' && letter !== 'M') return null;
+  let i = 1;
+  while (i < token.length && token[i] >= '0' && token[i] <= '9') i++;
+  const digits = token.slice(1, i);
+  if (digits === '') return null;
+  const remaining = token.slice(i);
+  const trimmed = digits.replace(/^0+/, '');
+  return {
+    cmd: letter + (trimmed === '' ? '0' : trimmed),
+    rest: remaining === '' ? null : remaining,
+  };
+}
+
+/**
+ * Parse `X<..>` / `Y<..>` values from a motion command. Works for both spaced
+ * (`X10 Y20`) and compact (`X10Y20`) forms: a value is the leading numeric
+ * part of its token, so the next axis letter terminates it. Values must be
+ * strict numbers (same semantics as Rust `token.parse::<f64>()`); anything
+ * else raises `GcodeParseError`.
+ */
+function parseXY(command: string): GPoint {
   let x = 0;
   let y = 0;
-  for (const t of tokens) {
-    if (t[0] === 'X') x = parseFloat(t.slice(1));
-    else if (t[0] === 'Y') y = parseFloat(t.slice(1));
+  let rest = command;
+  for (;;) {
+    const m = /[XY]/.exec(rest);
+    if (!m) break;
+    const axis = m[0];
+    const after = rest.slice(m.index + 1);
+    const token = after.split(/\s+/)[0];
+    if (token === undefined || token === '') {
+      throw new GcodeParseError(`malformed command: ${command}`);
+    }
+    let numEnd = 0;
+    while (numEnd < token.length && /[-+.\deE]/.test(token[numEnd])) numEnd++;
+    const numPart = token.slice(0, numEnd);
+    const trailing = token.slice(numEnd);
+    if (trailing !== '' && trailing[0] !== 'X' && trailing[0] !== 'Y') {
+      throw new GcodeParseError(`invalid number "${token}"`);
+    }
+    if (!/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(numPart)) {
+      throw new GcodeParseError(`invalid number "${token}"`);
+    }
+    const value = Number(numPart);
+    if (axis === 'X') x = value;
+    else y = value;
+    rest = after.slice(numPart.length);
   }
   return [x, y];
 }
@@ -76,7 +129,11 @@ export interface ParseResult {
   error?: string;
 }
 
-/** Parse a G-code document; each stroke is a connected pen-down sequence. */
+/**
+ * Parse a G-code document; each stroke is a connected pen-down sequence.
+ * Returns `error` (with the strokes parsed so far) when a line is malformed
+ * or a coordinate value is not a valid number — never silently drops commands.
+ */
 export function parseGcode(input: string): ParseResult {
   const strokes: GPoint[][] = [];
   let current: GPoint[] = [];
@@ -89,15 +146,26 @@ export function parseGcode(input: string): ParseResult {
     const tokens = trimmed.split(/\s+/);
     const key = tokens[0];
 
-    if (key === 'G0' || key === 'G1') {
-      pos = parseXY(tokens);
+    const normalized = normalizeCommand(key);
+    if (!normalized) continue;
+    const { cmd, rest } = normalized;
+
+    if (cmd === 'G0' || cmd === 'G1') {
+      let next: GPoint;
+      try {
+        next = parseXY(rest ?? trimmed);
+      } catch (err) {
+        if (err instanceof GcodeParseError) return { strokes, error: err.message };
+        throw err;
+      }
+      pos = next;
       if (penDown) current.push(pos);
-    } else if (key === 'M3') {
+    } else if (cmd === 'M3') {
       if (!penDown) {
         penDown = true;
         current.push(pos);
       }
-    } else if (key === 'M5') {
+    } else if (cmd === 'M5') {
       if (penDown) {
         penDown = false;
         if (current.length > 0) strokes.push(current);
@@ -108,6 +176,70 @@ export function parseGcode(input: string): ParseResult {
   }
 
   return { strokes };
+}
+
+/**
+ * Zero-dependency self-test mirroring the Rust parser tests. Not called at
+ * runtime; import and call it manually (or from a runner) to verify parity.
+ */
+export function runParserSelfTests(): { ok: boolean; failures: string[] } {
+  const failures: string[] = [];
+  const expect = (name: string, got: GPoint[][], want: GPoint[][]): void => {
+    const same =
+      got.length === want.length &&
+      got.every((s, i) => {
+        const w = want[i];
+        return s.length === w.length && s.every((p, j) => p[0] === w[j][0] && p[1] === w[j][1]);
+      });
+    if (!same) failures.push(`${name}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+  };
+  const expectError = (name: string, result: ParseResult): void => {
+    if (!result.error) failures.push(`${name}: expected error, got ${JSON.stringify(result.strokes)}`);
+  };
+
+  expect('simple cipra fixture', parseGcode('G21 G90\nG0 X10 Y10\nM3\nG1 X50 Y50\nM5\n').strokes, [
+    [
+      [10, 10],
+      [50, 50],
+    ],
+  ]);
+  expect('zero-padded codes', parseGcode('G21 G90\nG00 X5 Y5\nM3\nG01 X10 Y20\nM5\n').strokes, [
+    [
+      [5, 5],
+      [10, 20],
+    ],
+  ]);
+  expect('compact motion', parseGcode('M3\nG1X50Y20\nM5\n').strokes, [
+    [
+      [0, 0],
+      [50, 20],
+    ],
+  ]);
+  expect('zero-padded compact motion', parseGcode('M3\nG01X10Y20\nM5\n').strokes, [
+    [
+      [0, 0],
+      [10, 20],
+    ],
+  ]);
+  expect(
+    'mixed travel and padded draw',
+    parseGcode('G0 X0 Y0\nM3\nG01 X10 Y10\nG01 X20 Y20\nM5\nG0 X30 Y30\nM3\nG01 X40 Y40\nM5\n').strokes,
+    [
+      [
+        [0, 0],
+        [10, 10],
+        [20, 20],
+      ],
+      [
+        [30, 30],
+        [40, 40],
+      ],
+    ],
+  );
+  expectError('invalid number with trailing garbage', parseGcode('M3\nG1 X10abc Y20\nM5\n'));
+  expectError('invalid number', parseGcode('M3\nG0 Xabc Y10\nM5\n'));
+
+  return { ok: failures.length === 0, failures };
 }
 
 // ─── Mapper (mirrors crate mapper.rs) ─────────────────────────────────────────

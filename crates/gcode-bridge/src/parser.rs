@@ -86,32 +86,37 @@ pub fn parse_gcode(input: &str) -> Result<Vec<Stroke>, ParseError> {
                 text: trimmed.into(),
             })?;
 
-        match key {
-            "G0" | "G1" => {
-                let (x, y) = parse_xy(trimmed, i + 1)?;
-                pos = (x, y);
-                if pen_down {
-                    current.push(pos);
+        if let Some((cmd, compact)) = normalize_command(key) {
+            match cmd.as_str() {
+                "G0" | "G1" => {
+                    // Compact lines like `G1X50Y20` carry the coordinates in
+                    // the command token itself; parse them from the remainder.
+                    let coords = compact.unwrap_or(trimmed);
+                    let (x, y) = parse_xy(coords, i + 1)?;
+                    pos = (x, y);
+                    if pen_down {
+                        current.push(pos);
+                    }
                 }
-            }
-            "M3" => {
-                // Tool on: start of a drawing stroke at the current position.
-                if !pen_down {
-                    pen_down = true;
-                    current.push(pos);
+                "M3" => {
+                    // Tool on: start of a drawing stroke at the current position.
+                    if !pen_down {
+                        pen_down = true;
+                        current.push(pos);
+                    }
                 }
-            }
-            "M5" if pen_down => {
-                // Tool off: end of the current stroke.
-                pen_down = false;
-                if !current.is_empty() {
-                    strokes.push(Stroke { points: current });
+                "M5" if pen_down => {
+                    // Tool off: end of the current stroke.
+                    pen_down = false;
+                    if !current.is_empty() {
+                        strokes.push(Stroke { points: current });
+                    }
+                    current = Vec::new();
                 }
-                current = Vec::new();
+                // G21 (units mm) and G90 (absolute positioning) are preamble;
+                // unknown M/G codes are tolerated to future-proof the dialect.
+                _ => {}
             }
-            // G21 (units mm) and G90 (absolute positioning) are preamble;
-            // unknown M/G codes are tolerated to future-proof the dialect.
-            _ => {}
         }
     }
 
@@ -141,7 +146,35 @@ fn strip_comment(line: &str) -> String {
     out
 }
 
-/// Extract `X<..>` and `Y<..>` values from a motion command.
+/// Normalize a command word: strip the leading `G`/`M` letter and any leading
+/// zeros from the numeric part, then re-prefix the letter, so `G01` → `G1`,
+/// `G00` → `G0`, `M05` → `M5`. Returns the normalized command plus, for
+/// compact forms like `G1X50Y20` (no whitespace), the remaining coordinate
+/// text. Returns `None` when the word is not a command (e.g. `G21`-style
+/// unknown codes stay normalized but unmatched, and non-commands are skipped).
+fn normalize_command(token: &str) -> Option<(String, Option<&str>)> {
+    let (letter, rest) = token.split_at(1);
+    if letter != "G" && letter != "M" {
+        return None;
+    }
+    let digits_len = rest.bytes().take_while(|b| b.is_ascii_digit()).count();
+    let (digits, remaining) = rest.split_at(digits_len);
+    if digits.is_empty() {
+        return None;
+    }
+    let trimmed = digits.trim_start_matches('0');
+    let number = if trimmed.is_empty() { "0" } else { trimmed };
+    let compact = if remaining.is_empty() {
+        None
+    } else {
+        Some(remaining)
+    };
+    Some((format!("{letter}{number}"), compact))
+}
+
+/// Extract `X<..>` and `Y<..>` values from a motion command. Works for both
+/// spaced (`X10 Y20`) and compact (`X10Y20`) forms: a value is the leading
+/// numeric part of its token, so the next axis letter terminates it.
 fn parse_xy(command: &str, line: usize) -> Result<Point2D, ParseError> {
     let mut x: Option<f64> = None;
     let mut y: Option<f64> = None;
@@ -157,7 +190,20 @@ fn parse_xy(command: &str, line: usize) -> Result<Point2D, ParseError> {
                 line,
                 text: command.into(),
             })?;
-        let value: f64 = token.parse().map_err(|_| ParseError::InvalidNumber {
+        let num_len = token
+            .bytes()
+            .take_while(|b| b.is_ascii_digit() || matches!(b, b'-' | b'+' | b'.' | b'e' | b'E'))
+            .count();
+        let (num, trailing) = token.split_at(num_len);
+        // A trailing `X`/`Y` starts the next axis value (compact form);
+        // anything else is a malformed number, e.g. `X10abc`.
+        if !trailing.is_empty() && !trailing.starts_with(['X', 'Y']) {
+            return Err(ParseError::InvalidNumber {
+                line,
+                token: token.into(),
+            });
+        }
+        let value: f64 = num.parse().map_err(|_| ParseError::InvalidNumber {
             line,
             token: token.into(),
         })?;
@@ -166,8 +212,9 @@ fn parse_xy(command: &str, line: usize) -> Result<Point2D, ParseError> {
             'Y' => y = Some(value),
             _ => unreachable!(),
         }
-        // Advance past this axis token to find the next one.
-        rest = &after[token.len()..];
+        // Advance past this axis value to find the next one; a compact trailing
+        // part (e.g. `Y20` in `X50Y20`) is rescanned as the next axis.
+        rest = &after[num_len..];
     }
 
     Ok((x.unwrap_or(0.0), y.unwrap_or(0.0)))
@@ -218,6 +265,52 @@ mod tests {
     #[test]
     fn reports_malformed_number() {
         let gcode = "M3\nG0 Xabc Y10\n";
+        assert!(matches!(
+            parse_gcode(gcode),
+            Err(ParseError::InvalidNumber { .. })
+        ));
+    }
+
+    #[test]
+    fn parses_zero_padded_codes() {
+        let gcode = "G21 G90\nG00 X5 Y5\nM3\nG01 X10 Y20\nM5\n";
+        let strokes = parse_gcode(gcode).unwrap();
+        assert_eq!(strokes.len(), 1);
+        assert_eq!(strokes[0].points, vec![(5.0, 5.0), (10.0, 20.0)]);
+    }
+
+    #[test]
+    fn parses_compact_motion_no_whitespace() {
+        let gcode = "M3\nG1X50Y20\nM5\n";
+        let strokes = parse_gcode(gcode).unwrap();
+        assert_eq!(strokes.len(), 1);
+        assert_eq!(strokes[0].points, vec![(0.0, 0.0), (50.0, 20.0)]);
+    }
+
+    #[test]
+    fn parses_zero_padded_compact_motion() {
+        let gcode = "M3\nG01X10Y20\nM5\n";
+        let strokes = parse_gcode(gcode).unwrap();
+        assert_eq!(strokes.len(), 1);
+        assert_eq!(strokes[0].points, vec![(0.0, 0.0), (10.0, 20.0)]);
+    }
+
+    #[test]
+    fn parses_mixed_travel_and_zero_padded_draw() {
+        let gcode = "G0 X0 Y0\nM3\nG01 X10 Y10\nG01 X20 Y20\nM5\n\
+                     G0 X30 Y30\nM3\nG01 X40 Y40\nM5\n";
+        let strokes = parse_gcode(gcode).unwrap();
+        assert_eq!(strokes.len(), 2);
+        assert_eq!(
+            strokes[0].points,
+            vec![(0.0, 0.0), (10.0, 10.0), (20.0, 20.0)]
+        );
+        assert_eq!(strokes[1].points, vec![(30.0, 30.0), (40.0, 40.0)]);
+    }
+
+    #[test]
+    fn reports_invalid_number_with_trailing_garbage() {
+        let gcode = "M3\nG1 X10abc Y20\n";
         assert!(matches!(
             parse_gcode(gcode),
             Err(ParseError::InvalidNumber { .. })
