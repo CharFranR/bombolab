@@ -224,6 +224,11 @@ fn parse_xy(command: &str, line: usize) -> Result<Point2D, ParseError> {
 mod tests {
     use super::*;
 
+    // Inline cases below mirror the shared parity fixture
+    // `shared/gcode-parity.json` (the single source of truth, also consumed by
+    // `tests/parity.rs` and the TS self-tests in `web/src/lib/gcodeCipra.ts`).
+    // Keep this set in sync with the fixture when either side changes.
+
     #[test]
     fn parses_simple_path_cipra_fixture() {
         let gcode = "G21 G90\nG0 X10.00 Y10.00\nM3\nG1 X50.00 Y50.00\nM5\n";

@@ -175,12 +175,21 @@ export function parseGcode(input: string): ParseResult {
     // G21/G90 are preamble; unknown codes tolerated.
   }
 
+  // Trailing partial stroke (document ends with the pen still down), mirroring
+  // the Rust parser in crates/gcode-bridge/src/parser.rs.
+  if (penDown && current.length > 0) strokes.push(current);
+
   return { strokes };
 }
 
 /**
- * Zero-dependency self-test mirroring the Rust parser tests. Not called at
- * runtime; import and call it manually (or from a runner) to verify parity.
+ * Zero-dependency self-test mirroring the Rust parser tests and the shared
+ * parity fixture `shared/gcode-parity.json` (the single source of truth for
+ * parser behavior). Not called at runtime; import and call it manually (or
+ * from a runner) to verify parity.
+ *
+ * Keep these cases in sync with the fixture when either side changes, and run
+ * the Rust integration test `crates/gcode-bridge/tests/parity.rs`.
  */
 export function runParserSelfTests(): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
@@ -197,30 +206,58 @@ export function runParserSelfTests(): { ok: boolean; failures: string[] } {
     if (!result.error) failures.push(`${name}: expected error, got ${JSON.stringify(result.strokes)}`);
   };
 
-  expect('simple cipra fixture', parseGcode('G21 G90\nG0 X10 Y10\nM3\nG1 X50 Y50\nM5\n').strokes, [
+  expect('simple path', parseGcode('G21 G90\nG0 X10 Y10\nM3\nG1 X50 Y50\nM5\n').strokes, [
     [
       [10, 10],
       [50, 50],
     ],
   ]);
-  expect('zero-padded codes', parseGcode('G21 G90\nG00 X5 Y5\nM3\nG01 X10 Y20\nM5\n').strokes, [
+  expect(
+    'multi stroke',
+    parseGcode('G21 G90\nG0 X10 Y10\nM3\nG1 X50 Y50\nM5\nG0 X60 Y60\nM3\nG1 X70 Y70\nG1 X80 Y80\nM5\n').strokes,
+    [
+      [
+        [10, 10],
+        [50, 50],
+      ],
+      [
+        [60, 60],
+        [70, 70],
+        [80, 80],
+      ],
+    ],
+  );
+  expect('zero padded', parseGcode('G21 G90\nG00 X5 Y5\nM3\nG01 X10 Y20\nM5\n').strokes, [
     [
       [5, 5],
       [10, 20],
     ],
   ]);
-  expect('compact motion', parseGcode('M3\nG1X50Y20\nM5\n').strokes, [
+  expect('compact', parseGcode('G21 G90\nG0X10Y10\nM3\nG1X50Y20\nM5\n').strokes, [
     [
-      [0, 0],
+      [10, 10],
       [50, 20],
     ],
   ]);
-  expect('zero-padded compact motion', parseGcode('M3\nG01X10Y20\nM5\n').strokes, [
+  expect('compact zero padded', parseGcode('M3\nG01X10Y20\nM5\n').strokes, [
     [
       [0, 0],
       [10, 20],
     ],
   ]);
+  expect('comments', parseGcode('G21 G90 ; mm and absolute\n  (a comment)\nM3\nG1 X1 Y2\nM5\n').strokes, [
+    [
+      [0, 0],
+      [1, 2],
+    ],
+  ]);
+  expect('trailing partial stroke', parseGcode('G21 G90\nG0 X1 Y1\nM3\nG1 X5 Y5\n').strokes, [
+    [
+      [1, 1],
+      [5, 5],
+    ],
+  ]);
+  expect('empty', parseGcode('G21 G90\nM5\n').strokes, []);
   expect(
     'mixed travel and padded draw',
     parseGcode('G0 X0 Y0\nM3\nG01 X10 Y10\nG01 X20 Y20\nM5\nG0 X30 Y30\nM3\nG01 X40 Y40\nM5\n').strokes,
@@ -237,7 +274,7 @@ export function runParserSelfTests(): { ok: boolean; failures: string[] } {
     ],
   );
   expectError('invalid number with trailing garbage', parseGcode('M3\nG1 X10abc Y20\nM5\n'));
-  expectError('invalid number', parseGcode('M3\nG0 Xabc Y10\nM5\n'));
+  expectError('bad number', parseGcode('M3\nG0 Xabc Y10\n'));
 
   return { ok: failures.length === 0, failures };
 }
