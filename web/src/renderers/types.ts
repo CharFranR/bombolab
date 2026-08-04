@@ -44,6 +44,12 @@ export interface RobotRendererProps {
   workspacePoints?: [number, number, number][];
   /** Preview of the commanded drawing path (shape the selected demo draws). */
   tracePath?: [number, number, number][];
+  /**
+   * Fraction 0..1 of the trajectory consumed (read in useFrame, NOT state —
+   * the renderer reveals the trace via geometry.setDrawRange without forcing
+   * React re-renders every frame).
+   */
+  traceProgressRef?: React.MutableRefObject<number>;
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;

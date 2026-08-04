@@ -50,6 +50,7 @@ export default function StlRobotScene({
   gripper,
   workspacePoints,
   tracePath,
+  traceProgressRef,
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -96,6 +97,24 @@ export default function StlRobotScene({
       : undefined),
     [workspacePoints],
   );
+
+  // Full trace geometry mounted once; the line is revealed progressively
+  // with geometry.setDrawRange in useFrame. Reads traceProgressRef (a ref
+  // the app updates in its rAF loop) so this scene is NOT re-rendered by
+  // React on every frame delta — only setDrawRange changes, GPU-side.
+  const traceGeoRef = useRef<THREE.BufferGeometry>(null);
+  const traceArray = useMemo(
+    () => (tracePath && tracePath.length > 0 ? new Float32Array(tracePath.flat()) : null),
+    [tracePath],
+  );
+  useFrame(() => {
+    const g = traceGeoRef.current;
+    if (!g) return;
+    const attr = g.getAttribute('position');
+    if (!attr) return;
+    const p = Math.min(1, Math.max(0, traceProgressRef?.current ?? 1));
+    g.setDrawRange(0, Math.floor(p * attr.count));
+  });
 
   // Find target entry for TransformControls
   const targetEntry = useMemo(() => {
@@ -308,14 +327,15 @@ export default function StlRobotScene({
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
       )}
-      {/* Preview of the selected trajectory shape (drawing plane z) */}
-      {tracePath && tracePath.length > 1 && (
+      {/* Progressive trace of the drawing path (three.js coords, z = plane).
+          Full geometry mounts once; setDrawRange in useFrame reveals it. */}
+      {tracePath && tracePath.length > 1 && traceArray && (
         <line>
-          <bufferGeometry>
+          <bufferGeometry ref={traceGeoRef}>
             <bufferAttribute
               attach="attributes-position"
               count={tracePath.length}
-              array={new Float32Array(tracePath.flat())}
+              array={traceArray}
               itemSize={3}
             />
           </bufferGeometry>
