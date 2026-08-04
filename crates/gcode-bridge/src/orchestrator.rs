@@ -12,13 +12,11 @@
 //! without a robot attached.
 
 use bombolab_core::communication::ArduinoNano;
-use bombolab_core::kinematics::solve_drawing_plane_ik;
-use bombolab_core::math::Iso3;
-use bombolab_core::robot::Robot;
-use bombolab_core::{base_transform, fabri_creator, tool_transform, IkSolver, ServoCommand};
+use bombolab_core::ServoCommand;
 
 use crate::mapper::{MappingConfig, MoveZ, map_point};
 use crate::parser::parse_gcode;
+use crate::validate::DrawingValidator;
 
 /// A sink that consumes resolved servo commands (degrees + gripper).
 ///
@@ -165,20 +163,17 @@ impl std::error::Error for BridgeError {}
 /// The bridge itself: parses, maps and resolves a drawing to servo commands.
 pub struct GcodeBridge {
     config: MappingConfig,
-    solver: IkSolver,
-    robot: Robot,
-    base: Iso3,
-    tool: Iso3,
+    /// Reachability validator + solver: the single source of truth for the
+    /// IK solve (solver config, robot and transforms are shared between the
+    /// dry-run validation and the resolution below).
+    validator: DrawingValidator,
 }
 
 impl GcodeBridge {
     pub fn new(config: MappingConfig) -> Self {
         Self {
             config,
-            solver: IkSolver::new(200, 1.0, 0.05, 0.5),
-            robot: fabri_creator(),
-            base: base_transform(),
-            tool: tool_transform(),
+            validator: DrawingValidator::new(),
         }
     }
 
@@ -193,34 +188,51 @@ impl GcodeBridge {
         let (w, h) = (bb.2 - bb.0, bb.3 - bb.1);
         let scale = self.config.target.fit_scale(w, h);
 
+        // Map every target once, remembering its stroke-local index (0 for
+        // the travel point, 1..n for draw points) for error reporting.
+        let mut targets: Vec<(usize, (f64, f64, f64))> = Vec::new();
+        for stroke in &strokes {
+            let first = &stroke.points[0];
+            targets.push((
+                0,
+                map_point(first.0, first.1, w, h, &self.config, MoveZ::Travel),
+            ));
+            targets.extend(stroke.points.iter().enumerate().map(|(i, &(x, y))| {
+                (i + 1, map_point(x, y, w, h, &self.config, MoveZ::Draw))
+            }));
+        }
+
+        // Strict reachability validation — the DrawingValidator is the single
+        // source of truth for the IK solve (solver config, robot, transforms
+        // and warm-start chaining). Any unreachable target aborts the plan.
+        let flat: Vec<(f64, f64, f64)> = targets.iter().map(|&(_, t)| t).collect();
+        let validation = self.validator.validate(&flat);
+        if let Some(f) = validation.failures.first() {
+            return Err(BridgeError::Unreachable {
+                index: targets[f.index].0,
+                target: f.target,
+                reason: f.error.to_string(),
+            });
+        }
+
+        // The validated solutions are the trajectory joints; the only
+        // remaining per-target check is the physical servo range.
         let mut plan = DrawingPlan {
             scale,
             ..Default::default()
         };
-
-        // Warm-start IK: each target is solved from the previous target's
-        // converged joints; the first target starts from the home pose. For
-        // long drawings this keeps the solver near the previous branch,
-        // improving both convergence and solve time.
-        let mut q_init = [0.0_f64; 5];
+        let mut target_iter = targets.into_iter();
+        let mut solution_iter = validation.solutions.into_iter();
         for stroke in &strokes {
-            let first = &stroke.points[0];
-            let travel = map_point(first.0, first.1, w, h, &self.config, MoveZ::Travel);
-
-            let mut resolved: Vec<ResolvedTarget> = Vec::new();
-            let r = self
-                .resolve(travel, &q_init)
-                .map_err(|e| extract(e, 0))?;
-            self.servo_check(&r.q)
-                .map_err(|e| with_index(e, 0))?;
-            q_init = r.q;
-            resolved.push(r);
-
-            for (i, &(x, y)) in stroke.points.iter().enumerate() {
-                let t = map_point(x, y, w, h, &self.config, MoveZ::Draw);
-                let r = self.resolve(t, &q_init).map_err(|e| extract(e, i + 1))?;
-                self.servo_check(&r.q).map_err(|e| with_index(e, i + 1))?;
-                q_init = r.q;
+            let mut resolved: Vec<ResolvedTarget> = Vec::with_capacity(stroke.points.len() + 1);
+            for _ in 0..=stroke.points.len() {
+                let ((idx, t), sol) = (
+                    target_iter.next().expect("target count matches strokes"),
+                    solution_iter.next().expect("solution count matches targets"),
+                );
+                let q = sol.expect("validated targets always resolve");
+                let r = ResolvedTarget { target: t, q };
+                self.servo_check(&r.q).map_err(|e| with_index(e, idx))?;
                 resolved.push(r);
             }
             plan.strokes.push(resolved);
@@ -229,32 +241,10 @@ impl GcodeBridge {
         Ok(plan)
     }
 
-    /// Resolve a single robot target with IK (strict: error if unreachable).
-    ///
-    /// `q_init` seeds the solver; the caller threads the previous converged
-    /// solution through consecutive targets to warm-start each solve.
-    fn resolve(
-        &self,
-        target: (f64, f64, f64),
-        q_init: &[f64; 5],
-    ) -> Result<ResolvedTarget, BridgeError> {
-        match solve_drawing_plane_ik(
-            &self.solver, &[target.0, target.1, target.2], q_init,
-            &self.robot, &self.base, &self.tool,
-        ) {
-            Ok(q) => Ok(ResolvedTarget { target, q }),
-            Err(e) => Err(BridgeError::Unreachable {
-                index: 0,
-                target,
-                reason: e.to_string(),
-            }),
-        }
-    }
-
     /// Validate that the resolved joints map to servo angles within the
     /// physical range. Returns the index of the offending joint (1-based J).
     fn servo_check(&self, q: &[f64; 5]) -> Result<(), BridgeError> {
-        let servo = self.robot.q_to_servo(q);
+        let servo = self.validator.robot().q_to_servo(q);
         for (i, v) in servo.iter().enumerate().take(5) {
             let deg = v.to_degrees();
             if !deg.is_finite() || !(5.0..=175.0).contains(&deg) {
@@ -279,7 +269,7 @@ impl GcodeBridge {
         for stroke in &plan.strokes {
             for resolved in stroke {
                 self.servo_check(&resolved.q)?;
-                let servo = self.robot.q_to_servo(&resolved.q);
+                let servo = self.validator.robot().q_to_servo(&resolved.q);
                 let mut joints = [0.0_f64; 5];
                 for (i, v) in servo.iter().enumerate().take(5) {
                     joints[i] = v.to_degrees();
@@ -291,18 +281,6 @@ impl GcodeBridge {
             }
         }
         Ok(count)
-    }
-}
-
-/// Collapse a resolve error preserving the failing target index.
-fn extract(e: BridgeError, index: usize) -> BridgeError {
-    match e {
-        BridgeError::Unreachable { target, reason, .. } => BridgeError::Unreachable {
-            index,
-            target,
-            reason,
-        },
-        other => other,
     }
 }
 
@@ -364,12 +342,16 @@ mod tests {
         // but IS reachable from the solution of A=(260, -45, 80). Warm-starting
         // chains the previous converged q into the next solve, so the stroke
         // A→B plans cleanly; a fresh [0;5]-init solve per target would reject B.
+        //
+        // The config below (scale 1.0, target rect [155..255]×[-30..-25], and
+        // a drawing bbox of 110×35) maps A4 (110, 0) → (260, -45) and
+        // A4 (0, 35) → (150, -10).
         let config = MappingConfig {
             target: crate::workspace::DrawingBounds {
-                x_min: 100.0,
-                x_max: 300.0,
-                y_min: -70.0,
-                y_max: 70.0,
+                x_min: 155.0,
+                x_max: 255.0,
+                y_min: -30.0,
+                y_max: -25.0,
             },
             z_draw: 80.0,
             z_travel: 80.0,
@@ -378,19 +360,18 @@ mod tests {
         let b = GcodeBridge::new(config);
         let a = (260.0, -45.0, 80.0);
         let bpt = (150.0, -10.0, 80.0);
-        let a_sol = b.resolve(a, &[0.0; 5]).expect("A reachable from home");
+        let a_sol = b.validator.solve(a, &[0.0; 5]).expect("A reachable from home");
         assert!(
-            b.resolve(bpt, &[0.0; 5]).is_err(),
+            b.validator.solve(bpt, &[0.0; 5]).is_err(),
             "B must be out of reach from a fresh [0;5] init"
         );
         assert!(
-            b.resolve(bpt, &a_sol.q).is_ok(),
+            b.validator.solve(bpt, &a_sol).is_ok(),
             "B must be reachable warm-started from A's solution"
         );
 
-        // A4 (110, 25) → (260, -45) and A4 (0, 60) → (150, -10) under the
-        // forced 1:1 mapping above: travel A, then draw A, then draw B.
-        let gcode = "G21 G90\nG0 X110.00 Y25.00\nM3\nG1 X0.00 Y60.00\nM5\n";
+        // Stroke: travel A, then draw A, then draw B.
+        let gcode = "G21 G90\nG0 X110.00 Y0.00\nM3\nG1 X0.00 Y35.00\nM5\n";
         let plan = b.plan(gcode).expect("stroke A→B must plan with warm start");
         assert_eq!(plan.target_count(), 3); // 1 travel + 2 draw points
     }
@@ -436,7 +417,7 @@ mod tests {
         let b = bridge();
         // A pose that forces a servo angle far out of range is rejected by
         // ServoCommand (strict), not clamped into range.
-        let out_of_range = b.robot.q_to_servo(&[0.0, 0.0, 3.0, 0.0, 0.0]);
+        let out_of_range = b.validator.robot().q_to_servo(&[0.0, 0.0, 3.0, 0.0, 0.0]);
         let joints: [f64; 5] = std::array::from_fn(|i| out_of_range[i].to_degrees());
         assert!(bombolab_core::ServoCommand::new(joints, 90).is_err());
     }

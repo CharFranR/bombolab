@@ -8,6 +8,9 @@
 //!
 //! The validator runs in **strict mode** by design: if any target is
 //! unreachable, the caller must abort instead of silently skipping points.
+//! Consecutive targets are solved with a warm start (previous converged `q`
+//! as the next initial guess), mirroring how the planner resolves a drawing,
+//! so the validation verdict matches the executed trajectory.
 
 use bombolab_core::math::Iso3;
 use bombolab_core::robot::Robot;
@@ -33,6 +36,10 @@ pub struct Validation {
     pub total: usize,
     pub reachable: usize,
     pub failures: Vec<ReachabilityFailure>,
+    /// Converged joints per target: `Some(q)` when reachable, `None` when
+    /// the solve failed. Lets callers reuse the validated solutions instead
+    /// of re-solving the drawing.
+    pub solutions: Vec<Option<[f64; 5]>>,
 }
 
 impl Validation {
@@ -95,30 +102,70 @@ impl DrawingValidator {
         .is_ok()
     }
 
+    /// Solve one target for its converged joints (strict).
+    ///
+    /// This is the same solve the validator dry-runs, exposed so callers can
+    /// reuse the resulting `q` for execution instead of re-solving. `q_init`
+    /// seeds the solver; chain the previous target's solution for warm starts.
+    pub fn solve(
+        &self,
+        target: (f64, f64, f64),
+        q_init: &[f64; 5],
+    ) -> Result<[f64; 5], IkError> {
+        solve_drawing_plane_ik(
+            &self.solver,
+            &[target.0, target.1, target.2],
+            q_init,
+            &self.robot,
+            &self.base,
+            &self.tool,
+        )
+    }
+
+    /// The robot model the validator checks targets against.
+    pub fn robot(&self) -> &Robot {
+        &self.robot
+    }
+
     /// Dry-run every target and collect the unreachable ones.
+    ///
+    /// Targets are solved with a warm start: each one seeds the solver with
+    /// the previous converged `q` (a failure keeps the last converged `q`),
+    /// so long strokes stay on one branch exactly as they resolve at plan
+    /// time. The converged solutions are returned alongside the failures.
     pub fn validate(&self, targets: &[(f64, f64, f64)]) -> Validation {
         let mut failures = Vec::new();
+        let mut solutions = Vec::with_capacity(targets.len());
+        let mut q_init = self.q_init;
         for (index, &(x, y, z)) in targets.iter().enumerate() {
             let result = solve_drawing_plane_ik(
                 &self.solver,
                 &[x, y, z],
-                &self.q_init,
+                &q_init,
                 &self.robot,
                 &self.base,
                 &self.tool,
             );
-            if let Err(error) = result {
-                failures.push(ReachabilityFailure {
-                    index,
-                    target: (x, y, z),
-                    error,
-                });
+            match result {
+                Ok(q) => {
+                    q_init = q;
+                    solutions.push(Some(q));
+                }
+                Err(error) => {
+                    failures.push(ReachabilityFailure {
+                        index,
+                        target: (x, y, z),
+                        error,
+                    });
+                    solutions.push(None);
+                }
             }
         }
         Validation {
             total: targets.len(),
             reachable: targets.len() - failures.len(),
             failures,
+            solutions,
         }
     }
 }
