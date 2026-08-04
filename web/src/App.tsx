@@ -444,9 +444,14 @@ export default function App() {
       return false;
     }
 
+    // Start the trajectory from the robot's current tool-tip pose (the TCP),
+    // NOT the base. fk.ee is the tool pose (frame_last * tool_transform); in the
+    // row-major Mat4 returned by forwardKinematics the translation lives in
+    // [3],[7],[11]. Reading [12..14] instead yields the affine last row [0,0,1],
+    // i.e. base origin, which made demos climb diagonally from the base.
     const fk = forwardKinematics(robot.segments, robot.baseTransform);
-    const ee = fk.frames[fk.frames.length - 1];
-    const start: [number, number, number] = [ee[12], ee[13], ee[14]];
+    const tip = fk.ee;
+    const start: [number, number, number] = [tip[3], tip[7], tip[11]];
     setTracePath(drawingPath(cmds).map(robotToThree));
     traceProgressRef.current = 0;
     setActiveDemo(key);
