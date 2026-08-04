@@ -43,6 +43,11 @@ export default function App() {
   const trajectoryIdxRef = useRef(0);
   const trajectoryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const revealAtTargetRef = useRef<number[]>([]); // points revealed after each target
+  // Render-safe playback flag read by the IK effect: while a trajectory is
+  // playing, commanded poses must honor the drawing-plane contract the
+  // targets were built with, regardless of robotMode.
+  const trajectoryPlayingRef = useRef(false);
+  trajectoryPlayingRef.current = trajectoryPlaying;
   const robotRef = useRef(robot);
   robotRef.current = robot;
   const [ikMode, setIkMode] = useState(false);
@@ -238,9 +243,16 @@ export default function App() {
       setIkFailure(false);
       return;
     }
-    const solver = robotMode === 'drawing'
-      ? (drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk)
-      : solveIk;
+    // During trajectory playback the commanded pose must satisfy the same
+    // drawing-plane constraint the targets were solved with at load time, so
+    // the replay overrides the solver selection with solveDrawingPlaneIk
+    // regardless of robotMode. Outside playback the mode-driven selection is
+    // unchanged (manual jog, square demo without playback, etc.).
+    const solver = trajectoryPlayingRef.current
+      ? solveDrawingPlaneIk
+      : robotMode === 'drawing'
+        ? (drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk)
+        : solveIk;
     const qInit = robot.segments.map(s => s.q);
     const result = solver(robot, ikTarget, qInit);
     setIkError(result.error);
