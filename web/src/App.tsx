@@ -711,9 +711,11 @@ export default function App() {
     setTrajectoryError(null);
     setTrajectoryIdx(0);
     setTrajectoryReveal(reveal[0] ?? 0);
-    // Solver the IK effect will use for every commanded target: playback
-    // forces drawingMode 2, so drawing mode resolves to solveDrawingPlaneIk.
-    const solver = robotMode === 'drawing' ? solveDrawingPlaneIk : solveIk;
+    // Solver the IK effect will use for every commanded target. Trajectory
+    // targets were built at load time with solveDrawingPlaneIk (drawing-plane
+    // constrained by construction), so validation and re-solve must use the
+    // same solver regardless of robotMode to honor that contract.
+    const solver = solveDrawingPlaneIk;
     const firstCheck = solver(live, targets[0], live.segments.map(s => s.q));
     if (!firstCheck.converged) {
       setTrajectoryError(
@@ -751,7 +753,7 @@ export default function App() {
       setTrajectoryReveal(reveal[next] ?? 0);
       setIkTarget(target);
     }, 60);
-  }, [robot, trajectoryPlaying, robotMode, stopTrajectory, setTrajectoryIdx]);
+  }, [robot, trajectoryPlaying, stopTrajectory, setTrajectoryIdx]);
 
   const trajectoryTargetsRef = useRef(trajectoryTargets);
   trajectoryTargetsRef.current = trajectoryTargets;
