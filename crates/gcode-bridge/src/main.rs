@@ -187,7 +187,13 @@ fn main() {
     // Export the plan to the web viewer's JSON document and exit.
     if let Some(path) = &cli.export {
         let gripper = cli.gripper.unwrap_or(90);
-        let json = plan.to_trajectory_json(Some(gripper));
+        let json = match plan.to_trajectory_json(Some(gripper)) {
+            Ok(json) => json,
+            Err(e) => {
+                eprintln!("error: no se pudo serializar la trayectoria: {e}");
+                std::process::exit(1);
+            }
+        };
         match std::fs::write(path, json) {
             Ok(()) => {
                 println!("Trayectoria exportada a {}", path.display());

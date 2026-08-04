@@ -1,6 +1,6 @@
 //! Parser for the minimal G-code dialect emitted by CIPRA.
 //!
-//! CIPRA produces a purely geometric dialect (see `shared/gcode-spec.md`):
+//! CIPRA produces a purely geometric dialect of G-code, described below:
 //!
 //! ```gcode
 //! G21 G90        — preamble (millimetres, absolute positioning)

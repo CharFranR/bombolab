@@ -112,9 +112,8 @@ impl DrawingPlan {
     }
 
     /// Serialize the plan to the web-viewer JSON document.
-    pub fn to_trajectory_json(&self, gripper: Option<u8>) -> String {
-        serde_json::to_string_pretty(&self.to_trajectory(gripper))
-            .expect("trajectory JSON serialization cannot fail")
+    pub fn to_trajectory_json(&self, gripper: Option<u8>) -> Result<String, BridgeError> {
+        serde_json::to_string_pretty(&self.to_trajectory(gripper)).map_err(BridgeError::Serialization)
     }
 }
 
@@ -133,6 +132,7 @@ pub enum BridgeError {
         joint: usize,
         servo_deg: f64,
     },
+    Serialization(serde_json::Error),
     Execution(String),
 }
 
@@ -153,6 +153,7 @@ impl std::fmt::Display for BridgeError {
                 "target #{index}: joint J{} resolved to {servo_deg:.2}° servo angle outside [5,175]°",
                 joint + 1
             ),
+            BridgeError::Serialization(e) => write!(f, "serialization error: {e}"),
             BridgeError::Execution(m) => write!(f, "execution error: {m}"),
         }
     }
@@ -227,10 +228,16 @@ impl GcodeBridge {
             let mut resolved: Vec<ResolvedTarget> = Vec::with_capacity(stroke.points.len() + 1);
             for _ in 0..=stroke.points.len() {
                 let ((idx, t), sol) = (
-                    target_iter.next().expect("target count matches strokes"),
-                    solution_iter.next().expect("solution count matches targets"),
+                    target_iter.next().ok_or_else(|| {
+                        BridgeError::Geometry("internal error: target count mismatch".into())
+                    })?,
+                    solution_iter.next().ok_or_else(|| {
+                        BridgeError::Geometry("internal error: solution count mismatch".into())
+                    })?,
                 );
-                let q = sol.expect("validated targets always resolve");
+                let q = sol.ok_or_else(|| {
+                    BridgeError::Geometry("internal error: validated target did not resolve".into())
+                })?;
                 let r = ResolvedTarget { target: t, q };
                 self.servo_check(&r.q).map_err(|e| with_index(e, idx))?;
                 resolved.push(r);
@@ -443,7 +450,7 @@ mod tests {
     fn to_trajectory_json_is_valid_and_matches_shape() {
         let b = bridge();
         let plan = b.plan(SQUARE).unwrap();
-        let json = plan.to_trajectory_json(Some(90));
+        let json = plan.to_trajectory_json(Some(90)).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(parsed.get("steps").unwrap().is_array());
         assert_eq!(parsed["steps"].as_array().unwrap().len(), plan.target_count());
