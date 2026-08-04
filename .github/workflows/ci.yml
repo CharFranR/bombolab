@@ -91,6 +91,31 @@ jobs:
       - run: npx tsc --noEmit
         working-directory: web
 
+  web-parity:
+    name: Web parser parity check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run test:parity
+        working-directory: web
+
+  gcode-bridge:
+    name: G-code bridge test & clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/gcode-bridge
+      - run: cargo test --manifest-path crates/gcode-bridge/Cargo.toml
+      - run: cargo clippy --manifest-path crates/gcode-bridge/Cargo.toml -- -D warnings
+
   firmware:
     name: Firmware build
     runs-on: ubuntu-latest
