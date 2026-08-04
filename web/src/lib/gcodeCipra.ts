@@ -52,13 +52,25 @@ export function fitScale(b: DrawingBounds, w: number, h: number): number {
 
 // ─── Parser (mirrors crate parser.rs) ──────────────────────────────────────────
 
+// Mirrors the Rust `strip_comment` (crates/gcode-bridge/src/parser.rs):
+// paren-depth aware — `(` opens a comment, `)` closes it (nested parens
+// supported), `;` only starts a comment at depth 0, and content inside
+// parens is dropped while the rest of the line survives.
 function stripComment(line: string): string {
-  const semicolon = line.indexOf(';');
-  const paren = line.indexOf('(');
-  let cut = -1;
-  if (semicolon >= 0) cut = semicolon;
-  if (paren >= 0 && (cut < 0 || paren < cut)) cut = paren;
-  return cut >= 0 ? line.slice(0, cut) : line;
+  let out = '';
+  let depth = 0;
+  for (const c of line) {
+    if (c === '(') {
+      depth++;
+    } else if (c === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && c === ';') {
+      break;
+    } else if (depth === 0) {
+      out += c;
+    }
+  }
+  return out;
 }
 
 /** Error raised by the strict parser; `message` mirrors the Rust ParseError. */
@@ -90,8 +102,9 @@ function normalizeCommand(token: string): { cmd: string; rest: string | null } |
  * Parse `X<..>` / `Y<..>` values from a motion command. Works for both spaced
  * (`X10 Y20`) and compact (`X10Y20`) forms: a value is the leading numeric
  * part of its token, so the next axis letter terminates it. Values must be
- * strict numbers (same semantics as Rust `token.parse::<f64>()`); anything
- * else raises `GcodeParseError`.
+ * strict numbers (shared grammar with the Rust port, which rejects `.5`,
+ * `5.`, `+5`, `-.5` and similar forms); anything else raises
+ * `GcodeParseError`.
  */
 function parseXY(command: string): GPoint {
   let x = 0;
@@ -258,23 +271,47 @@ export function runParserSelfTests(): { ok: boolean; failures: string[] } {
     ],
   ]);
   expect('empty', parseGcode('G21 G90\nM5\n').strokes, []);
-  expect(
-    'mixed travel and padded draw',
-    parseGcode('G0 X0 Y0\nM3\nG01 X10 Y10\nG01 X20 Y20\nM5\nG0 X30 Y30\nM3\nG01 X40 Y40\nM5\n').strokes,
+  expect('mixed travel and padded draw', parseGcode('G0 X0 Y0\nM3\nG01 X10 Y10\nG01 X20 Y20\nM5\nG0 X30 Y30\nM3\nG01 X40 Y40\nM5\n').strokes, [
     [
-      [
-        [0, 0],
-        [10, 10],
-        [20, 20],
-      ],
-      [
-        [30, 30],
-        [40, 40],
-      ],
+      [0, 0],
+      [10, 10],
+      [20, 20],
     ],
-  );
+    [
+      [30, 30],
+      [40, 40],
+    ],
+  ]);
+  expect('mid-line paren comment', parseGcode('M3\nG1 X1 Y2 (note) X3\nM5\n').strokes, [
+    [
+      [0, 0],
+      [3, 2],
+    ],
+  ]);
+  expect('paren comment with axis letter', parseGcode('M3\nG1 X5 Y5 (X999)\nM5\n').strokes, [
+    [
+      [0, 0],
+      [5, 5],
+    ],
+  ]);
+  expect('decimal and exponent accepted', parseGcode('M3\nG1 X1.5 Y1e3\nM5\n').strokes, [
+    [
+      [0, 0],
+      [1.5, 1000],
+    ],
+  ]);
+  expect('signed exponent accepted', parseGcode('M3\nG1 X-1.5e+2 Y2\nM5\n').strokes, [
+    [
+      [0, 0],
+      [-150, 2],
+    ],
+  ]);
   expectError('invalid number with trailing garbage', parseGcode('M3\nG1 X10abc Y20\nM5\n'));
   expectError('bad number', parseGcode('M3\nG0 Xabc Y10\n'));
+  expectError('leading dot number', parseGcode('M3\nG1 X.5 Y1\nM5\n'));
+  expectError('trailing dot number', parseGcode('M3\nG1 X5. Y1\nM5\n'));
+  expectError('explicit plus number', parseGcode('M3\nG1 X+5 Y1\nM5\n'));
+  expectError('negative leading dot number', parseGcode('M3\nG1 X-.5 Y1\nM5\n'));
 
   return { ok: failures.length === 0, failures };
 }

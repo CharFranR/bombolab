@@ -172,6 +172,53 @@ fn normalize_command(token: &str) -> Option<(String, Option<&str>)> {
     Some((format!("{letter}{number}"), compact))
 }
 
+/// Validate a number token against the strict grammar shared with the TS port
+/// (`^-?\d+(\.\d+)?([eE][+-]?\d+)?$`): optional `-`, one or more digits,
+/// optional fraction (`.` + digits), optional exponent (`e`/`E` with optional
+/// sign and one or more digits). Rejects `.5`, `5.`, `+5`, `-.5`, `5.e2`,
+/// empty strings, and every other form `f64::from_str` would otherwise accept.
+fn is_strict_number(token: &str) -> bool {
+    let b = token.as_bytes();
+    if b.is_empty() {
+        return false;
+    }
+    let mut i = 0;
+    if b[i] == b'-' {
+        i += 1;
+    }
+    let int_start = i;
+    while i < b.len() && b[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == int_start {
+        return false;
+    }
+    if i < b.len() && b[i] == b'.' {
+        i += 1;
+        let frac_start = i;
+        while i < b.len() && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i == frac_start {
+            return false;
+        }
+    }
+    if i < b.len() && matches!(b[i], b'e' | b'E') {
+        i += 1;
+        if i < b.len() && matches!(b[i], b'+' | b'-') {
+            i += 1;
+        }
+        let exp_start = i;
+        while i < b.len() && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i == exp_start {
+            return false;
+        }
+    }
+    i == b.len()
+}
+
 /// Extract `X<..>` and `Y<..>` values from a motion command. Works for both
 /// spaced (`X10 Y20`) and compact (`X10Y20`) forms: a value is the leading
 /// numeric part of its token, so the next axis letter terminates it.
@@ -198,6 +245,14 @@ fn parse_xy(command: &str, line: usize) -> Result<Point2D, ParseError> {
         // A trailing `X`/`Y` starts the next axis value (compact form);
         // anything else is a malformed number, e.g. `X10abc`.
         if !trailing.is_empty() && !trailing.starts_with(['X', 'Y']) {
+            return Err(ParseError::InvalidNumber {
+                line,
+                token: token.into(),
+            });
+        }
+        // Strict number grammar shared with the TS port: `.5`, `5.`, `+5`,
+        // `-.5`, `5.e2` are rejected even though `f64::from_str` accepts them.
+        if !is_strict_number(num) {
             return Err(ParseError::InvalidNumber {
                 line,
                 token: token.into(),
@@ -320,5 +375,32 @@ mod tests {
             parse_gcode(gcode),
             Err(ParseError::InvalidNumber { .. })
         ));
+    }
+
+    // Boundary cases mirroring the TS regex `^-?\d+(\.\d+)?([eE][+-]?\d+)?$`
+    // and the shared parity fixture `shared/gcode-parity.json`.
+    #[test]
+    fn strict_number_grammar_matches_ts_regex() {
+        for ok in [
+            "0", "-0", "1.5", "1e3", "1E-3", "-1.5e+2", "10", "-5", "1e+5",
+        ] {
+            assert!(is_strict_number(ok), "{ok:?} must be accepted");
+        }
+        for bad in [
+            ".5", "5.", "+5", "-.5", "5.e2", "abc", "1.2.3", "", "--5", "1e", "1e+", "-", "+",
+        ] {
+            assert!(!is_strict_number(bad), "{bad:?} must be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_non_strict_number_forms() {
+        for token in [".5", "5.", "+5", "-.5"] {
+            let gcode = format!("M3\nG1 X{token} Y1\nM5\n");
+            assert!(
+                matches!(parse_gcode(&gcode), Err(ParseError::InvalidNumber { .. })),
+                "{token:?} must be rejected"
+            );
+        }
     }
 }

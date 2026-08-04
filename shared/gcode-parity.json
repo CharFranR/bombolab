@@ -39,12 +39,52 @@
       "name": "empty",
       "gcode": "G21 G90\nM5\n",
       "strokes": []
+    },
+    {
+      "name": "mid-line paren comment",
+      "gcode": "M3\nG1 X1 Y2 (note) X3\nM5\n",
+      "strokes": [[[0.0, 0.0], [3.0, 2.0]]]
+    },
+    {
+      "name": "paren comment with axis letter",
+      "gcode": "M3\nG1 X5 Y5 (X999)\nM5\n",
+      "strokes": [[[0.0, 0.0], [5.0, 5.0]]]
+    },
+    {
+      "name": "decimal and exponent accepted",
+      "gcode": "M3\nG1 X1.5 Y1e3\nM5\n",
+      "strokes": [[[0.0, 0.0], [1.5, 1000.0]]]
+    },
+    {
+      "name": "signed exponent accepted",
+      "gcode": "M3\nG1 X-1.5e+2 Y2\nM5\n",
+      "strokes": [[[0.0, 0.0], [-150.0, 2.0]]]
     }
   ],
   "errorCases": [
     {
       "name": "bad number",
       "gcode": "M3\nG0 Xabc Y10\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "leading dot number",
+      "gcode": "M3\nG1 X.5 Y1\nM5\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "trailing dot number",
+      "gcode": "M3\nG1 X5. Y1\nM5\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "explicit plus number",
+      "gcode": "M3\nG1 X+5 Y1\nM5\n",
+      "error": "InvalidNumber"
+    },
+    {
+      "name": "negative leading dot number",
+      "gcode": "M3\nG1 X-.5 Y1\nM5\n",
       "error": "InvalidNumber"
     }
   ]
