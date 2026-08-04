@@ -38,14 +38,19 @@ export default function App() {
   const [trajectoryTargets, setTrajectoryTargets] = useState<[number, number, number][]>([]);
   const [trajectoryPlaying, setTrajectoryPlaying] = useState(false);
   const [trajectoryReveal, setTrajectoryReveal] = useState(0); // polyline points drawn so far
+  const [trajectorySkipped, setTrajectorySkipped] = useState(0); // non-converged targets dropped on load
+  const [trajectoryError, setTrajectoryError] = useState<string | null>(null);
   const trajectoryIdxRef = useRef(0);
   const trajectoryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const revealAtTargetRef = useRef<number[]>([]); // points revealed after each target
+  const robotRef = useRef(robot);
+  robotRef.current = robot;
   const [ikMode, setIkMode] = useState(false);
   const [drawingMode, setDrawingMode] = useState(0); // 0=off, 1=modo1, 2=modo2
   const [drawingActive, setDrawingActive] = useState(false);
   const [ikTarget, setIkTarget] = useState<[number, number, number] | null>(null);
   const [ikError, setIkError] = useState<number | null>(null);
+  const [ikFailure, setIkFailure] = useState(false);
   // Robot operating mode: the enum has more variants (Teaching, Calibration,
   // EmergencyStop) but only Normal and Drawing are implemented (slice 1).
   const [robotMode, setRobotMode] = useState<'normal' | 'drawing'>('normal');
@@ -229,7 +234,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!ikMode || !ikTarget || !robot) return;
+    if (!ikMode || !ikTarget || !robot) {
+      setIkFailure(false);
+      return;
+    }
     const solver = robotMode === 'drawing'
       ? (drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk)
       : solveIk;
@@ -237,6 +245,12 @@ export default function App() {
     const result = solver(robot, ikTarget, qInit);
     setIkError(result.error);
     setDrawingActive(result.converged && result.error < 10);
+    if (!result.converged) {
+      // Never command a garbage pose: keep the previous joints when IK fails.
+      setIkFailure(true);
+      return;
+    }
+    setIkFailure(false);
     setRobot(prev => {
       if (!prev) return prev;
       return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
@@ -592,12 +606,16 @@ export default function App() {
           console.error('[App] Failed to parse gcode:', error ?? 'no strokes');
           setTrajectoryPoints([]);
           setTrajectoryTargets([]);
+          setTrajectorySkipped(0);
+          setTrajectoryError(null);
           return;
         }
         const bbox = drawingBoundingBox(strokes);
         if (!bbox) {
           setTrajectoryPoints([]);
           setTrajectoryTargets([]);
+          setTrajectorySkipped(0);
+          setTrajectoryError(null);
           return;
         }
         const config = defaultMapping();
@@ -608,7 +626,7 @@ export default function App() {
         const points: [number, number, number][] = [];
         const targets: [number, number, number][] = [];
         const revealAfter: number[] = [];
-        let convergedCount = 0;
+        let skippedCount = 0;
         let totalTargets = 0;
         for (const stroke of strokes) {
           if (stroke.length === 0) continue;
@@ -617,14 +635,14 @@ export default function App() {
           for (const [mx, my, mz] of [travel, ...stroke.map((p) => mapPoint(p[0], p[1], drawingW, drawingH, config, 'draw'))]) {
             totalTargets += 1;
             const target: [number, number, number] = [mx, my, mz];
-            targets.push(target);
             const res = solveDrawingPlaneIk(robot, target, [0, 0, 0, 0, 0]);
             if (!res.converged) {
-              console.warn(`[App] IK no converge en target (${mx},${my},${mz}): error ${res.error.toFixed(2)}mm`);
-              revealAfter.push(points.length); // no new point for this target
+              // Never play a target IK cannot reach: skip it and report below.
+              skippedCount += 1;
+              console.warn(`[App] IK no converge en target (${mx},${my},${mz}): error ${res.error.toFixed(2)}mm — omitido`);
               continue;
             }
-            convergedCount += 1;
+            targets.push(target);
             // Resolve FK for this step and extract the tool-tip position with
             // the same DH→THREE [x,z,y] swap the JSON loader uses.
             const segs = robot.segments.map((s, i) => ({ ...s, q: res.q[i] }));
@@ -644,8 +662,10 @@ export default function App() {
         setTrajectoryReveal(0); // drawing appears as the robot draws
         setTrajectoryTargets(targets);
         setTrajectoryPoints(points);
+        setTrajectorySkipped(skippedCount);
+        setTrajectoryError(null);
         console.log(
-          `[App] Loaded gcode — ${strokes.length} strokes, ${points.length} tool-tip points (IK ${convergedCount}/${totalTargets} converged), scale ${scale.toFixed(4)}`,
+          `[App] Loaded gcode — ${strokes.length} strokes, ${points.length} tool-tip points (IK ${targets.length}/${totalTargets} converged, ${skippedCount} skipped), scale ${scale.toFixed(4)}`,
         );
       };
       reader.readAsText(file);
@@ -675,12 +695,26 @@ export default function App() {
     const targets = trajectoryTargetsRef.current;
     const reveal = revealAtTargetRef.current;
     if (!robot || targets.length === 0) return;
+    const live = robotRef.current;
+    if (!live) return;
 
     setIkMode(true);
     setDrawingMode(2); // marcador vertical (same as demo / gcode loader IK)
     setTrajectoryPlaying(true);
+    setTrajectoryError(null);
     setTrajectoryIdx(0);
     setTrajectoryReveal(reveal[0] ?? 0);
+    // Solver the IK effect will use for every commanded target: playback
+    // forces drawingMode 2, so drawing mode resolves to solveDrawingPlaneIk.
+    const solver = robotMode === 'drawing' ? solveDrawingPlaneIk : solveIk;
+    const firstCheck = solver(live, targets[0], live.segments.map(s => s.q));
+    if (!firstCheck.converged) {
+      setTrajectoryError(
+        `IK no converge en el primer target — trayectoria no iniciada (error ${firstCheck.error.toFixed(1)}mm)`,
+      );
+      stopTrajectory();
+      return;
+    }
     setIkTarget(targets[0]);
 
     trajectoryTimerRef.current = setInterval(() => {
@@ -691,11 +725,26 @@ export default function App() {
         stopTrajectory();
         return;
       }
+      const target = targets[next];
+      // Defense-in-depth: re-solve from the live pose before commanding. If
+      // IK cannot reach the target, stop playback with a visible error
+      // instead of continuing (or commanding a garbage pose).
+      const liveRobot = robotRef.current;
+      if (liveRobot) {
+        const check = solver(liveRobot, target, liveRobot.segments.map(s => s.q));
+        if (!check.converged) {
+          setTrajectoryError(
+            `IK no converge en el target ${next + 1} de ${targets.length} — trayectoria detenida (error ${check.error.toFixed(1)}mm)`,
+          );
+          stopTrajectory();
+          return;
+        }
+      }
       setTrajectoryIdx(next);
       setTrajectoryReveal(reveal[next] ?? 0);
-      setIkTarget(targets[next]);
+      setIkTarget(target);
     }, 60);
-  }, [robot, trajectoryPlaying, stopTrajectory, setTrajectoryIdx]);
+  }, [robot, trajectoryPlaying, robotMode, stopTrajectory, setTrajectoryIdx]);
 
   const trajectoryTargetsRef = useRef(trajectoryTargets);
   trajectoryTargetsRef.current = trajectoryTargets;
@@ -1056,6 +1105,11 @@ export default function App() {
                   err: {ikError.toFixed(1)}mm
                 </span>
               )}
+              {ikFailure && (
+                <div style={{ color: '#e84', marginTop: 2 }}>
+                  IK no converge — se mantiene la pose anterior
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1096,6 +1150,14 @@ export default function App() {
           >
             Cargar trayectoria .gcode
           </button>
+          {trajectorySkipped > 0 && (
+            <div style={{ fontSize: 11, color: '#e84' }}>
+              {trajectorySkipped === 1 ? '1 target omitido' : `${trajectorySkipped} targets omitidos`} por IK no convergente
+            </div>
+          )}
+          {trajectoryError && (
+            <div style={{ fontSize: 11, color: '#e55' }}>{trajectoryError}</div>
+          )}
           {hasTrajectory && (
             <div style={{ display: 'flex', gap: 6 }}>
               <button
@@ -1118,6 +1180,8 @@ export default function App() {
                   stopTrajectory();
                   setTrajectoryPoints([]);
                   setTrajectoryTargets([]);
+                  setTrajectorySkipped(0);
+                  setTrajectoryError(null);
                   setTrajectoryReveal(0);
                   setIkTarget(null);
                 }}
