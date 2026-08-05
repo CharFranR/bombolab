@@ -136,6 +136,22 @@ describe('parseGcode', () => {
     expect(r.bounds).toEqual({ min: [10, 10], max: [20, 20] });
   });
 
+  it('G4 dwell: P is milliseconds, S is seconds (wait in seconds)', () => {
+    const byP = parse('G21 G90\nG4 P2000\nG1 X10 Y10');
+    expect(byP.commands).toEqual([
+      { type: 'wait', duration: 2 }, // 2000 ms → 2 s
+      { type: 'penDown' },
+      { type: 'move', target: [10, 10, 80], speed: 40 },
+    ]);
+
+    const byS = parse('G21 G90\nG4 S1.5\nG1 X10 Y10');
+    expect(byS.commands).toEqual([
+      { type: 'wait', duration: 1.5 }, // seconds, passed through as-is
+      { type: 'penDown' },
+      { type: 'move', target: [10, 10, 80], speed: 40 },
+    ]);
+  });
+
   it('autofits (scales + centers) the drawing to the target area', () => {
     const r = parseGcode('G21 G90\nM3\nG1 X0 Y0\nG1 X100 Y0\n', {
       area: { xMin: 160, xMax: 240, yMin: -35, yMax: 35 },

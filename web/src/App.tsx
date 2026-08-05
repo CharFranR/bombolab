@@ -442,11 +442,13 @@ export default function App() {
     setValidating(false);
 
     if (!reach.ok) {
+      const isDemo = key !== 'gcode';
       setDrawingBlock({
         reason:
           'La trayectoria contiene ' +
           reach.failures.length +
-          ' punto(s) fuera del rango de trabajo del robot. No se dibuja para evitar movimientos prohibidos.',
+          ' punto(s) fuera del rango de trabajo del robot. No se dibuja para evitar movimientos prohibidos.' +
+          (isDemo ? ' Prueba con otro tamaño o posición del demo.' : ''),
         points: reach.failures,
         canRefit: key === 'gcode' && (lastGcodeRef.current?.name ?? gcodeName) != null,
       });

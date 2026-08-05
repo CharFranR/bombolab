@@ -49,6 +49,13 @@ interface Band {
 }
 const bands: Band[] = [];
 
+/** The band cache is built once per session from the default robot model
+ *  (`fabriCreator`). If the model or calibration changes mid-session the
+ *  tables become stale; call this after such a change to rebuild them. */
+export function resetReachabilityCache(): void {
+  bands.length = 0;
+}
+
 function nextTick(): Promise<void> {
   return new Promise((res) => setTimeout(res, 0));
 }

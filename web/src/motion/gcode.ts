@@ -6,6 +6,9 @@
  *   G92 (set origin), G4 (dwell), M3/M5 (spindle/pen down/up).
  * G2/G3 (arcs) are rejected with a warning in v1.
  *
+ * G4 dwell: P is milliseconds (Fanuc/standard), S is seconds (LinuxCNC).
+ * Both are emitted as a `wait` command whose duration is in seconds.
+ *
  * Pen semantics auto-detect:
  *   - if the file uses M3/M5, those control the pen (Z is ignored);
  *   - otherwise the lowest Z value is the drawing plane (pen down) and any
@@ -173,7 +176,10 @@ export function parseGcode(text: string, opts: GcodeOptions = {}): GcodeParseRes
       continue;
     }
     if (isWait) {
-      const duration = waitP !== null ? waitP : waitS !== null ? waitS / 1000 : 0;
+      // G4 dwell semantics: P is milliseconds (Fanuc/standard), S is seconds
+      // (LinuxCNC). The downstream `wait` command holds for `duration`
+      // seconds, so P must be /1000 while S is passed through as-is.
+      const duration = waitP !== null ? waitP / 1000 : waitS !== null ? waitS : 0;
       if (duration > 0) rawEvents.push({ kind: 'wait', duration });
       continue;
     }
@@ -268,6 +274,15 @@ export function parseGcode(text: string, opts: GcodeOptions = {}): GcodeParseRes
   return { commands, warnings, bounds, moveCount };
 }
 
+/** Scale + translate `points` so their bounding box fills `area`.
+ *
+ * Policy: small drawings are scaled UP to fill the target area (there is no
+ * never-enlarge cap). This is intentional: the target area is validated
+ * against the reachable bands, and enlarging preserves stroke proportions —
+ * a 10×10 mm sketch becomes the largest possible drawing, which is what the
+ * robot can actually reach. If never-enlarge behaviour is ever wanted, clamp
+ * `scale` to ≤ 1 here.
+ */
 function computeAutofit(
   points: [number, number][],
   area: { xMin: number; xMax: number; yMin: number; yMax: number },
