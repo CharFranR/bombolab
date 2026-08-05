@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RobotRendererProps } from './types';
@@ -144,6 +145,8 @@ export default function SimpleRobotScene({
   frames: poses,
   gripper = 0,
   workspacePoints = [],
+  tracePath,
+  traceProgressRef,
   ikTarget,
   onIkTargetChange,
   onDragStart,
@@ -159,6 +162,24 @@ export default function SimpleRobotScene({
     () => (workspacePoints.length > 0 ? new Float32Array(workspacePoints.flat()) : undefined),
     [workspacePoints],
   );
+
+  // Full trace geometry mounted once; the line is revealed progressively
+  // with geometry.setDrawRange in useFrame. Reads traceProgressRef (a ref
+  // the app updates in its rAF loop) so this scene is NOT re-rendered by
+  // React on every frame delta — only setDrawRange changes, GPU-side.
+  const traceGeoRef = useRef<THREE.BufferGeometry>(null);
+  const traceArray = useMemo(
+    () => (tracePath && tracePath.length > 0 ? new Float32Array(tracePath.flat()) : null),
+    [tracePath],
+  );
+  useFrame(() => {
+    const g = traceGeoRef.current;
+    if (!g) return;
+    const attr = g.getAttribute('position');
+    if (!attr) return;
+    const p = Math.min(1, Math.max(0, traceProgressRef?.current ?? 1));
+    g.setDrawRange(0, Math.floor(p * attr.count));
+  });
 
   return (
     <group>
@@ -256,6 +277,22 @@ export default function SimpleRobotScene({
           </bufferGeometry>
           <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
         </points>
+      )}
+
+      {/* Progressive trace of the drawing path (three.js coords, z = plane).
+          Full geometry mounts once; setDrawRange in useFrame reveals it. */}
+      {tracePath && tracePath.length > 1 && traceArray && (
+        <line>
+          <bufferGeometry ref={traceGeoRef}>
+            <bufferAttribute
+              attach="attributes-position"
+              count={tracePath.length}
+              array={traceArray}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff8866" linewidth={2} />
+        </line>
       )}
     </group>
   );

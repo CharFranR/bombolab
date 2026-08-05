@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, type PlayerStateJs } from './wasm';
 import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type MotionCommandJS } from './motion/commands';
+import { parseGcode } from './motion/gcode';
+import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
@@ -46,7 +48,24 @@ export default function App() {
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
+  const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
+  const [gcodeName, setGcodeName] = useState<string | null>(null);
+  const [gcodeWarnings, setGcodeWarnings] = useState<string[]>([]);
+  const [gcodeError, setGcodeError] = useState<string | null>(null);
+  const gcodeInputRef = useRef<HTMLInputElement | null>(null);
+  // Last parsed gcode text + name, kept so the "Reajustar" button can re-autofit
+  // into a smaller safe area if the current drawing is rejected by the workspace.
+  const lastGcodeRef = useRef<{ name: string; text: string } | null>(null);
+  // Workspace block: trajectory had points outside the robot reach. Playback
+  // is blocked until the user dismisses / re-fits it. No forbidden movement is
+  // ever commanded.
+  const [drawingBlock, setDrawingBlock] = useState<{
+    reason: string;
+    points: [number, number, number][];
+    canRefit: boolean;
+  } | null>(null);
+  const [validating, setValidating] = useState(false);
   const gripperBeforeModeRef = useRef(50);
   const lastFrameRef = useRef(0);
   const lastTrajectoryTargetRef = useRef<[number, number, number] | null>(null);
@@ -228,11 +247,20 @@ export default function App() {
     const qInit = robot.segments.map(s => s.q);
     const result = solver(robot, ikTarget, qInit);
     setIkError(result.error);
-    setDrawingActive(result.converged && result.error < 10);
-    setRobot(prev => {
-      if (!prev) return prev;
-      return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
-    });
+    // Only apply the solution when it truly converges. A best-effort q from a
+    // failed solve can land outside the workspace even when the table-backed
+    // guard approved the target (edge/concavity); applying it silently bends
+    // the arm to an illegal pose. When the solve fails we hold the last valid
+    // pose instead — qInit stays on the last good q, so the solver resumes
+    // cleanly once the target is reachable again.
+    const ok = result.converged && result.error < 10;
+    setDrawingActive(ok);
+    if (ok) {
+      setRobot(prev => {
+        if (!prev) return prev;
+        return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
+      });
+    }
   }, [ikTarget, ikMode, drawingMode, robotMode]);
 
   // Scroll wheel → ajustar Z del target IK
@@ -309,6 +337,12 @@ export default function App() {
     lastTrajectoryTargetRef.current = null;
     setTracePath([]);
     setActiveDemo(null);
+    setGcodeName(null);
+    setGcodeWarnings([]);
+    setGcodeError(null);
+    lastGcodeRef.current = null;
+    setDrawingBlock(null);
+    setValidating(false);
     setRobotMode('normal');
     setIkMode(false);
     setIkTarget(null);
@@ -322,17 +356,42 @@ export default function App() {
     if (playerId === null) return;
     lastFrameRef.current = 0;
     let raf = 0;
+    let stop = false;
     const loop = (now: number) => {
+      if (stop) return;
       const dt = lastFrameRef.current > 0 ? Math.min((now - lastFrameRef.current) / 1000, 0.1) : 0.016;
       lastFrameRef.current = now;
       try {
         motionPlayerUpdate(playerId, dt);
         const st = motionPlayerState(playerId);
         setPlayerState(st);
+        // Ref, not state: the renderer reads it in useFrame, so the heavy R3F
+        // scene is NOT re-rendered on every frame delta.
+        traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
         if (st === 'running' || st === 'paused') {
           const target = motionPlayerTarget(playerId);
           const last = lastTrajectoryTargetRef.current;
           if (!last || Math.hypot(target[0] - last[0], target[1] - last[1], target[2] - last[2]) > 0.5) {
+            // Runtime safeguard: never let the IK solver chase a target outside
+            // the reachable workspace. isReachablePoint is O(1) table-backed.
+            if (!isReachablePoint(target)) {
+              setDrawingBlock({
+                reason:
+                  'La trayectoria intentó un punto fuera del rango de trabajo ' +
+                  '(x=' + target[0].toFixed(1) + ', y=' + target[1].toFixed(1) + '). ' +
+                  'Reproducción detenida para evitar movimientos prohibidos.',
+                points: [target],
+                canRefit: false,
+              });
+              try { motionPlayerDrop(playerId); } catch {}
+              setPlayerId(null);
+              setPlayerState('idle');
+              lastTrajectoryTargetRef.current = null;
+              setIkTarget(null);
+              stop = true;
+              cancelAnimationFrame(raf);
+              return;
+            }
             lastTrajectoryTargetRef.current = target;
             setIkTarget(target);
           }
@@ -340,43 +399,175 @@ export default function App() {
       } catch (e) {
         console.error('[motion]', e);
       }
-      raf = requestAnimationFrame(loop);
+      if (!stop) raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      stop = true;
+      cancelAnimationFrame(raf);
+    };
   }, [playerId]);
 
-  const startTrajectory = useCallback((cmds: MotionCommandJS[], key: string) => {
-    if (transitioning || !robot || robotMode !== 'drawing') return;
+  // Starts a drawing trajectory ONLY after a pre-flight reachability check
+  // confirms every waypoint (and sampled mid-segment points) fits inside the
+  // robot's drawing workspace. If any point is out of reach, playback is blocked
+  // and `drawingBlock` is set — the robot never receives a forbidden target.
+  // The movement logic itself (IK / motion player) is unchanged; this only
+  // gates what it is fed.
+  const startTrajectory = useCallback(async (cmds: MotionCommandJS[], key: string) => {
+    if (transitioning || !robot || robotMode !== 'drawing') return false;
     // Replace any running/completed trajectory — the demo buttons must
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
     }
+    setDrawingBlock(null);
+    setValidating(true);
+    let reach: ReachResult | null = null;
+    try {
+      reach = await validateDrawingCommands(cmds, {
+        onProgress: (done, total) => {
+          if (done === total) setValidating(false);
+        },
+      });
+    } catch (e: any) {
+      setValidating(false);
+      setDrawingBlock({
+        reason: 'No se pudo validar la trayectoria: ' + (e?.message ?? String(e)),
+        points: [],
+        canRefit: false,
+      });
+      return false;
+    }
+    setValidating(false);
+
+    if (!reach.ok) {
+      const isDemo = key !== 'gcode';
+      setDrawingBlock({
+        reason:
+          'La trayectoria contiene ' +
+          reach.failures.length +
+          ' punto(s) fuera del rango de trabajo del robot. No se dibuja para evitar movimientos prohibidos.' +
+          (isDemo ? ' Prueba con otro tamaño o posición del demo.' : ''),
+        points: reach.failures,
+        canRefit: key === 'gcode' && (lastGcodeRef.current?.name ?? gcodeName) != null,
+      });
+      return false;
+    }
+
+    // Start the trajectory from the robot's current tool-tip pose (the TCP),
+    // NOT the base. fk.ee is the tool pose (frame_last * tool_transform); in the
+    // row-major Mat4 returned by forwardKinematics the translation lives in
+    // [3],[7],[11]. Reading [12..14] instead yields the affine last row [0,0,1],
+    // i.e. base origin, which made demos climb diagonally from the base.
     const fk = forwardKinematics(robot.segments, robot.baseTransform);
-    const ee = fk.frames[fk.frames.length - 1];
-    const start: [number, number, number] = [ee[12], ee[13], ee[14]];
-    setTracePath(drawingPath(cmds));
+    const tip = fk.ee;
+    const start: [number, number, number] = [tip[3], tip[7], tip[11]];
+    setTracePath(drawingPath(cmds).map(robotToThree));
+    traceProgressRef.current = 0;
     setActiveDemo(key);
     const id = motionPlayerNew(cmds, start);
     setPlayerId(id);
     motionPlayerPlay(id);
     setPlayerState('running');
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
-  }, [playerId, transitioning, robot, robotMode]);
+    return true;
+  }, [playerId, transitioning, robot, robotMode, gcodeName]);
 
   const handleStartDemo = useCallback(() => {
-    const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
-    startTrajectory(squareCommands(200, 0, 80, half), 'square');
+    void (async () => {
+      const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
+      await startTrajectory(squareCommands(200, 0, 80, half), 'square');
+    })();
   }, [startTrajectory, demoSizeCm]);
 
   const handleStartDiagnostic = useCallback(() => {
-    startTrajectory(diagnosticLinesCommands(), 'lines');
+    void startTrajectory(diagnosticLinesCommands(), 'lines');
   }, [startTrajectory]);
 
   const handleStartArc = useCallback(() => {
-    startTrajectory(arcCommands(), 'arc');
+    void startTrajectory(arcCommands(), 'arc');
   }, [startTrajectory]);
+
+  const handleGcodeFile = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      void (async () => {
+        try {
+          const text = String(reader.result);
+          lastGcodeRef.current = { name: file.name, text };
+          setGcodeError(null);
+          setGcodeName(file.name);
+          // safeDrawingArea builds the reachability tables (~1-2s, async). Show
+          // the spinner for the whole load+validate window.
+          setValidating(true);
+          const area = await safeDrawingArea(DRAW_PLANE_Z);
+          const result = parseGcode(text, {
+            area,
+            planeZ: DRAW_PLANE_Z,
+            travelZ: TRAVEL_PLANE_Z,
+          });
+          if (result.commands.length === 0) {
+            setValidating(false);
+            setGcodeError('El archivo no contiene movimientos dibujables (G0/G1 con lápiz).');
+            return;
+          }
+          setGcodeError(null);
+          setGcodeWarnings(result.warnings);
+          setGcodeName(file.name);
+          // startTrajectory sets its own validating state for the trajectory
+          // check and blocks automatically if any point is out of reach.
+          const started = await startTrajectory(result.commands, 'gcode');
+          setValidating(false);
+          if (!started) setGcodeError(null); // blocked by the workspace panel
+        } catch (err: any) {
+          setValidating(false);
+          setGcodeError(err?.message ?? 'Error al leer el archivo .gcode');
+        }
+      })();
+    };
+    reader.onerror = () => setGcodeError('Error al leer el archivo');
+    reader.readAsText(file);
+  }, [startTrajectory]);
+
+  // Re-parse a rejected gcode against a progressively smaller safe drawing area
+  // (up to N attempts) so the user can recover without leaving drawing mode.
+  const handleRefitGcode = useCallback(async () => {
+    const raw = lastGcodeRef.current;
+    if (!raw) return;
+    setValidating(true);
+    const baseArea = await safeDrawingArea(DRAW_PLANE_Z);
+    try {
+      let area = baseArea;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const margin = 0.88;
+        const cx = (area.xMin + area.xMax) / 2;
+        const cy = (area.yMin + area.yMax) / 2;
+        const hx = ((area.xMax - area.xMin) / 2) * margin;
+        const hy = ((area.yMax - area.yMin) / 2) * margin;
+        area = { xMin: cx - hx, xMax: cx + hx, yMin: cy - hy, yMax: cy + hy };
+        const result = parseGcode(raw.text, { area, planeZ: DRAW_PLANE_Z, travelZ: TRAVEL_PLANE_Z });
+        if (result.commands.length === 0) continue;
+        setGcodeWarnings(result.warnings);
+        const ok = await startTrajectory(result.commands, 'gcode');
+        if (ok) return;
+      }
+      setGcodeError('No se pudo ajustar el dibujo al área de trabajo alcanzable.');
+    } finally {
+      setValidating(false);
+    }
+  }, [startTrajectory]);
+
+  const handleClearDrawingBlock = useCallback(() => {
+    setDrawingBlock(null);
+    setTracePath([]);
+    if (playerId !== null) {
+      try { motionPlayerDrop(playerId); } catch {}
+      setPlayerId(null);
+    }
+    setPlayerState('idle');
+    setIkTarget(null);
+  }, [playerId]);
 
   const handleBacklashToggle = useCallback((enabled: boolean) => {
     setBacklashEnabled(enabled);
@@ -1042,6 +1233,120 @@ export default function App() {
               </div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                 <button
+                  onClick={() => gcodeInputRef.current?.click()}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: 8,
+                    background: activeDemo === 'gcode' ? '#553' : '#3a3a3a',
+                    border: '1px solid ' + (activeDemo === 'gcode' ? '#885' : '#444'),
+                    borderRadius: 4,
+                    color: activeDemo === 'gcode' ? '#ddc' : '#888',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {gcodeName ? `G-code: ${gcodeName}` : 'Cargar .gcode'}
+                </button>
+                <input
+                  ref={gcodeInputRef}
+                  type="file"
+                  accept=".gcode,.gco,.nc,.txt"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleGcodeFile(file);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+              {gcodeError && (
+                <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>
+                  ⚠ {gcodeError}
+                </div>
+              )}
+              {gcodeWarnings.length > 0 && (
+                <div style={{ fontSize: 10, color: '#aa8', marginBottom: 6 }}>
+                  {gcodeWarnings.slice(0, 5).map((w, i) => (
+                    <div key={i}>{w}</div>
+                  ))}
+                  {gcodeWarnings.length > 5 && (
+                    <div>… y {gcodeWarnings.length - 5} más</div>
+                  )}
+                </div>
+              )}
+              {validating && (
+                <div style={{ fontSize: 11, color: '#88f', marginBottom: 6 }}>
+                  Validando que la trayectoria entre en el rango de trabajo…
+                </div>
+              )}
+              {drawingBlock && (
+                <div
+                  style={{
+                    padding: 8,
+                    marginBottom: 6,
+                    borderRadius: 4,
+                    background: '#300',
+                    border: '1px solid #833',
+                    color: '#f88',
+                    fontSize: 11,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    ⛔ {drawingBlock.reason}
+                  </div>
+                  {drawingBlock.points.length > 0 && (
+                    <div style={{ color: '#c99', marginBottom: 4 }}>
+                      Puntos fuera de rango (máx. 8):{' '}
+                      {drawingBlock.points.slice(0, 8).map((p, i) => (
+                        <span key={i}>
+                          ({p[0].toFixed(1)}, {p[1].toFixed(1)}, {p[2].toFixed(0)})
+                          {i < Math.min(drawingBlock.points.length, 8) - 1 ? '; ' : ''}
+                        </span>
+                      ))}
+                      {drawingBlock.points.length > 8
+                        ? `… (+${drawingBlock.points.length - 8} más)`
+                        : ''}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <button
+                      onClick={handleClearDrawingBlock}
+                      style={{
+                        flex: 1,
+                        padding: '2px 6px',
+                        fontSize: 11,
+                        background: '#333',
+                        border: '1px solid #444',
+                        borderRadius: 3,
+                        color: '#aaa',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cerrar
+                    </button>
+                    {drawingBlock.canRefit && (
+                      <button
+                        onClick={handleRefitGcode}
+                        style={{
+                          flex: 1,
+                          padding: '2px 6px',
+                          fontSize: 11,
+                          background: '#533',
+                          border: '1px solid #885',
+                          borderRadius: 3,
+                          color: '#ddc',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reajustar y dibujar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
                   onClick={handlePlaybackControl}
                   disabled={playerId === null}
                   style={{
@@ -1125,6 +1430,7 @@ export default function App() {
           gripper={gripper}
           workspacePoints={workspacePoints}
           tracePath={tracePath}
+          traceProgressRef={traceProgressRef}
           ikTarget={ikTarget}
           onIkTargetChange={setIkTarget}
           fidelityMode={fidelityMode}
@@ -1156,6 +1462,12 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+/** Robot DH coordinates (x, y, z) → three.js scene coordinates (x, z, y).
+ *  Same mapping used by framePose() in renderers/types.ts and IkTarget. */
+function robotToThree(p: [number, number, number]): [number, number, number] {
+  return [p[0], p[2], p[1]];
 }
 
 function generateWorkspace(samples: number): [number, number, number][] {
