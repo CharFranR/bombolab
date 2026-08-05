@@ -497,6 +497,7 @@ export default function App() {
             travelZ: TRAVEL_PLANE_Z,
           });
           if (result.commands.length === 0) {
+            setValidating(false);
             setGcodeError('El archivo no contiene movimientos dibujables (G0/G1 con lápiz).');
             return;
           }
