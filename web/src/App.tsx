@@ -247,11 +247,20 @@ export default function App() {
     const qInit = robot.segments.map(s => s.q);
     const result = solver(robot, ikTarget, qInit);
     setIkError(result.error);
-    setDrawingActive(result.converged && result.error < 10);
-    setRobot(prev => {
-      if (!prev) return prev;
-      return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
-    });
+    // Only apply the solution when it truly converges. A best-effort q from a
+    // failed solve can land outside the workspace even when the table-backed
+    // guard approved the target (edge/concavity); applying it silently bends
+    // the arm to an illegal pose. When the solve fails we hold the last valid
+    // pose instead — qInit stays on the last good q, so the solver resumes
+    // cleanly once the target is reachable again.
+    const ok = result.converged && result.error < 10;
+    setDrawingActive(ok);
+    if (ok) {
+      setRobot(prev => {
+        if (!prev) return prev;
+        return { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: result.q[i] ?? 0 })) };
+      });
+    }
   }, [ikTarget, ikMode, drawingMode, robotMode]);
 
   // Scroll wheel → ajustar Z del target IK
