@@ -10,10 +10,11 @@
  *
  * Follows the gcode.test.ts convention: pure functions, no jsdom/React.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { validateEnvelope, buildAckRequest, buildErrorRequest, SCHEMA_VERSION } from './cipra/protocol';
 import { jobReducer, initialJobState, jobById, jobStatus } from './cipra/jobStore';
 import { loadGcodeText, type LoadGcodeTextDeps } from './cipra/loadGcodeText';
+import { buildGcodeWsUrl, planIncoming, GcodeClient } from './cipra';
 
 /** Reachable drawing-plane heights (mirror of reachability DRAW/TRAVEL_PLANE_Z).
  *  Kept literal here to keep the node test free of the wasm module chain. */
@@ -263,5 +264,140 @@ describe('cipra/loadGcodeText.ts — shared gcode→trajectory pipeline (R12)', 
     await loadGcodeText('G21\nG1 X1 Y1', 'x.gcode', deps);
     expect(flags[0]).toBe(true);
     expect(flags[flags.length - 1]).toBe(false);
+  });
+});
+
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = [];
+  url: string;
+  sent: string[] = [];
+  onopen: ((ev: unknown) => void) | null = null;
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  onclose: ((ev: unknown) => void) | null = null;
+  onerror: ((ev: unknown) => void) | null = null;
+  constructor(url: string) {
+    this.url = url;
+    FakeWebSocket.instances.push(this);
+  }
+  send(data: string): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.onclose?.({});
+  }
+  open(): void {
+    this.onopen?.({});
+  }
+  deliver(data: string): void {
+    this.onmessage?.({ data });
+  }
+}
+
+afterEach(() => {
+  FakeWebSocket.instances.length = 0;
+  vi.restoreAllMocks();
+});
+
+describe('cipra.ts — WebSocket adapter (K4-04)', () => {
+  describe('buildGcodeWsUrl', () => {
+    it('builds ws://host:8000/ws/gcode/ from an http page origin', () => {
+      expect(buildGcodeWsUrl({ protocol: 'http:', hostname: '192.168.1.7' }, null)).toBe(
+        'ws://192.168.1.7:8000/ws/gcode/',
+      );
+    });
+
+    it('upgrades to wss:// on an https page origin', () => {
+      expect(buildGcodeWsUrl({ protocol: 'https:', hostname: 'bombolab.local' }, null)).toBe(
+        'wss://bombolab.local:8000/ws/gcode/',
+      );
+    });
+
+    it('prefers an explicit env override URL when present', () => {
+      expect(
+        buildGcodeWsUrl({ protocol: 'http:', hostname: 'ignored' }, 'ws://other:9000/ws/gcode/'),
+      ).toBe('ws://other:9000/ws/gcode/');
+    });
+  });
+
+  describe('planIncoming', () => {
+    it('plans ack+arrive for a validated gcode.ready', () => {
+      expect(planIncoming(JSON.stringify(READY_FIXTURE))).toEqual({
+        kind: 'arrive',
+        envelope: READY_FIXTURE,
+      });
+    });
+
+    it('plans a protocol-version error reply for a version mismatch (S2)', () => {
+      expect(planIncoming(JSON.stringify({ ...READY_FIXTURE, version: 2 }))).toEqual({
+        kind: 'version-mismatch',
+        id: 'job-1',
+      });
+    });
+
+    it('plans ignore for unparseable data', () => {
+      expect(planIncoming('not-json')).toEqual({ kind: 'invalid' });
+    });
+
+    it('plans ignore for non-ready envelopes', () => {
+      const nojob = { type: 'no-job', version: 1, id: 'x', name: '', meta: {}, payload: '' };
+      expect(planIncoming(JSON.stringify(nojob))).toEqual({ kind: 'ignore' });
+    });
+  });
+
+  describe('ACK on validated receipt (R10/S8) + status', () => {
+    function makeClient(): { client: GcodeClient; sockets: FakeWebSocket[]; onReady: ReturnType<typeof vi.fn> } {
+      const sockets: FakeWebSocket[] = [];
+      const client = new GcodeClient('ws://test:8000/ws/gcode/', (url) => {
+        const s = new FakeWebSocket(url);
+        sockets.push(s);
+        return s as unknown as WebSocket;
+      });
+      const onReady = vi.fn();
+      client.onReady = onReady;
+      client.connect();
+      return { client, sockets, onReady };
+    }
+
+    it('sends a gcode.ack for a validated receipt before surfacing the job', () => {
+      const { sockets, onReady } = makeClient();
+      const ws = sockets[0];
+      ws.open();
+      ws.deliver(JSON.stringify(READY_FIXTURE));
+      expect(ws.sent).toContainEqual(
+        JSON.stringify({ type: 'gcode.ack', version: 1, id: 'job-1', name: '', meta: {}, payload: '' }),
+      );
+      expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ id: 'job-1' }));
+    });
+
+    it('replies E_PROTOCOL_VERSION error but does NOT ack/surface on version mismatch (S2)', () => {
+      const { sockets, onReady } = makeClient();
+      const ws = sockets[0];
+      ws.open();
+      ws.deliver(JSON.stringify({ ...READY_FIXTURE, version: 99 }));
+      expect(onReady).not.toHaveBeenCalled();
+      const outbound = ws.sent.map((s) => JSON.parse(s));
+      expect(outbound.some((o) => o.type === 'gcode.error' && o.meta?.code === 'E_PROTOCOL_VERSION')).toBe(true);
+      expect(outbound.some((o) => o.type === 'gcode.ack')).toBe(false);
+    });
+
+    it('reports connecting → connected on open and powers the offline banner', () => {
+      const statuses: string[] = [];
+      const sockets: FakeWebSocket[] = [];
+      const client = new GcodeClient('ws://x/ws/gcode/', (url) => {
+        const s = new FakeWebSocket(url);
+        sockets.push(s);
+        return s as unknown as WebSocket;
+      });
+      client.onStatus = (s) => statuses.push(s);
+      client.connect();
+      expect(statuses).toContain('connecting');
+      sockets[0].open();
+      expect(statuses).toContain('connected');
+      expect(client.status).toBe('connected');
+      sockets[0].close();
+      expect(statuses).toContain('disconnected');
+      expect(client.status).toBe('disconnected');
+      client.disconnect(); // cancel the reconnect timer
+    });
   });
 });
