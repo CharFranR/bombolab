@@ -13,6 +13,12 @@
 import { describe, it, expect } from 'vitest';
 import { validateEnvelope, buildAckRequest, buildErrorRequest, SCHEMA_VERSION } from './cipra/protocol';
 import { jobReducer, initialJobState, jobById, jobStatus } from './cipra/jobStore';
+import { loadGcodeText, type LoadGcodeTextDeps } from './cipra/loadGcodeText';
+
+/** Reachable drawing-plane heights (mirror of reachability DRAW/TRAVEL_PLANE_Z).
+ *  Kept literal here to keep the node test free of the wasm module chain. */
+const DRAW_PLANE_Z = 80;
+const TRAVEL_PLANE_Z = 85;
 
 const READY_FIXTURE = {
   type: 'gcode.ready',
@@ -170,5 +176,92 @@ describe('cipra/jobStore.ts — pending-job state machine (R8/R9)', () => {
     const s = jobReducer(initialJobState, arrive('a'));
     const next = jobReducer(s, { type: 'DRAW', id: 'a' }); // pending cannot draw directly
     expect(next).toBe(s);
+  });
+});
+
+function makeLoaderDeps(overrides: Partial<LoadGcodeTextDeps> = {}): LoadGcodeTextDeps {
+  return {
+    safeDrawingArea: async () => ({ xMin: 160, xMax: 240, yMin: -35, yMax: 35 }),
+    parseGcode: () => ({
+      commands: [{ type: 'move', target: [180, 0, DRAW_PLANE_Z], speed: 40 }],
+      warnings: [],
+      bounds: { min: [179, -1], max: [181, 1] },
+      moveCount: 1,
+    }),
+    startTrajectory: async () => true,
+    setValidating: () => {},
+    setGcodeError: () => {},
+    setGcodeWarnings: () => {},
+    setGcodeName: () => {},
+    ...overrides,
+  };
+}
+
+describe('cipra/loadGcodeText.ts — shared gcode→trajectory pipeline (R12)', () => {
+  it('parses with the safe drawing area and starts the trajectory in-reach (R11)', async () => {
+    let parsed = false;
+    let startedKey = '';
+    const deps = makeLoaderDeps({
+      parseGcode: (text, opts) => {
+        parsed = true;
+        expect(opts.area).toEqual({ xMin: 160, xMax: 240, yMin: -35, yMax: 35 });
+        expect(opts.planeZ).toBe(DRAW_PLANE_Z);
+        expect(opts.travelZ).toBe(TRAVEL_PLANE_Z);
+        return {
+          commands: [{ type: 'penDown' }, { type: 'move', target: [40, 0, DRAW_PLANE_Z], speed: 40 }],
+          warnings: ['arco omitido'],
+          bounds: { min: [40, 0], max: [40, 0] },
+          moveCount: 1,
+        };
+      },
+      startTrajectory: async (_c, key) => {
+        startedKey = key;
+        return true;
+      },
+    });
+    const res = await loadGcodeText('G21\nM3\nG1 X10 Y10', 'logo.gcode', deps);
+    expect(parsed).toBe(true);
+    expect(startedKey).toBe('gcode');
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('blocks (no draw) when the workspace rejects an out-of-reach trajectory (R11/S9)', async () => {
+    let started = false;
+    const deps = makeLoaderDeps({
+      startTrajectory: async () => {
+        started = true;
+        return false; // workspace block — nothing queued
+      },
+    });
+    const res = await loadGcodeText('G21\nM3\nG1 X999 Y999', 'far.gcode', deps);
+    // `startTrajectory` WAS consulted (the pre-flight gate ran), but it refused.
+    expect(started).toBe(true);
+    expect(res).toEqual({ ok: false, reason: 'blocked' });
+  });
+
+  it('surfaces a visible error and does NOT start when there are no drawable moves', async () => {
+    const gcodeError: string[] = [];
+    const deps = makeLoaderDeps({
+      parseGcode: () => ({ commands: [], warnings: [], bounds: null, moveCount: 0 }),
+      setGcodeError: (e) => {
+        if (e !== null) gcodeError.push(e);
+      },
+      startTrajectory: async () => {
+        throw new Error('must not be called');
+      },
+    });
+    const res = await loadGcodeText('G4 P1', 'empty.gcode', deps);
+    expect(gcodeError.length).toBe(1);
+    expect(res).toEqual({ ok: false, reason: 'no-drawable' });
+  });
+
+  it('always clears the spinner in the finally block (validating=false)', async () => {
+    const flags: boolean[] = [];
+    const deps = makeLoaderDeps({
+      setValidating: (v) => flags.push(v),
+    });
+    await loadGcodeText('G21\nG1 X1 Y1', 'x.gcode', deps);
+    expect(flags[0]).toBe(true);
+    expect(flags[flags.length - 1]).toBe(false);
   });
 });
