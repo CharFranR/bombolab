@@ -873,7 +873,10 @@ export default function App() {
             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
               {robotMode !== 'drawing' && (
                 <button
-                  onClick={() => { void enterDrawingMode(); }}
+                  onClick={() => {
+                    void enterDrawingMode();
+                    setCipraNoticeDismissed(true);
+                  }}
                   disabled={transitioning}
                   style={{
                     flex: 1,
