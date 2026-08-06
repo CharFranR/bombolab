@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, useReducer } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, type PlayerStateJs } from './wasm';
@@ -14,6 +14,9 @@ import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
+import { loadGcodeText } from './cipra/loadGcodeText';
+import { jobReducer, initialJobState, type CipraJob } from './cipra/jobStore';
+import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, type CipraConnectionStatus } from './cipra';
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
@@ -474,6 +477,23 @@ export default function App() {
     return true;
   }, [playerId, transitioning, robot, robotMode, gcodeName]);
 
+  // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
+  // picker and the CIPRA arrival "Dibujar" action both go through this so
+  // reachability/robot-mode gating is never duplicated.
+  const runLoadGcodeText = useCallback(
+    (text: string, name: string) =>
+      loadGcodeText(text, name, {
+        safeDrawingArea: () => safeDrawingArea(DRAW_PLANE_Z),
+        parseGcode,
+        startTrajectory,
+        setValidating,
+        setGcodeError,
+        setGcodeWarnings,
+        setGcodeName,
+      }),
+    [startTrajectory],
+  );
+
   const handleStartDemo = useCallback(() => {
     void (async () => {
       const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
@@ -496,30 +516,7 @@ export default function App() {
         try {
           const text = String(reader.result);
           lastGcodeRef.current = { name: file.name, text };
-          setGcodeError(null);
-          setGcodeName(file.name);
-          // safeDrawingArea builds the reachability tables (~1-2s, async). Show
-          // the spinner for the whole load+validate window.
-          setValidating(true);
-          const area = await safeDrawingArea(DRAW_PLANE_Z);
-          const result = parseGcode(text, {
-            area,
-            planeZ: DRAW_PLANE_Z,
-            travelZ: TRAVEL_PLANE_Z,
-          });
-          if (result.commands.length === 0) {
-            setValidating(false);
-            setGcodeError('El archivo no contiene movimientos dibujables (G0/G1 con lápiz).');
-            return;
-          }
-          setGcodeError(null);
-          setGcodeWarnings(result.warnings);
-          setGcodeName(file.name);
-          // startTrajectory sets its own validating state for the trajectory
-          // check and blocks automatically if any point is out of reach.
-          const started = await startTrajectory(result.commands, 'gcode');
-          setValidating(false);
-          if (!started) setGcodeError(null); // blocked by the workspace panel
+          await runLoadGcodeText(text, file.name);
         } catch (err: any) {
           setValidating(false);
           setGcodeError(err?.message ?? 'Error al leer el archivo .gcode');
@@ -528,7 +525,7 @@ export default function App() {
     };
     reader.onerror = () => setGcodeError('Error al leer el archivo');
     reader.readAsText(file);
-  }, [startTrajectory]);
+  }, [runLoadGcodeText]);
 
   // Re-parse a rejected gcode against a progressively smaller safe drawing area
   // (up to N attempts) so the user can recover without leaving drawing mode.
@@ -557,6 +554,66 @@ export default function App() {
       setValidating(false);
     }
   }, [startTrajectory]);
+
+  // ─── CIPRA WebSocket subscriber (R10/R13/R15) ──────────────────────────
+  // Jobs live in a pure reducer. The client ACKs validated arrivals itself;
+  // App only decides ACCEPT/DRAW/DISCARD through the Dibujar/Descartar panel.
+  // The ALERT banner is purely informational — it never auto-starts a job.
+  const [cipraJobs, cipraDispatch] = useReducer(jobReducer, initialJobState);
+  const [cipraConn, setCipraConn] = useState<CipraConnectionStatus>('disconnected');
+  const [cipraNoticeDismissed, setCipraNoticeDismissed] = useState(false);
+  const cipraClientRef = useRef<GcodeClient | null>(null);
+
+  useEffect(() => {
+    const client = new GcodeClient(
+      buildGcodeWsUrl(
+        { protocol: window.location.protocol, hostname: window.location.hostname },
+        readEnvWsUrl(),
+      ),
+    );
+    client.onStatus = setCipraConn;
+    client.onReady = (env) => {
+      cipraDispatch({
+        type: 'ARRIVE',
+        job: { id: env.id, name: env.name || env.id, payload: env.payload },
+      });
+    };
+    client.connect();
+    cipraClientRef.current = client;
+    return () => {
+      client.disconnect();
+      cipraClientRef.current = null;
+    };
+  }, []);
+
+  // A fresh arrival re-arms the banner so a new job is always announced.
+  useEffect(() => {
+    if (cipraJobs.lastNotice) setCipraNoticeDismissed(false);
+  }, [cipraJobs.lastNotice?.jobId]);
+
+  // Trajectory finished → mark the single active cipra job completed (R8).
+  useEffect(() => {
+    if (playerState === 'completed' && cipraJobs.drawingId) {
+      cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId });
+    }
+  }, [playerState, cipraJobs.drawingId]);
+
+  const handleDrawCipraJob = useCallback(async (job: CipraJob) => {
+    if (cipraJobs.drawingId !== null || transitioning) return; // single-active (R9)
+    cipraDispatch({ type: 'ACCEPT', id: job.id });
+    cipraDispatch({ type: 'DRAW', id: job.id });
+    lastGcodeRef.current = { name: job.name, text: job.payload };
+    await runLoadGcodeText(job.payload, job.name);
+  }, [cipraJobs.drawingId, transitioning, runLoadGcodeText]);
+
+  const handleDiscardCipraJob = useCallback((id: string) => {
+    cipraDispatch({ type: 'DISCARD', id });
+  }, []);
+
+  const cipraPanelJobs = useMemo(
+    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
+    [cipraJobs.jobs],
+  );
 
   const handleClearDrawingBlock = useCallback(() => {
     setDrawingBlock(null);
@@ -793,6 +850,64 @@ export default function App() {
           </p>
         </div>
 
+        {/* CIPRA arrival ALERT — top of the sidebar, ANY mode (R13).
+            Informational only: it never decides, it only announces and offers
+            "Ir al modo dibujo". The decision panel lives inside drawing mode. */}
+        {cipraJobs.lastNotice && !cipraNoticeDismissed && (
+          <div
+            role="alert"
+            style={{
+              padding: '8px 16px',
+              borderBottom: '1px solid #554',
+              background: '#2b2b1e',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
+              📥 Trabajo nuevo desde CIPRA
+            </div>
+            <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
+              {cipraJobs.lastNotice.whileDrawing
+                ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
+                : 'Se recibió un trabajo nuevo de CIPRA.'}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              {robotMode !== 'drawing' && (
+                <button
+                  onClick={() => { void enterDrawingMode(); }}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: '4px 6px',
+                    fontSize: 11,
+                    background: '#464',
+                    border: 'none',
+                    borderRadius: 3,
+                    color: '#ccc',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Ir al modo dibujo
+                </button>
+              )}
+              <button
+                onClick={() => setCipraNoticeDismissed(true)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  fontSize: 11,
+                  background: '#333',
+                  border: '1px solid #444',
+                  borderRadius: 3,
+                  color: '#aaa',
+                  cursor: 'pointer',
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Joint sliders */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <JointControls
@@ -928,6 +1043,23 @@ export default function App() {
               Conectar robot físico
             </button>
           )}
+        </div>
+
+        {/* Conexión CIPRA (subscriber) — status indicator, never a modal (R15) */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: cipraConn === 'connected' ? '#4cd964' : cipraConn === 'connecting' ? '#c8a84' : '#666',
+            }} />
+            <span role="status" style={{ fontSize: 12, color: '#888' }}>
+              {cipraConn === 'connected'
+                ? 'CIPRA: en línea'
+                : cipraConn === 'connecting'
+                  ? 'CIPRA: conectando…'
+                  : 'CIPRA: sin conexión'}
+            </span>
+          </div>
         </div>
 
         {/* Calibración de servos (deadband/backlash) — manual */}
@@ -1343,6 +1475,71 @@ export default function App() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+              {cipraPanelJobs.length > 0 && (
+                <div
+                  style={{
+                    padding: 8,
+                    marginBottom: 6,
+                    borderRadius: 4,
+                    background: '#232',
+                    border: '1px solid #364',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 11, color: '#9d9' }}>
+                    Trabajos de CIPRA
+                  </div>
+                  {cipraPanelJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      style={{
+                        padding: 6,
+                        marginBottom: 4,
+                        borderRadius: 4,
+                        background: '#1d1d20',
+                        border: '1px solid #333',
+                      }}
+                    >
+                      <div style={{ fontSize: 11, color: '#ccc', fontWeight: 600 }}>{job.name}</div>
+                      <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>
+                        id {job.id.slice(0, 8)} · {job.status}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => { void handleDrawCipraJob(job); }}
+                          disabled={cipraJobs.drawingId !== null || transitioning}
+                          style={{
+                            flex: 1,
+                            padding: '4px 6px',
+                            fontSize: 11,
+                            background: '#364',
+                            border: '1px solid #487',
+                            borderRadius: 3,
+                            color: '#cfc',
+                            cursor: cipraJobs.drawingId !== null || transitioning ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          Dibujar
+                        </button>
+                        <button
+                          onClick={() => handleDiscardCipraJob(job.id)}
+                          style={{
+                            flex: 1,
+                            padding: '4px 6px',
+                            fontSize: 11,
+                            background: '#533',
+                            border: '1px solid #833',
+                            borderRadius: 3,
+                            color: '#fcc',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Descartar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
