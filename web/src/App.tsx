@@ -16,7 +16,7 @@ import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
 import { loadGcodeText } from './cipra/loadGcodeText';
 import { jobReducer, initialJobState, type CipraJob } from './cipra/jobStore';
-import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, type CipraConnectionStatus } from './cipra';
+import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
@@ -1053,11 +1053,7 @@ export default function App() {
               background: cipraConn === 'connected' ? '#4cd964' : cipraConn === 'connecting' ? '#c8a84' : '#666',
             }} />
             <span role="status" style={{ fontSize: 12, color: '#888' }}>
-              {cipraConn === 'connected'
-                ? 'CIPRA: en línea'
-                : cipraConn === 'connecting'
-                  ? 'CIPRA: conectando…'
-                  : 'CIPRA: sin conexión'}
+              {getConnectionStatusLabel(cipraConn)}
             </span>
           </div>
         </div>

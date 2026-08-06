@@ -14,7 +14,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { validateEnvelope, buildAckRequest, buildErrorRequest, SCHEMA_VERSION } from './cipra/protocol';
 import { jobReducer, initialJobState, jobById, jobStatus } from './cipra/jobStore';
 import { loadGcodeText, type LoadGcodeTextDeps } from './cipra/loadGcodeText';
-import { buildGcodeWsUrl, planIncoming, GcodeClient } from './cipra';
+import { buildGcodeWsUrl, planIncoming, GcodeClient, getConnectionStatusLabel } from './cipra';
 
 /** Reachable drawing-plane heights (mirror of reachability DRAW/TRAVEL_PLANE_Z).
  *  Kept literal here to keep the node test free of the wasm module chain. */
@@ -316,6 +316,14 @@ describe('cipra.ts — WebSocket adapter (K4-04)', () => {
       expect(
         buildGcodeWsUrl({ protocol: 'http:', hostname: 'ignored' }, 'ws://other:9000/ws/gcode/'),
       ).toBe('ws://other:9000/ws/gcode/');
+    });
+  });
+
+  describe('getConnectionStatusLabel', () => {
+    it('maps each status to its user-facing banner copy (R15)', () => {
+      expect(getConnectionStatusLabel('connected')).toBe('CIPRA: en línea');
+      expect(getConnectionStatusLabel('connecting')).toBe('CIPRA: conectando…');
+      expect(getConnectionStatusLabel('disconnected')).toBe('CIPRA: sin conexión');
     });
   });
 

@@ -26,6 +26,18 @@ import {
 
 export type CipraConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
+/** User-facing (Spanish-neutral) label for the connection indicator (R15). */
+export function getConnectionStatusLabel(status: CipraConnectionStatus): string {
+  switch (status) {
+    case 'connected':
+      return 'CIPRA: en línea';
+    case 'connecting':
+      return 'CIPRA: conectando…';
+    case 'disconnected':
+      return 'CIPRA: sin conexión';
+  }
+}
+
 const GCODE_WS_PORT = 8000;
 
 /** Derive the gcode WS URL from the page origin (host only; port is fixed).
