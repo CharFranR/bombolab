@@ -77,6 +77,27 @@ export function canEnqueue(state: JobQueueState): boolean {
   return !queueFull(state);
 }
 
+/** Review fix #2: may the current drawing job be marked COMPLETE?
+ *
+ *  COMPLETE is only legitimate when the motion player that finished IS the
+ *  playback this job started (`boundPlayerId` — captured when the job's draw
+ *  began). A `completed` state from ANY other playback — a demo, a file-picker
+ *  draw, a refit, a leftover player — must not complete the job. */
+export function shouldCompleteCipraDraw(
+  state: JobQueueState,
+  playerState: string,
+  playerId: number | null,
+  boundPlayerId: number | null,
+): boolean {
+  return (
+    state.drawingId !== null &&
+    playerState === 'completed' &&
+    playerId !== null &&
+    boundPlayerId !== null &&
+    playerId === boundPlayerId
+  );
+}
+
 export function jobReducer(state: JobQueueState, action: JobAction): JobQueueState {
   switch (action.type) {
     case 'ARRIVE': {

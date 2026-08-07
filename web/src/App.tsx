@@ -15,7 +15,7 @@ import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
 import { loadGcodeText, mapDrawFailureToErrorCode, type LoadGcodeTextResult } from './cipra/loadGcodeText';
-import { jobReducer, initialJobState, queueFull, type CipraJob } from './cipra/jobStore';
+import { jobReducer, initialJobState, queueFull, shouldCompleteCipraDraw, type CipraJob } from './cipra/jobStore';
 import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
 
 function LoadingScreen({ error }: { error?: string }) {
@@ -470,6 +470,10 @@ export default function App() {
     traceProgressRef.current = 0;
     setActiveDemo(key);
     const id = motionPlayerNew(cmds, start);
+    // Review fix #2: remember the playback id THIS trajectory created; the
+    // CIPRA draw path copies it into cipraDrawPlayerIdRef after a successful
+    // start so a later `completed` state can be attributed to the right job.
+    lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
     setPlayerState('running');
@@ -563,6 +567,10 @@ export default function App() {
   const [cipraConn, setCipraConn] = useState<CipraConnectionStatus>('disconnected');
   const [cipraNoticeDismissed, setCipraNoticeDismissed] = useState(false);
   const cipraClientRef = useRef<GcodeClient | null>(null);
+  // Playback id created by the most recent motionPlayerNew (set inside
+  // startTrajectory). handleDrawCipraJob copies it into cipraDrawPlayerIdRef
+  // after a successful draw, so the binding is synchronous with the start.
+  const lastStartedPlayerIdRef = useRef<number | null>(null);
   // Motion-player id bound to the CURRENTLY DRAWING CIPRA job (review fix #2):
   // COMPLETE only fires when the completed playback IS the one this job
   // started. Cleared on new draw start, FAIL and discard.
@@ -606,11 +614,15 @@ export default function App() {
   }, [cipraJobs.lastNotice?.jobId]);
 
   // Trajectory finished → mark the single active cipra job completed (R8).
+  // Review fix #2: only when the finished playback IS the one the job started
+  // (playerId === cipraDrawPlayerIdRef). A demo/file/refit playback finishing
+  // must not complete a CIPRA job that is not actually playing it.
   useEffect(() => {
-    if (playerState === 'completed' && cipraJobs.drawingId) {
-      cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId });
+    if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
+      cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
+      cipraDrawPlayerIdRef.current = null;
     }
-  }, [playerState, cipraJobs.drawingId]);
+  }, [cipraJobs, playerState, playerId]);
 
   const handleClearDrawingBlock = useCallback(() => {
     setDrawingBlock(null);
@@ -648,6 +660,7 @@ export default function App() {
   const handleDrawCipraJob = useCallback(
     async (job: CipraJob) => {
       if (cipraJobs.drawingId !== null || transitioning) return; // single-active (R9)
+      cipraDrawPlayerIdRef.current = null; // fresh draw attempt — no stale binding
       cipraDispatch({ type: 'ACCEPT', id: job.id });
       cipraDispatch({ type: 'DRAW', id: job.id });
       lastGcodeRef.current = { name: job.name, text: job.payload };
@@ -658,7 +671,13 @@ export default function App() {
         // Review fix #3: a thrown parse/validation error is a draw failure too.
         result = { ok: false, reason: 'exception' };
       }
-      if (!result.ok) failCipraDraw(job.id, result.reason);
+      if (result.ok) {
+        // Review fix #2: bind COMPLETE to THIS playback — the motion player id
+        // created by this draw is what a later `completed` state must match.
+        cipraDrawPlayerIdRef.current = lastStartedPlayerIdRef.current;
+      } else {
+        failCipraDraw(job.id, result.reason);
+      }
     },
     [cipraJobs.drawingId, transitioning, runLoadGcodeText],
   );

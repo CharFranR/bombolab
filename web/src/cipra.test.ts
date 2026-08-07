@@ -26,6 +26,7 @@ import {
   MAX_PENDING_JOBS,
   queueFull,
   canEnqueue,
+  shouldCompleteCipraDraw,
 } from './cipra/jobStore';
 import {
   loadGcodeText,
@@ -604,5 +605,35 @@ describe('review fix #3 — FAIL recovers a drawing job to pending', () => {
   it('FAIL on a non-drawing job is a strict no-op (same reference)', () => {
     const s = jobReducer(initialJobState, arrive('a'));
     expect(jobReducer(s, { type: 'FAIL', id: 'a' })).toBe(s);
+  });
+});
+
+describe('review fix #2 — COMPLETE bound to the job playback id', () => {
+  function drawingState(): ReturnType<typeof jobReducer> {
+    let s = jobReducer(initialJobState, arrive('a'));
+    s = jobReducer(s, { type: 'ACCEPT', id: 'a' });
+    s = jobReducer(s, { type: 'DRAW', id: 'a' });
+    return s;
+  }
+
+  it('completes only when the completed player IS the job-bound playback', () => {
+    expect(shouldCompleteCipraDraw(drawingState(), 'completed', 5, 5)).toBe(true);
+  });
+
+  it('does NOT complete when a different playback (demo/other file) finished', () => {
+    expect(shouldCompleteCipraDraw(drawingState(), 'completed', 6, 5)).toBe(false);
+  });
+
+  it('does NOT complete while no playback id is bound to the job', () => {
+    expect(shouldCompleteCipraDraw(drawingState(), 'completed', 5, null)).toBe(false);
+  });
+
+  it('does NOT complete while the player is not in the completed state', () => {
+    expect(shouldCompleteCipraDraw(drawingState(), 'running', 5, 5)).toBe(false);
+  });
+
+  it('does NOT complete when no job is drawing', () => {
+    const s = jobReducer(initialJobState, arrive('a'));
+    expect(shouldCompleteCipraDraw(s, 'completed', 5, 5)).toBe(false);
   });
 });
