@@ -18,8 +18,10 @@
 import {
   validateEnvelope,
   isGcodeReadyEnvelope,
+  isOversizePayload,
   buildAckRequest,
   buildErrorRequest,
+  type ErrorCode,
   type Envelope,
   type GcodeReadyEnvelope,
 } from './cipra/protocol';
@@ -65,6 +67,7 @@ export function readEnvWsUrl(): string | undefined {
 export type IncomingPlan =
   | { kind: 'arrive'; envelope: GcodeReadyEnvelope }
   | { kind: 'version-mismatch'; id: string | undefined }
+  | { kind: 'oversize'; id: string | undefined }
   | { kind: 'invalid' }
   | { kind: 'ignore' };
 
@@ -75,6 +78,13 @@ export function planIncoming(raw: string): IncomingPlan {
     message = JSON.parse(raw);
   } catch {
     return { kind: 'invalid' };
+  }
+  // Review fix #1: the payload-size gate runs BEFORE envelope validation so an
+  // oversized arrival is classified as such (reply E_INVALID_ENVELOPE) instead
+  // of falling through as a generic invalid that would be silently dropped.
+  if (isOversizePayload(message)) {
+    const id = (message as { id?: unknown }).id;
+    return { kind: 'oversize', id: typeof id === 'string' ? id : undefined };
   }
   const { valid, error } = validateEnvelope(message);
   if (!valid) {
@@ -95,6 +105,10 @@ export class GcodeClient {
   status: CipraConnectionStatus = 'disconnected';
   onStatus?: (s: CipraConnectionStatus) => void;
   onReady?: (env: GcodeReadyEnvelope) => void;
+  /** Optional gate on validated arrivals (review fix #1). When it returns
+   *  false the client replies `gcode.error E_QUEUE_FULL` and does NOT surface
+   *  the job to the store. The caller owns queue state, so this is injected. */
+  canAcceptJob?: (env: GcodeReadyEnvelope) => boolean;
 
   private readonly wsUrl: string;
   private readonly socketFactory: (url: string) => WebSocket;
@@ -157,9 +171,22 @@ export class GcodeClient {
     const plan = planIncoming(raw);
     switch (plan.kind) {
       case 'arrive':
-        // ACK fires on validated receipt (R10), before any user decision.
+        // ACK fires on VALIDATED RECEIPT (R10), before any user decision.
         this.send(buildAckRequest(plan.envelope.id));
+        if (this.canAcceptJob && !this.canAcceptJob(plan.envelope)) {
+          // Queue at capacity (bombolab → publisher extension, review fix #1):
+          // the arrival is NOT fed to the store; the publisher is told why.
+          this.sendError('E_QUEUE_FULL', plan.envelope.id);
+          break;
+        }
         this.onReady?.(plan.envelope);
+        break;
+      case 'oversize':
+        // Review fix #1: payload above MAX_PAYLOAD_BYTES is rejected before
+        // the store sees it and before any G-Code parsing. E_INVALID_ENVELOPE
+        // tells the publisher the envelope failed validation; there is NO ACK
+        // for a rejected envelope (delivery was not accepted).
+        this.sendError('E_INVALID_ENVELOPE', plan.id);
         break;
       case 'version-mismatch':
         this.send(buildErrorRequest('E_PROTOCOL_VERSION', plan.id));
@@ -168,6 +195,13 @@ export class GcodeClient {
       case 'ignore':
         break;
     }
+  }
+
+  /** Emit a `gcode.error` envelope to the publisher (review fix #5). Used for
+   *  receive-path rejections (oversize, queue-full) and, from the App, for
+   *  draw-time failures mapped to E_PARSE_GCODE / E_UNREACHABLE. */
+  sendError(code: ErrorCode, jobId?: string): void {
+    this.send(buildErrorRequest(code, jobId));
   }
 
   private send(env: Envelope): void {

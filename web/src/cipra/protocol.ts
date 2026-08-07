@@ -12,6 +12,13 @@
 
 export const SCHEMA_VERSION = 1;
 
+/** Hard cap on a `gcode.ready` payload (review fix #1). Enforced in the
+ *  receive path BEFORE the payload is parsed as G-Code or fed to the job
+ *  store; an oversized envelope is rejected as `E_INVALID_ENVELOPE` and the
+ *  publisher is told with a `gcode.error`. 512 KiB covers any real generated
+ *  program while bounding memory and downstream parse cost. */
+export const MAX_PAYLOAD_BYTES = 512 * 1024;
+
 export const ENVELOPE_KEYS = ['type', 'version', 'id', 'name', 'meta', 'payload'] as const;
 
 // Message / event types (mirror of the Python T_* constants).
@@ -31,6 +38,10 @@ export const ERROR_CODES: Record<string, string> = {
   E_NO_JOB: 'No job is held in the current snapshot.',
   E_PARSE_GCODE: 'Failed to parse G-Code.',
   E_UNREACHABLE: 'Move is outside the reachable drawing area.',
+  // bombolab → publisher EXTENSION (not in the backend's canonical map): the
+  // pending-job queue is at capacity and the arrival was NOT enqueued. The
+  // backend validates envelope shape only, so it tolerates unknown codes.
+  E_QUEUE_FULL: 'Pending job queue is full; arrival not enqueued.',
 };
 
 export type MessageType =
@@ -88,7 +99,22 @@ export function validateEnvelope(message: unknown): ValidationResult {
   if (type === T_GCODE_READY && (typeof env.payload !== 'string' || env.payload.trim().length === 0)) {
     return { valid: false, error: 'E_INVALID_ENVELOPE' };
   }
+  // Review fix #1: a payload above MAX_PAYLOAD_BYTES is rejected here too, so
+  // ANY direct caller of validateEnvelope gets the same strict boundary.
+  if (type === T_GCODE_READY && typeof env.payload === 'string' && env.payload.length > MAX_PAYLOAD_BYTES) {
+    return { valid: false, error: 'E_INVALID_ENVELOPE' };
+  }
   return { valid: true, error: null };
+}
+
+/** True when a parsed message carries a payload above MAX_PAYLOAD_BYTES
+ *  (review fix #1). Kept separate from `validateEnvelope` so the receive path
+ *  can CLASSIFY an oversized arrival and reply `gcode.error E_INVALID_ENVELOPE`
+ *  instead of silently dropping it as generic malformed input. */
+export function isOversizePayload(message: unknown): boolean {
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) return false;
+  const payload = (message as Record<string, unknown>).payload;
+  return typeof payload === 'string' && payload.length > MAX_PAYLOAD_BYTES;
 }
 
 /** Type-narrowing guard for a validated `gcode.ready` envelope. */

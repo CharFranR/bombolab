@@ -11,8 +11,22 @@
  * Follows the gcode.test.ts convention: pure functions, no jsdom/React.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { validateEnvelope, buildAckRequest, buildErrorRequest, SCHEMA_VERSION } from './cipra/protocol';
-import { jobReducer, initialJobState, jobById, jobStatus } from './cipra/jobStore';
+import {
+  validateEnvelope,
+  buildAckRequest,
+  buildErrorRequest,
+  SCHEMA_VERSION,
+  MAX_PAYLOAD_BYTES,
+} from './cipra/protocol';
+import {
+  jobReducer,
+  initialJobState,
+  jobById,
+  jobStatus,
+  MAX_PENDING_JOBS,
+  queueFull,
+  canEnqueue,
+} from './cipra/jobStore';
 import { loadGcodeText, type LoadGcodeTextDeps } from './cipra/loadGcodeText';
 import { buildGcodeWsUrl, planIncoming, GcodeClient, getConnectionStatusLabel } from './cipra';
 
@@ -407,5 +421,121 @@ describe('cipra.ts — WebSocket adapter (K4-04)', () => {
       expect(client.status).toBe('disconnected');
       client.disconnect(); // cancel the reconnect timer
     });
+  });
+});
+
+// ─── Review-fix harnesses ────────────────────────────────────────────────────
+// A module-level client factory so the review-fix suites (below) share the
+// same fake-socket setup as the ACK suite without touching existing tests.
+function makeCipraClient(): { client: GcodeClient; sockets: FakeWebSocket[]; onReady: ReturnType<typeof vi.fn> } {
+  const sockets: FakeWebSocket[] = [];
+  const client = new GcodeClient('ws://test:8000/ws/gcode/', (url) => {
+    const s = new FakeWebSocket(url);
+    sockets.push(s);
+    return s as unknown as WebSocket;
+  });
+  const onReady = vi.fn();
+  client.onReady = onReady;
+  client.connect();
+  return { client, sockets, onReady };
+}
+
+function outboundJson(sockets: FakeWebSocket[]): Record<string, any>[] {
+  return sockets[0].sent.map((s) => JSON.parse(s));
+}
+
+describe('review fix #1 — payload size bound (MAX_PAYLOAD_BYTES)', () => {
+  it('exports MAX_PAYLOAD_BYTES = 512 KiB', () => {
+    expect(MAX_PAYLOAD_BYTES).toBe(512 * 1024);
+  });
+
+  it('rejects a gcode.ready payload above the limit with E_INVALID_ENVELOPE', () => {
+    expect(
+      validateEnvelope({ ...READY_FIXTURE, payload: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }),
+    ).toEqual({ valid: false, error: 'E_INVALID_ENVELOPE' });
+  });
+
+  it('accepts a payload exactly at the 512 KiB boundary', () => {
+    expect(validateEnvelope({ ...READY_FIXTURE, payload: 'x'.repeat(MAX_PAYLOAD_BYTES) })).toEqual({
+      valid: true,
+      error: null,
+    });
+  });
+
+  it('plans an oversized arrival as oversize (never fed to the store)', () => {
+    const plan = planIncoming(
+      JSON.stringify({ ...READY_FIXTURE, payload: 'y'.repeat(MAX_PAYLOAD_BYTES + 1) }),
+    );
+    expect(plan).toEqual({ kind: 'oversize', id: 'job-1' });
+  });
+
+  it('receive path replies E_INVALID_ENVELOPE for an oversized arrival (no ack, no store feed)', () => {
+    const { sockets, onReady } = makeCipraClient();
+    sockets[0].open();
+    sockets[0].deliver(
+      JSON.stringify({ ...READY_FIXTURE, payload: 'y'.repeat(MAX_PAYLOAD_BYTES + 1) }),
+    );
+    expect(onReady).not.toHaveBeenCalled();
+    const outbound = outboundJson(sockets);
+    expect(
+      outbound.some((o) => o.type === 'gcode.error' && o.meta?.code === 'E_INVALID_ENVELOPE'),
+    ).toBe(true);
+    expect(outbound.some((o) => o.type === 'gcode.ack')).toBe(false);
+  });
+});
+
+describe('review fix #1 — pending queue bound (MAX_PENDING_JOBS=5)', () => {
+  it('exports MAX_PENDING_JOBS = 5', () => {
+    expect(MAX_PENDING_JOBS).toBe(5);
+  });
+
+  it('rejects a new ARRIVE at capacity as a strict no-op (same reference)', () => {
+    let s = initialJobState;
+    for (let i = 0; i < MAX_PENDING_JOBS; i++) s = jobReducer(s, arrive(`j${i}`));
+    expect(queueFull(s)).toBe(true);
+    expect(canEnqueue(s)).toBe(false);
+    const before = s;
+    const next = jobReducer(s, arrive('overflow'));
+    expect(next).toBe(before);
+    expect(jobStatus(next, 'overflow')).toBeUndefined();
+    expect(next.jobs).toHaveLength(MAX_PENDING_JOBS);
+  });
+
+  it('allows arrivals up to the cap and reports queueFull only at it', () => {
+    let s = initialJobState;
+    expect(queueFull(s)).toBe(false);
+    for (let i = 0; i < MAX_PENDING_JOBS - 1; i++) s = jobReducer(s, arrive(`k${i}`));
+    expect(canEnqueue(s)).toBe(true);
+    expect(queueFull(s)).toBe(false);
+    s = jobReducer(s, arrive('last'));
+    expect(queueFull(s)).toBe(true);
+    expect(s.jobs).toHaveLength(MAX_PENDING_JOBS);
+  });
+});
+
+describe('review fix #1 — receive path emits error instead of store feed (mock WS)', () => {
+  it('replies E_QUEUE_FULL and skips the store feed when the queue is at capacity', () => {
+    const { client, sockets, onReady } = makeCipraClient();
+    client.canAcceptJob = () => false; // caller sees a full queue
+    sockets[0].open();
+    sockets[0].deliver(JSON.stringify(READY_FIXTURE));
+    expect(onReady).not.toHaveBeenCalled();
+    const outbound = outboundJson(sockets);
+    expect(outbound.some((o) => o.type === 'gcode.error' && o.meta?.code === 'E_QUEUE_FULL')).toBe(
+      true,
+    );
+    // Delivery is still confirmed (R10): the ACK is a receipt, not a queue slot.
+    expect(outbound.some((o) => o.type === 'gcode.ack')).toBe(true);
+  });
+
+  it('feeds the store normally (onReady) when the queue can enqueue', () => {
+    const { client, sockets, onReady } = makeCipraClient();
+    client.canAcceptJob = () => true;
+    sockets[0].open();
+    sockets[0].deliver(JSON.stringify(READY_FIXTURE));
+    expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ id: 'job-1' }));
+    expect(
+      outboundJson(sockets).some((o) => o.type === 'gcode.error' && o.meta?.code === 'E_QUEUE_FULL'),
+    ).toBe(false);
   });
 });

@@ -11,6 +11,13 @@
  */
 export type JobStatus = 'pending' | 'accepted' | 'drawing' | 'completed' | 'discarded';
 
+/** Hard cap on non-terminal (pending + accepted + drawing) jobs in the queue
+ *  (review fix #1). ARRIVE ignores a NEW job when the queue is at capacity so
+ *  memory and UI stay bounded; the caller detects the rejection via
+ *  `queueFull`/`canEnqueue` and tells the publisher with `gcode.error
+ *  E_QUEUE_FULL`. Drawing is single-active, so this mostly caps pending work. */
+export const MAX_PENDING_JOBS = 5;
+
 export interface CipraJob {
   id: string;
   name: string;
@@ -52,12 +59,33 @@ export function pendingJobs(state: JobQueueState): CipraJob[] {
   return state.jobs.filter((j) => j.status === 'pending');
 }
 
+/** Number of non-terminal jobs (pending + accepted + drawing). */
+export function pendingJobCount(state: JobQueueState): number {
+  return state.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded').length;
+}
+
+/** True when the queue is at MAX_PENDING_JOBS and cannot take a new arrival
+ *  (review fix #1). The caller uses this to detect an ARRIVE rejection and
+ *  emit `gcode.error E_QUEUE_FULL` back to the publisher. */
+export function queueFull(state: JobQueueState): boolean {
+  return pendingJobCount(state) >= MAX_PENDING_JOBS;
+}
+
+/** Inverse of `queueFull` — true while a new arrival would be enqueued. */
+export function canEnqueue(state: JobQueueState): boolean {
+  return !queueFull(state);
+}
+
 export function jobReducer(state: JobQueueState, action: JobAction): JobQueueState {
   switch (action.type) {
     case 'ARRIVE': {
       const { id, name, payload } = action.job;
       // Duplicate id → idempotent: keep the original, ignore the re-delivery (S11).
       if (state.jobs.some((j) => j.id === id)) return state;
+      // Review fix #1: queue at capacity → reject the NEW arrival outright.
+      // Returning the same reference lets the caller detect the rejection
+      // (strict no-op) and reply E_QUEUE_FULL to the publisher.
+      if (queueFull(state)) return state;
       const whileDrawing = state.drawingId !== null;
       const job: CipraJob = { id, name, status: 'pending', payload, createdAt: Date.now() };
       return { ...state, jobs: [...state.jobs, job], lastNotice: { jobId: id, whileDrawing } };

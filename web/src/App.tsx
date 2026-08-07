@@ -15,7 +15,7 @@ import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
 import { loadGcodeText } from './cipra/loadGcodeText';
-import { jobReducer, initialJobState, type CipraJob } from './cipra/jobStore';
+import { jobReducer, initialJobState, queueFull, type CipraJob } from './cipra/jobStore';
 import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
 
 function LoadingScreen({ error }: { error?: string }) {
@@ -563,6 +563,12 @@ export default function App() {
   const [cipraConn, setCipraConn] = useState<CipraConnectionStatus>('disconnected');
   const [cipraNoticeDismissed, setCipraNoticeDismissed] = useState(false);
   const cipraClientRef = useRef<GcodeClient | null>(null);
+  // Latest queue state readable from the WS client callbacks (they are mounted
+  // once with an empty closure); the queue-full gate needs current state.
+  const cipraJobsRef = useRef(cipraJobs);
+  useEffect(() => {
+    cipraJobsRef.current = cipraJobs;
+  }, [cipraJobs]);
 
   useEffect(() => {
     const client = new GcodeClient(
@@ -572,6 +578,10 @@ export default function App() {
       ),
     );
     client.onStatus = setCipraConn;
+    // Review fix #1: when the queue is at MAX_PENDING_JOBS the client replies
+    // E_QUEUE_FULL to the publisher and does NOT surface the arrival here; the
+    // reducer's own queueFull guard stays as the hard invariant.
+    client.canAcceptJob = () => !queueFull(cipraJobsRef.current);
     client.onReady = (env) => {
       cipraDispatch({
         type: 'ARRIVE',
