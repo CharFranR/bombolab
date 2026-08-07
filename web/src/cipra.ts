@@ -7,7 +7,11 @@
  *
  *  - on a VALIDATED ``gcode.ready`` receipt it ACKs with ``gcode.ack {id}``
  *    immediately (R10) and only then surfaces the job via ``onReady`` —
- *    ACK is decoupled from any user decision;
+ *    ACK is decoupled from any user decision. The ACK is a DELIVERY
+ *    confirmation per the backend contract, NOT a drawability confirmation
+ *    (review fix #5): the publisher learns about draw-time failures through
+ *    ``gcode.error`` (E_PARSE_GCODE / E_UNREACHABLE / E_QUEUE_FULL), never
+ *    through the ACK;
  *  - on a version mismatch it replies ``gcode.error E_PROTOCOL_VERSION`` and
  *    never queues the message (S2);
  *  - connection status is exposed for a "sin conexión" banner (R15).

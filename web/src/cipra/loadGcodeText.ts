@@ -16,6 +16,7 @@
  */
 import type { MotionCommandJS } from '../motion/commands';
 import type { GcodeOptions, GcodeParseResult } from '../motion/gcode';
+import type { ErrorCode } from './protocol';
 
 export interface DrawingAreaLike {
   xMin: number;
@@ -43,6 +44,19 @@ export interface LoadGcodeTextDeps {
   /** Drawing-plane heights. Defaults to 80/85 (mirror DRAW_PLANE_Z/TRAVEL_PLANE_Z). */
   planeZ?: number;
   travelZ?: number;
+}
+
+/** Map a draw-time failure to the canonical error code the publisher
+ *  understands (review fix #5). Parse-level failures — a thrown parse/
+ *  validation exception or a program with nothing drawable — map to
+ *  E_PARSE_GCODE; a workspace/reachability rejection (startTrajectory
+ *  refused) maps to E_UNREACHABLE. The ACK already confirmed DELIVERY, so
+ *  this code tells the publisher WHY the job could not be drawn. */
+export function mapDrawFailureToErrorCode(
+  reason: LoadGcodeTextResult['reason'] | 'exception',
+): ErrorCode {
+  if (reason === 'blocked') return 'E_UNREACHABLE';
+  return 'E_PARSE_GCODE';
 }
 
 export async function loadGcodeText(

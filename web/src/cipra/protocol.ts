@@ -124,7 +124,14 @@ export function isGcodeReadyEnvelope(message: unknown): message is GcodeReadyEnv
   return (message as Envelope).type === T_GCODE_READY;
 }
 
-/** Build a canonical `gcode.ack` for the received job *id* (R10). */
+/** Build a canonical `gcode.ack` for the received job *id* (R10).
+ *
+ *  ACK SEMANTICS (review fix #5): the ACK is a DELIVERY confirmation — it
+ *  fires once the envelope is validated and accepted by the subscriber, BEFORE
+ *  any user decision and before the job is even queued or drawn. It is NOT a
+ *  drawability confirmation: the publisher must not read it as "the job will
+ *  draw". A later `gcode.error` (E_PARSE_GCODE / E_UNREACHABLE / E_QUEUE_FULL)
+ *  reports what happened after delivery. */
 export function buildAckRequest(id: string): Envelope {
   return {
     type: T_GCODE_ACK,

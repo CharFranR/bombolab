@@ -27,7 +27,11 @@ import {
   queueFull,
   canEnqueue,
 } from './cipra/jobStore';
-import { loadGcodeText, type LoadGcodeTextDeps } from './cipra/loadGcodeText';
+import {
+  loadGcodeText,
+  mapDrawFailureToErrorCode,
+  type LoadGcodeTextDeps,
+} from './cipra/loadGcodeText';
 import { buildGcodeWsUrl, planIncoming, GcodeClient, getConnectionStatusLabel } from './cipra';
 
 /** Reachable drawing-plane heights (mirror of reachability DRAW/TRAVEL_PLANE_Z).
@@ -537,5 +541,39 @@ describe('review fix #1 — receive path emits error instead of store feed (mock
     expect(
       outboundJson(sockets).some((o) => o.type === 'gcode.error' && o.meta?.code === 'E_QUEUE_FULL'),
     ).toBe(false);
+  });
+});
+
+describe('review fix #5 — sendError + draw-failure mapping (E_PARSE_GCODE / E_UNREACHABLE)', () => {
+  it('sendError emits a canonical gcode.error envelope with code and job id', () => {
+    const { client, sockets } = makeCipraClient();
+    client.sendError('E_PARSE_GCODE', 'job-9');
+    expect(JSON.parse(sockets[0].sent[0])).toEqual({
+      type: 'gcode.error',
+      version: 1,
+      id: 'job-9',
+      name: '',
+      meta: { code: 'E_PARSE_GCODE', message: expect.any(String) },
+      payload: '',
+    });
+  });
+
+  it('sendError omits the job id when none is attached', () => {
+    const { client, sockets } = makeCipraClient();
+    client.sendError('E_UNREACHABLE');
+    expect(JSON.parse(sockets[0].sent[0])).toMatchObject({
+      type: 'gcode.error',
+      meta: { code: 'E_UNREACHABLE' },
+      id: '',
+    });
+  });
+
+  it('maps parse-level draw failures (exception, nothing drawable) to E_PARSE_GCODE', () => {
+    expect(mapDrawFailureToErrorCode('exception')).toBe('E_PARSE_GCODE');
+    expect(mapDrawFailureToErrorCode('no-drawable')).toBe('E_PARSE_GCODE');
+  });
+
+  it('maps workspace/reachability rejection to E_UNREACHABLE', () => {
+    expect(mapDrawFailureToErrorCode('blocked')).toBe('E_UNREACHABLE');
   });
 });
