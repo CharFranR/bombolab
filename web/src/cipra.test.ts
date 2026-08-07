@@ -637,3 +637,20 @@ describe('review fix #2 — COMPLETE bound to the job playback id', () => {
     expect(shouldCompleteCipraDraw(s, 'completed', 5, 5)).toBe(false);
   });
 });
+
+describe('review fix #4 — discard of a drawing job (store side)', () => {
+  it('discards drawing → discarded and clears the active id (terminal)', () => {
+    let s = jobReducer(initialJobState, arrive('a'));
+    s = jobReducer(s, { type: 'ACCEPT', id: 'a' });
+    s = jobReducer(s, { type: 'DRAW', id: 'a' });
+    const next = jobReducer(s, { type: 'DISCARD', id: 'a' });
+    expect(jobStatus(next, 'a')).toBe('discarded');
+    expect(next.drawingId).toBeNull();
+  });
+
+  // NOTE (jsdom gap, documented risk): the STOP-the-motion-player half of this
+  // fix lives in App.handleDiscardCipraJob (motionPlayerDrop + clear drawing
+  // UI + clear the COMPLETE capture ref). This environment is node-only — no
+  // jsdom, no wasm — so that half is covered by review + a jsdom follow-up,
+  // not by an automated test here.
+});

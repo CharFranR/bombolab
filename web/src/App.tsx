@@ -682,9 +682,21 @@ export default function App() {
     [cipraJobs.drawingId, transitioning, runLoadGcodeText],
   );
 
-  const handleDiscardCipraJob = useCallback((id: string) => {
-    cipraDispatch({ type: 'DISCARD', id });
-  }, []);
+  const handleDiscardCipraJob = useCallback(
+    (id: string) => {
+      if (cipraJobs.drawingId === id) {
+        // Review fix #4 (user chose STOP): discarding a job that is DRAWING
+        // stops its playback via motionPlayerDrop and clears the drawing
+        // block/trace/player state exactly like handleClearDrawingBlock; the
+        // COMPLETE capture is unbound so no stale completion can fire after
+        // the discard. Not drawing → plain DISCARD below.
+        handleClearDrawingBlock();
+        cipraDrawPlayerIdRef.current = null;
+      }
+      cipraDispatch({ type: 'DISCARD', id });
+    },
+    [cipraJobs.drawingId, handleClearDrawingBlock],
+  );
 
   const cipraPanelJobs = useMemo(
     () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
