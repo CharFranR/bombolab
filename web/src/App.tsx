@@ -14,7 +14,7 @@ import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
-import { loadGcodeText } from './cipra/loadGcodeText';
+import { loadGcodeText, mapDrawFailureToErrorCode, type LoadGcodeTextResult } from './cipra/loadGcodeText';
 import { jobReducer, initialJobState, queueFull, type CipraJob } from './cipra/jobStore';
 import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
 
@@ -563,6 +563,10 @@ export default function App() {
   const [cipraConn, setCipraConn] = useState<CipraConnectionStatus>('disconnected');
   const [cipraNoticeDismissed, setCipraNoticeDismissed] = useState(false);
   const cipraClientRef = useRef<GcodeClient | null>(null);
+  // Motion-player id bound to the CURRENTLY DRAWING CIPRA job (review fix #2):
+  // COMPLETE only fires when the completed playback IS the one this job
+  // started. Cleared on new draw start, FAIL and discard.
+  const cipraDrawPlayerIdRef = useRef<number | null>(null);
   // Latest queue state readable from the WS client callbacks (they are mounted
   // once with an empty closure); the queue-full gate needs current state.
   const cipraJobsRef = useRef(cipraJobs);
@@ -608,23 +612,6 @@ export default function App() {
     }
   }, [playerState, cipraJobs.drawingId]);
 
-  const handleDrawCipraJob = useCallback(async (job: CipraJob) => {
-    if (cipraJobs.drawingId !== null || transitioning) return; // single-active (R9)
-    cipraDispatch({ type: 'ACCEPT', id: job.id });
-    cipraDispatch({ type: 'DRAW', id: job.id });
-    lastGcodeRef.current = { name: job.name, text: job.payload };
-    await runLoadGcodeText(job.payload, job.name);
-  }, [cipraJobs.drawingId, transitioning, runLoadGcodeText]);
-
-  const handleDiscardCipraJob = useCallback((id: string) => {
-    cipraDispatch({ type: 'DISCARD', id });
-  }, []);
-
-  const cipraPanelJobs = useMemo(
-    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
-    [cipraJobs.jobs],
-  );
-
   const handleClearDrawingBlock = useCallback(() => {
     setDrawingBlock(null);
     setTracePath([]);
@@ -635,6 +622,55 @@ export default function App() {
     setPlayerState('idle');
     setIkTarget(null);
   }, [playerId]);
+
+  const failCipraDraw = useCallback(
+    (jobId: string, reason: LoadGcodeTextResult['reason'] | 'exception') => {
+      // Review fix #3: a failed draw must NOT strand the job in `drawing`.
+      // FAIL moves it back to pending (selectable again) and frees the
+      // single-active guard; the drawing UI is cleaned exactly like
+      // handleClearDrawingBlock so no partial state survives the failure.
+      cipraDispatch({ type: 'FAIL', id: jobId });
+      cipraDrawPlayerIdRef.current = null; // no playback binding survives a FAIL
+      handleClearDrawingBlock();
+      const code = mapDrawFailureToErrorCode(reason);
+      setGcodeError(
+        reason === 'blocked'
+          ? 'No se pudo dibujar: la trayectoria queda fuera del área alcanzable. El trabajo volvió a la cola.'
+          : 'No se pudo dibujar: el G-Code no se pudo procesar. El trabajo volvió a la cola.',
+      );
+      // Review fix #5: the ACK already confirmed DELIVERY — this error tells
+      // the publisher WHY the job could not be drawn.
+      cipraClientRef.current?.sendError(code, jobId);
+    },
+    [handleClearDrawingBlock],
+  );
+
+  const handleDrawCipraJob = useCallback(
+    async (job: CipraJob) => {
+      if (cipraJobs.drawingId !== null || transitioning) return; // single-active (R9)
+      cipraDispatch({ type: 'ACCEPT', id: job.id });
+      cipraDispatch({ type: 'DRAW', id: job.id });
+      lastGcodeRef.current = { name: job.name, text: job.payload };
+      let result: LoadGcodeTextResult | { ok: false; reason: 'exception' };
+      try {
+        result = await runLoadGcodeText(job.payload, job.name);
+      } catch (err) {
+        // Review fix #3: a thrown parse/validation error is a draw failure too.
+        result = { ok: false, reason: 'exception' };
+      }
+      if (!result.ok) failCipraDraw(job.id, result.reason);
+    },
+    [cipraJobs.drawingId, transitioning, runLoadGcodeText],
+  );
+
+  const handleDiscardCipraJob = useCallback((id: string) => {
+    cipraDispatch({ type: 'DISCARD', id });
+  }, []);
+
+  const cipraPanelJobs = useMemo(
+    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
+    [cipraJobs.jobs],
+  );
 
   const handleBacklashToggle = useCallback((enabled: boolean) => {
     setBacklashEnabled(enabled);

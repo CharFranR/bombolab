@@ -577,3 +577,32 @@ describe('review fix #5 — sendError + draw-failure mapping (E_PARSE_GCODE / E_
     expect(mapDrawFailureToErrorCode('blocked')).toBe('E_UNREACHABLE');
   });
 });
+
+describe('review fix #3 — FAIL recovers a drawing job to pending', () => {
+  it('FAIL moves drawing → pending, clears drawingId and keeps the job selectable', () => {
+    let s = jobReducer(initialJobState, arrive('a'));
+    s = jobReducer(s, { type: 'ACCEPT', id: 'a' });
+    s = jobReducer(s, { type: 'DRAW', id: 'a' });
+    const next = jobReducer(s, { type: 'FAIL', id: 'a' });
+    expect(jobStatus(next, 'a')).toBe('pending');
+    expect(next.drawingId).toBeNull();
+    expect(jobById(next, 'a')?.payload).toBeDefined(); // job kept, not stranded
+  });
+
+  it('frees the single-active guard so another job can draw after FAIL', () => {
+    let s = jobReducer(initialJobState, arrive('a'));
+    s = jobReducer(s, arrive('b'));
+    s = jobReducer(s, { type: 'ACCEPT', id: 'a' });
+    s = jobReducer(s, { type: 'DRAW', id: 'a' });
+    s = jobReducer(s, { type: 'FAIL', id: 'a' });
+    s = jobReducer(s, { type: 'ACCEPT', id: 'b' });
+    const next = jobReducer(s, { type: 'DRAW', id: 'b' });
+    expect(jobStatus(next, 'b')).toBe('drawing');
+    expect(next.drawingId).toBe('b');
+  });
+
+  it('FAIL on a non-drawing job is a strict no-op (same reference)', () => {
+    const s = jobReducer(initialJobState, arrive('a'));
+    expect(jobReducer(s, { type: 'FAIL', id: 'a' })).toBe(s);
+  });
+});

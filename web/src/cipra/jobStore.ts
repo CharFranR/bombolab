@@ -44,7 +44,8 @@ export type JobAction =
   | { type: 'ACCEPT'; id: string }
   | { type: 'DRAW'; id: string }
   | { type: 'COMPLETE'; id: string }
-  | { type: 'DISCARD'; id: string };
+  | { type: 'DISCARD'; id: string }
+  | { type: 'FAIL'; id: string };
 
 export function jobById(state: JobQueueState, id: string): CipraJob | undefined {
   return state.jobs.find((j) => j.id === id);
@@ -121,6 +122,15 @@ export function jobReducer(state: JobQueueState, action: JobAction): JobQueueSta
         'discarded',
         state.drawingId === action.id ? null : state.drawingId,
       );
+    }
+    case 'FAIL': {
+      // Review fix #3: a draw that failed (parse/validation exception, nothing
+      // drawable, out-of-reach) must NOT strand the job in `drawing`. Move it
+      // back to pending so it stays selectable, and free the single-active
+      // guard (drawingId → null) so the user can retry or draw something else.
+      const job = jobById(state, action.id);
+      if (!job || job.status !== 'drawing') return state;
+      return withUnchangedOrder(state, action.id, 'pending', null);
     }
     default:
       return state;
