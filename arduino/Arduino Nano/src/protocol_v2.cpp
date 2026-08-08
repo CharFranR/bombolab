@@ -63,15 +63,23 @@ static const char* skip_spaces(const char* s) {
     return s;
 }
 
-static bool parse_u32_field(const char** pp, uint32_t* out, int max_digits) {
+static bool parse_u32_field(const char** pp, uint32_t* out, int max_digits, bool* overflowed) {
     const char* s = skip_spaces(*pp);
     if (*s < '0' || *s > '9') return false;
     uint32_t v = 0;
     int digits = 0;
     while (*s >= '0' && *s <= '9') {
         digits++;
-        if (digits > max_digits) return false;
-        v = v * 10u + (uint32_t)(*s - '0');
+        if (digits > max_digits) {
+            if (overflowed) *overflowed = true;
+            return false;
+        }
+        uint32_t d = (uint32_t)(*s - '0');
+        if (v > (V2_DT_MAX - d) / 10u) {
+            if (overflowed) *overflowed = true;
+            return false;
+        }
+        v = v * 10u + d;
         s++;
     }
     *pp = s;
@@ -117,11 +125,15 @@ static void discard_to_idle(V2Protocol* p) {
     p->state = V2_STATE_IDLE;
 }
 
+void v2_abort(V2Protocol* p) {
+    discard_to_idle(p);
+}
+
 static bool handle_hello(V2Protocol* p, const char* line) {
     const char* pp = line;
     uint32_t ver;
     if (!line_has_word(&pp, "HELLO") ||
-        !parse_u32_field(&pp, &ver, 2) || ver != 2 || !line_only_trailing_spaces(pp)) {
+        !parse_u32_field(&pp, &ver, 2, 0) || ver != 2 || !line_only_trailing_spaces(pp)) {
         reply_err(p, V2_ERR_BAD_LINE);
         discard_to_idle(p);
         return false;
@@ -149,8 +161,8 @@ static bool handle_manifest(V2Protocol* p, const char* line) {
         return false;
     }
     uint32_t count, duration;
-    if (!parse_u32_field(&pp, &count, 5) || count == 0 || count > 65535u ||
-        !parse_u32_field(&pp, &duration, 10) || !line_only_trailing_spaces(pp)) {
+    if (!parse_u32_field(&pp, &count, 5, 0) || count == 0 || count > 65535u ||
+        !parse_u32_field(&pp, &duration, 10, 0) || !line_only_trailing_spaces(pp)) {
         reply_err(p, V2_ERR_BAD_LINE);
         discard_to_idle(p);
         return false;
@@ -178,7 +190,7 @@ static bool handle_sample(V2Protocol* p, const char* line) {
     uint16_t joints[V2_JOINT_COUNT];
     for (int i = 0; i < V2_JOINT_COUNT; i++) {
         uint32_t j;
-        if (!parse_u32_field(&pp, &j, 4) || j > 2400u) {
+        if (!parse_u32_field(&pp, &j, 4, 0) || j > 2400u) {
             reply_err(p, V2_ERR_BAD_LINE);
             discard_to_idle(p);
             return false;
@@ -186,13 +198,9 @@ static bool handle_sample(V2Protocol* p, const char* line) {
         joints[i] = (uint16_t)j;
     }
     uint32_t dt;
-    if (!parse_u32_field(&pp, &dt, 10) || !line_only_trailing_spaces(pp)) {
-        reply_err(p, V2_ERR_BAD_LINE);
-        discard_to_idle(p);
-        return false;
-    }
-    if (dt > V2_DT_MAX) {
-        reply_err(p, V2_ERR_BAD_DT);
+    bool dt_overflow = false;
+    if (!parse_u32_field(&pp, &dt, 10, &dt_overflow) || !line_only_trailing_spaces(pp)) {
+        reply_err(p, dt_overflow ? V2_ERR_BAD_DT : V2_ERR_BAD_LINE);
         discard_to_idle(p);
         return false;
     }

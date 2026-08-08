@@ -30,7 +30,7 @@ static const char* last_reply(void) {
 
 static char sample_line[64];
 
-static void make_sample(uint16_t v, uint32_t dt) {
+static void make_sample(uint16_t v, unsigned long dt) {
     char tmp[8];
     sample_line[0] = '\0';
     strcat(sample_line, "SAMPLE ");
@@ -175,11 +175,12 @@ static void test_chunk_ack_every_24() {
         TEST_ASSERT_TRUE(v2_process_line(&g_proto, sample_line));
     }
     TEST_ASSERT_EQUAL_STRING("ACK 24", last_reply());
+    TEST_ASSERT_EQUAL(2, g_reply_count);
     for (int i = 24; i < 48; i++) {
         make_sample(1500, 100000);
         TEST_ASSERT_TRUE(v2_process_line(&g_proto, sample_line));
     }
-    TEST_ASSERT_EQUAL_STRING("ACK 24", last_reply());
+    TEST_ASSERT_EQUAL(2, g_reply_count);
     TEST_ASSERT_TRUE(v2_process_line(&g_proto, "EXECUTE"));
     TEST_ASSERT_EQUAL(V2_STATE_RUNNING, v2_state(&g_proto));
 }
@@ -208,6 +209,26 @@ static void test_duration_mismatch_on_end() {
     TEST_ASSERT_EQUAL(V2_STATE_IDLE, v2_state(&g_proto));
 }
 
+static void test_abort_resets_to_idle() {
+    TEST_ASSERT_TRUE(v2_process_line(&g_proto, "HELLO 2"));
+    TEST_ASSERT_TRUE(v2_process_line(&g_proto, "MANIFEST 2 100000"));
+    make_sample(1500, 0);
+    TEST_ASSERT_TRUE(v2_process_line(&g_proto, sample_line));
+    v2_abort(&g_proto);
+    TEST_ASSERT_EQUAL(V2_STATE_IDLE, v2_state(&g_proto));
+    TEST_ASSERT_TRUE(v2_process_line(&g_proto, "HELLO 2"));
+    TEST_ASSERT_EQUAL(V2_STATE_RECEIVING, v2_state(&g_proto));
+}
+
+static void test_dt_overflow_bad_dt() {
+    TEST_ASSERT_TRUE(v2_process_line(&g_proto, "HELLO 2"));
+    TEST_ASSERT_TRUE(v2_process_line(&g_proto, "MANIFEST 2 1000000"));
+    make_sample(1500, 5000000000ul);
+    TEST_ASSERT_FALSE(v2_process_line(&g_proto, sample_line));
+    TEST_ASSERT_EQUAL_STRING("ERR BAD_DT", last_reply());
+    TEST_ASSERT_EQUAL(V2_STATE_IDLE, v2_state(&g_proto));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_hello_handshake);
@@ -224,5 +245,7 @@ int main() {
     RUN_TEST(test_chunk_ack_every_24);
     RUN_TEST(test_ring_overflow_bad_state);
     RUN_TEST(test_duration_mismatch_on_end);
+    RUN_TEST(test_abort_resets_to_idle);
+    RUN_TEST(test_dt_overflow_bad_dt);
     return UNITY_END();
 }

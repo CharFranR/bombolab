@@ -206,6 +206,7 @@ void loop() {
     if (millis() - last_command_ms > HOLD_TIMEOUT_MS && !parked) {
         int park_positions[NUM_SERVOS] = {1472, 1472, 1379, 1524, 1163, 1472};
         apply_movement(park_positions);
+        v2_abort(&g_v2);
         parked = true;
     }
 

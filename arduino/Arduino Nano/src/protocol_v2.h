@@ -26,3 +26,4 @@ void v2_init(V2Protocol* p,
 V2State v2_state(const V2Protocol* p);
 bool v2_process_line(V2Protocol* p, const char* line);
 bool v2_tick(V2Protocol* p);
+void v2_abort(V2Protocol* p);
