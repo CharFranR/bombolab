@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, useReducer } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
 import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, type PlayerStateJs } from './wasm';
@@ -14,6 +14,9 @@ import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
+import { loadGcodeText, mapDrawFailureToErrorCode, type LoadGcodeTextResult } from './cipra/loadGcodeText';
+import { jobReducer, initialJobState, queueFull, shouldCompleteCipraDraw, type CipraJob } from './cipra/jobStore';
+import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
@@ -467,12 +470,33 @@ export default function App() {
     traceProgressRef.current = 0;
     setActiveDemo(key);
     const id = motionPlayerNew(cmds, start);
+    // Review fix #2: remember the playback id THIS trajectory created; the
+    // CIPRA draw path copies it into cipraDrawPlayerIdRef after a successful
+    // start so a later `completed` state can be attributed to the right job.
+    lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
     setPlayerState('running');
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
     return true;
   }, [playerId, transitioning, robot, robotMode, gcodeName]);
+
+  // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
+  // picker and the CIPRA arrival "Dibujar" action both go through this so
+  // reachability/robot-mode gating is never duplicated.
+  const runLoadGcodeText = useCallback(
+    (text: string, name: string) =>
+      loadGcodeText(text, name, {
+        safeDrawingArea: () => safeDrawingArea(DRAW_PLANE_Z),
+        parseGcode,
+        startTrajectory,
+        setValidating,
+        setGcodeError,
+        setGcodeWarnings,
+        setGcodeName,
+      }),
+    [startTrajectory],
+  );
 
   const handleStartDemo = useCallback(() => {
     void (async () => {
@@ -496,30 +520,7 @@ export default function App() {
         try {
           const text = String(reader.result);
           lastGcodeRef.current = { name: file.name, text };
-          setGcodeError(null);
-          setGcodeName(file.name);
-          // safeDrawingArea builds the reachability tables (~1-2s, async). Show
-          // the spinner for the whole load+validate window.
-          setValidating(true);
-          const area = await safeDrawingArea(DRAW_PLANE_Z);
-          const result = parseGcode(text, {
-            area,
-            planeZ: DRAW_PLANE_Z,
-            travelZ: TRAVEL_PLANE_Z,
-          });
-          if (result.commands.length === 0) {
-            setValidating(false);
-            setGcodeError('El archivo no contiene movimientos dibujables (G0/G1 con lápiz).');
-            return;
-          }
-          setGcodeError(null);
-          setGcodeWarnings(result.warnings);
-          setGcodeName(file.name);
-          // startTrajectory sets its own validating state for the trajectory
-          // check and blocks automatically if any point is out of reach.
-          const started = await startTrajectory(result.commands, 'gcode');
-          setValidating(false);
-          if (!started) setGcodeError(null); // blocked by the workspace panel
+          await runLoadGcodeText(text, file.name);
         } catch (err: any) {
           setValidating(false);
           setGcodeError(err?.message ?? 'Error al leer el archivo .gcode');
@@ -528,7 +529,7 @@ export default function App() {
     };
     reader.onerror = () => setGcodeError('Error al leer el archivo');
     reader.readAsText(file);
-  }, [startTrajectory]);
+  }, [runLoadGcodeText]);
 
   // Re-parse a rejected gcode against a progressively smaller safe drawing area
   // (up to N attempts) so the user can recover without leaving drawing mode.
@@ -558,6 +559,71 @@ export default function App() {
     }
   }, [startTrajectory]);
 
+  // ─── CIPRA WebSocket subscriber (R10/R13/R15) ──────────────────────────
+  // Jobs live in a pure reducer. The client ACKs validated arrivals itself;
+  // App only decides ACCEPT/DRAW/DISCARD through the Dibujar/Descartar panel.
+  // The ALERT banner is purely informational — it never auto-starts a job.
+  const [cipraJobs, cipraDispatch] = useReducer(jobReducer, initialJobState);
+  const [cipraConn, setCipraConn] = useState<CipraConnectionStatus>('disconnected');
+  const [cipraNoticeDismissed, setCipraNoticeDismissed] = useState(false);
+  const cipraClientRef = useRef<GcodeClient | null>(null);
+  // Playback id created by the most recent motionPlayerNew (set inside
+  // startTrajectory). handleDrawCipraJob copies it into cipraDrawPlayerIdRef
+  // after a successful draw, so the binding is synchronous with the start.
+  const lastStartedPlayerIdRef = useRef<number | null>(null);
+  // Motion-player id bound to the CURRENTLY DRAWING CIPRA job (review fix #2):
+  // COMPLETE only fires when the completed playback IS the one this job
+  // started. Cleared on new draw start, FAIL and discard.
+  const cipraDrawPlayerIdRef = useRef<number | null>(null);
+  // Latest queue state readable from the WS client callbacks (they are mounted
+  // once with an empty closure); the queue-full gate needs current state.
+  const cipraJobsRef = useRef(cipraJobs);
+  useEffect(() => {
+    cipraJobsRef.current = cipraJobs;
+  }, [cipraJobs]);
+
+  useEffect(() => {
+    const client = new GcodeClient(
+      buildGcodeWsUrl(
+        { protocol: window.location.protocol, hostname: window.location.hostname },
+        readEnvWsUrl(),
+      ),
+    );
+    client.onStatus = setCipraConn;
+    // Review fix #1: when the queue is at MAX_PENDING_JOBS the client replies
+    // E_QUEUE_FULL to the publisher and does NOT surface the arrival here; the
+    // reducer's own queueFull guard stays as the hard invariant.
+    client.canAcceptJob = () => !queueFull(cipraJobsRef.current);
+    client.onReady = (env) => {
+      cipraDispatch({
+        type: 'ARRIVE',
+        job: { id: env.id, name: env.name || env.id, payload: env.payload },
+      });
+    };
+    client.connect();
+    cipraClientRef.current = client;
+    return () => {
+      client.disconnect();
+      cipraClientRef.current = null;
+    };
+  }, []);
+
+  // A fresh arrival re-arms the banner so a new job is always announced.
+  useEffect(() => {
+    if (cipraJobs.lastNotice) setCipraNoticeDismissed(false);
+  }, [cipraJobs.lastNotice?.jobId]);
+
+  // Trajectory finished → mark the single active cipra job completed (R8).
+  // Review fix #2: only when the finished playback IS the one the job started
+  // (playerId === cipraDrawPlayerIdRef). A demo/file/refit playback finishing
+  // must not complete a CIPRA job that is not actually playing it.
+  useEffect(() => {
+    if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
+      cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
+      cipraDrawPlayerIdRef.current = null;
+    }
+  }, [cipraJobs, playerState, playerId]);
+
   const handleClearDrawingBlock = useCallback(() => {
     setDrawingBlock(null);
     setTracePath([]);
@@ -568,6 +634,74 @@ export default function App() {
     setPlayerState('idle');
     setIkTarget(null);
   }, [playerId]);
+
+  const failCipraDraw = useCallback(
+    (jobId: string, reason: LoadGcodeTextResult['reason'] | 'exception') => {
+      // Review fix #3: a failed draw must NOT strand the job in `drawing`.
+      // FAIL moves it back to pending (selectable again) and frees the
+      // single-active guard; the drawing UI is cleaned exactly like
+      // handleClearDrawingBlock so no partial state survives the failure.
+      cipraDispatch({ type: 'FAIL', id: jobId });
+      cipraDrawPlayerIdRef.current = null; // no playback binding survives a FAIL
+      handleClearDrawingBlock();
+      const code = mapDrawFailureToErrorCode(reason);
+      setGcodeError(
+        reason === 'blocked'
+          ? 'No se pudo dibujar: la trayectoria queda fuera del área alcanzable. El trabajo volvió a la cola.'
+          : 'No se pudo dibujar: el G-Code no se pudo procesar. El trabajo volvió a la cola.',
+      );
+      // Review fix #5: the ACK already confirmed DELIVERY — this error tells
+      // the publisher WHY the job could not be drawn.
+      cipraClientRef.current?.sendError(code, jobId);
+    },
+    [handleClearDrawingBlock],
+  );
+
+  const handleDrawCipraJob = useCallback(
+    async (job: CipraJob) => {
+      if (cipraJobs.drawingId !== null || transitioning) return; // single-active (R9)
+      cipraDrawPlayerIdRef.current = null; // fresh draw attempt — no stale binding
+      cipraDispatch({ type: 'ACCEPT', id: job.id });
+      cipraDispatch({ type: 'DRAW', id: job.id });
+      lastGcodeRef.current = { name: job.name, text: job.payload };
+      let result: LoadGcodeTextResult | { ok: false; reason: 'exception' };
+      try {
+        result = await runLoadGcodeText(job.payload, job.name);
+      } catch (err) {
+        // Review fix #3: a thrown parse/validation error is a draw failure too.
+        result = { ok: false, reason: 'exception' };
+      }
+      if (result.ok) {
+        // Review fix #2: bind COMPLETE to THIS playback — the motion player id
+        // created by this draw is what a later `completed` state must match.
+        cipraDrawPlayerIdRef.current = lastStartedPlayerIdRef.current;
+      } else {
+        failCipraDraw(job.id, result.reason);
+      }
+    },
+    [cipraJobs.drawingId, transitioning, runLoadGcodeText],
+  );
+
+  const handleDiscardCipraJob = useCallback(
+    (id: string) => {
+      if (cipraJobs.drawingId === id) {
+        // Review fix #4 (user chose STOP): discarding a job that is DRAWING
+        // stops its playback via motionPlayerDrop and clears the drawing
+        // block/trace/player state exactly like handleClearDrawingBlock; the
+        // COMPLETE capture is unbound so no stale completion can fire after
+        // the discard. Not drawing → plain DISCARD below.
+        handleClearDrawingBlock();
+        cipraDrawPlayerIdRef.current = null;
+      }
+      cipraDispatch({ type: 'DISCARD', id });
+    },
+    [cipraJobs.drawingId, handleClearDrawingBlock],
+  );
+
+  const cipraPanelJobs = useMemo(
+    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
+    [cipraJobs.jobs],
+  );
 
   const handleBacklashToggle = useCallback((enabled: boolean) => {
     setBacklashEnabled(enabled);
@@ -793,6 +927,67 @@ export default function App() {
           </p>
         </div>
 
+        {/* CIPRA arrival ALERT — top of the sidebar, ANY mode (R13).
+            Informational only: it never decides, it only announces and offers
+            "Ir al modo dibujo". The decision panel lives inside drawing mode. */}
+        {cipraJobs.lastNotice && !cipraNoticeDismissed && (
+          <div
+            role="alert"
+            style={{
+              padding: '8px 16px',
+              borderBottom: '1px solid #554',
+              background: '#2b2b1e',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
+              📥 Trabajo nuevo desde CIPRA
+            </div>
+            <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
+              {cipraJobs.lastNotice.whileDrawing
+                ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
+                : 'Se recibió un trabajo nuevo de CIPRA.'}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              {robotMode !== 'drawing' && (
+                <button
+                  onClick={() => {
+                    void enterDrawingMode();
+                    setCipraNoticeDismissed(true);
+                  }}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: '4px 6px',
+                    fontSize: 11,
+                    background: '#464',
+                    border: 'none',
+                    borderRadius: 3,
+                    color: '#ccc',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Ir al modo dibujo
+                </button>
+              )}
+              <button
+                onClick={() => setCipraNoticeDismissed(true)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  fontSize: 11,
+                  background: '#333',
+                  border: '1px solid #444',
+                  borderRadius: 3,
+                  color: '#aaa',
+                  cursor: 'pointer',
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Joint sliders */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <JointControls
@@ -928,6 +1123,19 @@ export default function App() {
               Conectar robot físico
             </button>
           )}
+        </div>
+
+        {/* Conexión CIPRA (subscriber) — status indicator, never a modal (R15) */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: cipraConn === 'connected' ? '#4cd964' : cipraConn === 'connecting' ? '#c8a84' : '#666',
+            }} />
+            <span role="status" style={{ fontSize: 12, color: '#888' }}>
+              {getConnectionStatusLabel(cipraConn)}
+            </span>
+          </div>
         </div>
 
         {/* Calibración de servos (deadband/backlash) — manual */}
@@ -1343,6 +1551,71 @@ export default function App() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+              {cipraPanelJobs.length > 0 && (
+                <div
+                  style={{
+                    padding: 8,
+                    marginBottom: 6,
+                    borderRadius: 4,
+                    background: '#232',
+                    border: '1px solid #364',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 11, color: '#9d9' }}>
+                    Trabajos de CIPRA
+                  </div>
+                  {cipraPanelJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      style={{
+                        padding: 6,
+                        marginBottom: 4,
+                        borderRadius: 4,
+                        background: '#1d1d20',
+                        border: '1px solid #333',
+                      }}
+                    >
+                      <div style={{ fontSize: 11, color: '#ccc', fontWeight: 600 }}>{job.name}</div>
+                      <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>
+                        id {job.id.slice(0, 8)} · {job.status}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => { void handleDrawCipraJob(job); }}
+                          disabled={cipraJobs.drawingId !== null || transitioning}
+                          style={{
+                            flex: 1,
+                            padding: '4px 6px',
+                            fontSize: 11,
+                            background: '#364',
+                            border: '1px solid #487',
+                            borderRadius: 3,
+                            color: '#cfc',
+                            cursor: cipraJobs.drawingId !== null || transitioning ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          Dibujar
+                        </button>
+                        <button
+                          onClick={() => handleDiscardCipraJob(job.id)}
+                          style={{
+                            flex: 1,
+                            padding: '4px 6px',
+                            fontSize: 11,
+                            background: '#533',
+                            border: '1px solid #833',
+                            borderRadius: 3,
+                            color: '#fcc',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Descartar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
