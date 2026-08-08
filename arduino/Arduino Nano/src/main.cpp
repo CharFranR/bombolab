@@ -212,7 +212,6 @@ void loop() {
     bool activity = false;
 
     if (v2_state(&g_v2) == V2_STATE_IDLE && Serial.available()) {
-        // Peek at the first byte — skip empty lines (stray newlines)
         if (Serial.peek() == '\n' || Serial.peek() == '\r') {
             Serial.read();
         } else if (Serial.peek() == 'H') {
