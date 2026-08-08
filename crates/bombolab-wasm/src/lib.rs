@@ -6,8 +6,8 @@ use bombolab_core::kinematics::{
 };
 use bombolab_core::math::Iso3;
 use bombolab_core::robot::{
-    Joint, JointType, Robot, Segment, base_transform as make_base_transform,
-    fabri_creator as make_fabri_creator, tool_transform as make_tool_transform,
+    Joint, JointType, Robot, Segment, ToolFrame, base_transform as make_base_transform,
+    fabri_creator as make_fabri_creator,
 };
 
 // ─── Serializable types for JS interop ──────────────────────────────────────
@@ -137,7 +137,7 @@ fn robot_from_js_value(js_robot: &JsValue) -> Result<JsRobotDef, JsValue> {
 pub fn fabri_creator() -> Result<JsValue, JsValue> {
     let robot = make_fabri_creator();
     let base = make_base_transform();
-    let tool = make_tool_transform();
+    let tool = *ToolFrame::marker_perpendicular().pose();
 
     let js_robot = JsRobotDef {
         segments: robot
@@ -159,6 +159,22 @@ pub fn fabri_creator() -> Result<JsValue, JsValue> {
     };
 
     to_js_value(&js_robot)
+}
+
+/// Tool-frame preset pose by name: `"marker"`, `"pen"` or `"gripper"`.
+///
+/// Returns the pose in the same 12-float wire format as
+/// `JsRobotDef.tool_transform` (rotation + translation). Unknown names are
+/// rejected. Additive seam for a future tool selector.
+#[wasm_bindgen]
+pub fn tool_frame_preset(name: &str) -> Result<JsValue, JsValue> {
+    let frame = match name {
+        "marker" => ToolFrame::marker_perpendicular(),
+        "pen" => ToolFrame::pen(),
+        "gripper" => ToolFrame::gripper(),
+        _ => return Err(JsValue::from_str("unknown tool frame preset")),
+    };
+    to_js_value(&iso3_to_array(frame.pose()))
 }
 
 /// Forward kinematics: compute all frames for given q.
