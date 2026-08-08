@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Servo.h>
+#include "protocol_v2.h"
 
 // Failsafe (watchdog): if no valid frame is received within HOLD_TIMEOUT_MS,
 // the servos are parked at the home pose (90,90,81,95,60,90) once per timeout
@@ -144,6 +145,45 @@ void apply_movement(int positions[]) {
     }
 }
 
+V2Protocol g_v2;
+
+static void apply_v2_servos(const uint16_t* joints) {
+    for (int i = 0; i < NUM_SERVOS; i++) {
+        servos[i].writeMicroseconds(joints[i]);
+    }
+}
+
+static void reply_v2(const char* line) {
+    Serial.println(line);
+}
+
+static bool read_v2_line(char* buf, int cap) {
+    int idx = 0;
+    unsigned long start = millis();
+    while (true) {
+        if (millis() - start > 100) {
+            drain_rx_until_newline();
+            return false;
+        }
+        if (!Serial.available()) {
+            continue;
+        }
+        char c = Serial.read();
+        if (c == '\n') {
+            buf[idx] = '\0';
+            return idx > 0;
+        }
+        if (c == '\r') {
+            continue;
+        }
+        if (idx >= cap - 1) {
+            drain_rx_until_newline();
+            return false;
+        }
+        buf[idx++] = c;
+    }
+}
+
 
 void setup() {
     Serial.begin(115200);
@@ -156,6 +196,7 @@ void setup() {
     }
 
     apply_movement(actual_positions);
+    v2_init(&g_v2, micros, apply_v2_servos, reply_v2);
 }
 
 
@@ -168,24 +209,39 @@ void loop() {
         parked = true;
     }
 
-    if (!Serial.available()) {
-        return;
+    bool activity = false;
+
+    if (v2_state(&g_v2) == V2_STATE_IDLE && Serial.available()) {
+        // Peek at the first byte — skip empty lines (stray newlines)
+        if (Serial.peek() == '\n' || Serial.peek() == '\r') {
+            Serial.read();
+        } else if (Serial.peek() == 'H') {
+            char line[64];
+            if (read_v2_line(line, sizeof(line))) {
+                activity = v2_process_line(&g_v2, line);
+            }
+        } else {
+            int new_positions[NUM_SERVOS];
+
+            if (read_positions_serial(new_positions)) {
+                apply_movement(new_positions);
+                activity = true;
+                Serial.println(F("OK"));
+            } else {
+                Serial.println(F("ERR"));
+            }
+        }
+    } else if (v2_state(&g_v2) != V2_STATE_IDLE && Serial.available()) {
+        char line[64];
+        if (read_v2_line(line, sizeof(line))) {
+            activity = v2_process_line(&g_v2, line);
+        }
     }
 
-    // Peek at the first byte — skip empty lines (stray newlines)
-    if (Serial.peek() == '\n' || Serial.peek() == '\r') {
-        Serial.read();
-        return;
-    }
+    activity = v2_tick(&g_v2) || activity;
 
-    int new_positions[NUM_SERVOS];
-
-    if (read_positions_serial(new_positions)) {
-        apply_movement(new_positions);
+    if (activity) {
         last_command_ms = millis();
         parked = false;
-        Serial.println(F("OK"));
-    } else {
-        Serial.println(F("ERR"));
     }
 }
