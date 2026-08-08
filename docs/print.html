@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-01a7f806.js";
+            window.path_to_searchindex_js = "searchindex-4be38f74.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b353f33e.js"></script>
+        <script src="toc-fe45787e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2009,6 +2009,7 @@ itself, the ADRs document the decisions.</p>
 <tr><td><a href="#adr-0001-constrained-drawing-ik-with-reduced-jacobian">0001</a></td><td>Constrained drawing IK with reduced Jacobian</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0002-serial-wire-protocol-in-microseconds">0002</a></td><td>Serial wire protocol in microseconds</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0003-tests-in-separate-files-code-is-documented-not-commented">0003</a></td><td>Tests in separate files; docs, not comments</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0004-tool-frame-roll-only-invariant">0004</a></td><td>Tool-frame roll-only invariant</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -2135,6 +2136,44 @@ byte-identical in content.</li>
 (<code>math::jacobian::jacobian_tests::...</code>), which makes failure output more
 specific.</li>
 <li>New code must follow the rule: documentation artifacts, not comments.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0004-tool-frame-roll-only-invariant"><a class="header" href="#adr-0004-tool-frame-roll-only-invariant">ADR-0004: Tool-Frame Roll-Only Invariant</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context-3"><a class="header" href="#context-3">Context</a></h2>
+<p>ADR-0001 derives the constrained drawing IK on the variety</p>
+<pre><code>M = { q4 = 0, q5 = −(q2+q3) }
+</code></pre>
+<p>using the chain-rule reduced Jacobian</p>
+<pre><code>Jᵣ = [ J₁ , J₂ − J₅ , J₃ − J₅ ].
+</code></pre>
+<p>That derivation assumes the tool is mounted as a pure translation along the
+last joint X-axis: the tool pose has <strong>identity rotation</strong> relative to the
+flange. The offset only shifts the TCP along X, so the wrist orientation
+residual <code>R35 = R03ᵀ · R_target</code> keeps the analytic form <code>[c,s,0; 0,1,0; −s,c,0]</code> that forces <code>q4 = 0</code> and <code>q5 = −(q2+q3)</code> exactly.</p>
+<h2 id="decision-3"><a class="header" href="#decision-3">Decision</a></h2>
+<p>Only <strong>roll about the tool X-axis</strong> preserves the drawing variety <code>M</code> and the
+reduced Jacobian <code>Jᵣ</code> of ADR-0001. A roll rotates the marker about the tool
+axis itself: it changes no constraint equation and no Jacobian column, so the
+reduced derivation stays exact.</p>
+<p>Any tool rotation about <strong>Y or Z invalidates the derivation</strong>: the tool pose
+is no longer a pure X translation, the wrist residual no longer has the
+analytic form, <code>q4 = 0</code> and <code>q5 = −(q2+q3)</code> cease to hold, and the columns
+<code>J₂ − J₅</code>, <code>J₃ − J₅</code> are no longer the exact linearization of the constrained
+motion.</p>
+<p>Consequently every <code>ToolFrame</code> preset (marker, pen, gripper) uses identity
+rotation with a translation-only offset along X. The same invariant is stated
+in the <code>ToolFrame</code> rustdoc.</p>
+<h2 id="consequences-3"><a class="header" href="#consequences-3">Consequences</a></h2>
+<ul>
+<li>Tool presets are constrained to X translations; tools with Y/Z-rotated poses
+are outside the drawing-IK contract.</li>
+<li>The reduced Jacobian stays valid for singularity analysis of drawing motions.</li>
+<li>A future tool with a non-roll rotation requires re-deriving the constraint
+(new ADR), not a parameter tweak.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>
