@@ -1,7 +1,8 @@
 use wasm_bindgen::prelude::*;
 
 use bombolab_core::kinematics::{
-    IkSolver, OrientationSolver, forward_kinematics as fk, solve_drawing_ik as solve_drawing,
+    GateReason, GateReport, IkSolver, OrientationSolver, SingularityLevel, SingularityThresholds,
+    analyze_path, forward_kinematics as fk, solve_drawing_ik as solve_drawing,
     solve_drawing_ik_v2 as solve_drawing_v2,
 };
 use bombolab_core::math::Iso3;
@@ -42,6 +43,32 @@ pub struct JsIkResult {
 pub struct JsFkResult {
     pub frames: Vec<[f64; 12]>,
     pub ee: [f64; 12],
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct JsGateWaypoint {
+    pub index: usize,
+    pub target: [f64; 3],
+    pub q: [f64; 5],
+    pub sigma_min: f64,
+    pub kappa: f64,
+    pub yoshikawa: f64,
+    pub level: String,
+    pub reason: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct JsGateReport {
+    pub sampled: usize,
+    pub worst: Vec<JsGateWaypoint>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct JsThresholds {
+    pub warn_sigma_min: f64,
+    pub warn_kappa: f64,
+    pub block_sigma_min: f64,
+    pub block_kappa: f64,
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -519,6 +546,61 @@ fn compute_position_error(
     Ok((target_v - p_ee).norm())
 }
 
+fn js_report_from_core(report: &GateReport) -> JsGateReport {
+    JsGateReport {
+        sampled: report.sampled,
+        worst: report
+            .worst
+            .iter()
+            .map(|wp| JsGateWaypoint {
+                index: wp.index,
+                target: wp.target,
+                q: wp.q,
+                sigma_min: wp.metrics.sigma_min,
+                kappa: wp.metrics.kappa,
+                yoshikawa: wp.metrics.yoshikawa,
+                level: match wp.level {
+                    SingularityLevel::Ok => "ok",
+                    SingularityLevel::Warn => "warn",
+                    SingularityLevel::Block => "block",
+                }
+                .to_string(),
+                reason: match wp.reason {
+                    GateReason::Metrics => "metrics",
+                    GateReason::IkNonConvergence => "ik_non_convergence",
+                }
+                .to_string(),
+            })
+            .collect(),
+    }
+}
+
+/// Per-waypoint singularity analysis over a command list.
+///
+/// Returns `{sampled, worst: [{index, target, q, sigma_min, kappa,
+/// yoshikawa, level, reason}]}`; `level` is "ok" | "warn" | "block".
+#[wasm_bindgen]
+pub fn analyze_path_singularity(
+    js_robot: &JsValue,
+    commands: &JsValue,
+    thresholds: &JsValue,
+) -> Result<JsValue, JsValue> {
+    let js_robot = robot_from_js_value(js_robot)?;
+    let robot = robot_from_js(&js_robot);
+    let base = array_to_iso3(&js_robot.base_transform);
+    let commands = parse_commands(commands)?;
+    let js_thresholds: JsThresholds = serde_wasm_bindgen::from_value(thresholds.clone())
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let core_thresholds = SingularityThresholds {
+        warn_sigma_min: js_thresholds.warn_sigma_min,
+        warn_kappa: js_thresholds.warn_kappa,
+        block_sigma_min: js_thresholds.block_sigma_min,
+        block_kappa: js_thresholds.block_kappa,
+    };
+    let report = analyze_path(&robot, &base, &commands, &core_thresholds);
+    to_js_value(&js_report_from_core(&report))
+}
+
 // ─── Motion player (trajectory execution) ─────────────────────────────────
 // Pure-logic trajectory engine from bombolab-core, exposed to the web app.
 // Players live in an id registry; the app drives them with frame deltas.
@@ -655,5 +737,53 @@ pub fn motion_player_drop(id: usize) {
     let mut reg = PLAYERS.lock().unwrap();
     if let Some(slot) = reg.get_mut(id) {
         *slot = None;
+    }
+}
+
+
+#[cfg(test)]
+mod singularity_binding_tests {
+    use super::*;
+    use bombolab_core::kinematics::{
+        GateReason, SingularityLevel, SingularityThresholds, analyze_path,
+    };
+    use bombolab_core::trajectory::MotionCommand;
+
+    fn fold_report() -> GateReport {
+        let robot = bombolab_core::robot::fabri_creator();
+        let base = bombolab_core::robot::base_transform();
+        let commands = vec![
+            MotionCommand::MoveLinear { target: [85.0, -15.0, 142.0], speed: 1.0 },
+            MotionCommand::MoveLinear { target: [200.0, 0.0, 80.0], speed: 1.0 },
+        ];
+        analyze_path(&robot, &base, &commands, &SingularityThresholds::default())
+    }
+
+    #[test]
+    fn test_payload_maps_metrics_and_worst_flags() {
+        let report = fold_report();
+        let payload = js_report_from_core(&report);
+        assert_eq!(payload.sampled, report.sampled);
+        assert_eq!(payload.worst.len(), report.worst.len());
+        let block = payload
+            .worst
+            .iter()
+            .find(|w| w.level == "block")
+            .expect("fold waypoint must be flagged block");
+        assert_eq!(block.sigma_min, 0.0);
+        assert_eq!(block.kappa, 0.0);
+        assert_eq!(block.yoshikawa, 0.0);
+        assert_eq!(block.reason, "ik_non_convergence");
+        assert_eq!(block.target, [85.0, -15.0, 142.0]);
+        assert_eq!(block.q.len(), 5);
+        let healthy = payload
+            .worst
+            .iter()
+            .find(|w| w.level != "block")
+            .expect("healthy waypoint must be present");
+        assert!(healthy.sigma_min > 0.0);
+        assert!(healthy.kappa > 0.0);
+        assert_eq!(healthy.reason, "metrics");
+        assert!(payload.worst.iter().all(|w| w.q.len() == 5));
     }
 }

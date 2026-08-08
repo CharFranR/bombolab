@@ -30,7 +30,9 @@ fn constrained_tcp(robot: &Robot, base: Iso3, q13: &[f64; 3]) -> Vec3 {
     )
     .with_tool(robot.tool().clone());
     let (frames, _) = crate::kinematics::forward::forward_kinematics(base, &robot_q);
-    (frames.last().unwrap() * robot_q.tool().pose()).translation.vector
+    (frames.last().unwrap() * robot_q.tool().pose())
+        .translation
+        .vector
 }
 
 #[test]
@@ -51,8 +53,8 @@ fn test_reduced_jacobian_matches_fd() {
         qp[i] += d;
         let mut qm = q13;
         qm[i] -= d;
-        let fd = (constrained_tcp(&robot, base, &qp) - constrained_tcp(&robot, base, &qm))
-            / (2.0 * d);
+        let fd =
+            (constrained_tcp(&robot, base, &qp) - constrained_tcp(&robot, base, &qm)) / (2.0 * d);
         let diff = (Vec3::new(jr[(0, i)], jr[(1, i)], jr[(2, i)]) - fd).norm();
         assert!(
             diff < 1e-5,
@@ -120,10 +122,6 @@ fn test_sigma_min_descent_toward_fold() {
     }
 }
 
-
-
-
-
 #[test]
 fn test_gate_empty_path() {
     let robot = fabri_creator();
@@ -141,9 +139,18 @@ fn test_gate_warm_start_chain() {
     let p2 = [320.0, 0.0, 120.0];
     let p3 = [330.0, 0.0, 120.0];
     let commands = vec![
-        MotionCommand::MoveLinear { target: p1, speed: 1.0 },
-        MotionCommand::MoveLinear { target: p2, speed: 1.0 },
-        MotionCommand::MoveLinear { target: p3, speed: 1.0 },
+        MotionCommand::MoveLinear {
+            target: p1,
+            speed: 1.0,
+        },
+        MotionCommand::MoveLinear {
+            target: p2,
+            speed: 1.0,
+        },
+        MotionCommand::MoveLinear {
+            target: p3,
+            speed: 1.0,
+        },
     ];
     let report = analyze_path(&robot, &base, &commands, &SingularityThresholds::default());
     let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
@@ -174,14 +181,21 @@ fn test_gate_warm_start_chain() {
         let (frames, _) = crate::kinematics::forward::forward_kinematics(base, &robot_q);
         let p = (frames.last().unwrap() * tool).translation.vector;
         let err = (Vec3::new(target[0], target[1], target[2]) - p).norm();
-        assert!(err < 2.0, "reported q must land on target, err = {err:.3}mm");
+        assert!(
+            err < 2.0,
+            "reported q must land on target, err = {err:.3}mm"
+        );
     }
     let wp3 = report
         .worst
         .iter()
         .find(|w| w.target == p3)
         .expect("p3 must appear in the report");
-    assert_eq!(wp3.level, SingularityLevel::Warn, "boundary point is near-singular");
+    assert_eq!(
+        wp3.level,
+        SingularityLevel::Warn,
+        "boundary point is near-singular"
+    );
 }
 
 #[test]
@@ -202,8 +216,15 @@ fn test_gate_10k_path_capped() {
         x += dir;
     }
     let report = analyze_path(&robot, &base, &commands, &SingularityThresholds::default());
-    assert_eq!(report.sampled, 5000, "sampling cap must bound the solved points");
-    assert_eq!(report.worst.len(), 10, "well-conditioned path fills worst-N");
+    assert_eq!(
+        report.sampled, 5000,
+        "sampling cap must bound the solved points"
+    );
+    assert_eq!(
+        report.worst.len(),
+        10,
+        "well-conditioned path fills worst-N"
+    );
 }
 
 #[test]
@@ -218,7 +239,11 @@ fn test_gate_custom_thresholds() {
         .iter()
         .find(|w| w.target == target)
         .expect("target must appear under default thresholds");
-    assert_eq!(wp.level, SingularityLevel::Ok, "sigma_min 36.6 is above warn 25");
+    assert_eq!(
+        wp.level,
+        SingularityLevel::Ok,
+        "sigma_min 36.6 is above warn 25"
+    );
     let warn = SingularityThresholds {
         warn_sigma_min: 40.0,
         warn_kappa: 20.0,
@@ -280,10 +305,10 @@ fn test_gate_deterministic() {
     assert_eq!(a.worst.len(), b.worst.len());
     for (wa, wb) in a.worst.iter().zip(&b.worst) {
         assert_eq!(wa.index, wb.index);
-        assert_eq!(wa.metrics.sigma_min.to_bits(), wb.metrics.sigma_min.to_bits());
+        assert_eq!(
+            wa.metrics.sigma_min.to_bits(),
+            wb.metrics.sigma_min.to_bits()
+        );
         assert_eq!(wa.level, wb.level);
     }
 }
-
-
-

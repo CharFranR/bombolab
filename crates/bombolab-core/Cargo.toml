@@ -18,6 +18,10 @@ name = "dynamics-report"
 path = "src/bin/dynamics-report.rs"
 
 [[bin]]
+name = "singularity-report"
+path = "src/bin/singularity-report.rs"
+
+[[bin]]
 name = "test-case-report"
 path = "src/bin/test-case-report.rs"
 

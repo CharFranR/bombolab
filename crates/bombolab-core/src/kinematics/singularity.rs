@@ -114,7 +114,8 @@ pub struct GateReport {
 fn classify(metrics: &WaypointMetrics, thresholds: &SingularityThresholds) -> SingularityLevel {
     if metrics.sigma_min < thresholds.block_sigma_min || metrics.kappa > thresholds.block_kappa {
         SingularityLevel::Block
-    } else if metrics.sigma_min < thresholds.warn_sigma_min || metrics.kappa > thresholds.warn_kappa {
+    } else if metrics.sigma_min < thresholds.warn_sigma_min || metrics.kappa > thresholds.warn_kappa
+    {
         SingularityLevel::Warn
     } else {
         SingularityLevel::Ok
