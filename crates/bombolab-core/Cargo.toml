@@ -26,6 +26,10 @@ name = "test-case-report"
 path = "src/bin/test-case-report.rs"
 
 [[bin]]
+name = "workspace-report"
+path = "src/bin/workspace-report.rs"
+
+[[bin]]
 name = "serial-test"
 path = "src/bin/serial-test.rs"
 required-features = ["serial"]

@@ -111,7 +111,7 @@ pub struct GateReport {
     pub worst: Vec<GateWaypoint>,
 }
 
-fn classify(metrics: &WaypointMetrics, thresholds: &SingularityThresholds) -> SingularityLevel {
+pub fn classify(metrics: &WaypointMetrics, thresholds: &SingularityThresholds) -> SingularityLevel {
     if metrics.sigma_min < thresholds.block_sigma_min || metrics.kappa > thresholds.block_kappa {
         SingularityLevel::Block
     } else if metrics.sigma_min < thresholds.warn_sigma_min || metrics.kappa > thresholds.warn_kappa
