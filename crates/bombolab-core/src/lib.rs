@@ -18,7 +18,7 @@ pub use math::{
     inertia_matrix,
 };
 pub use robot::{
-    DHParams, Error, Joint, JointType, Result, Robot, Segment, base_transform, fabri_creator,
-    tool_transform,
+    DHParams, Error, Joint, JointType, Result, Robot, Segment, ToolFrame, base_transform,
+    fabri_creator, tool_transform,
 };
 pub use trajectory::{MAX_DT, MotionCommand, MotionPlayer, PlayerState, TrajectoryPlanner};
