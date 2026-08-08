@@ -22,6 +22,13 @@ export type Mat4 = [
   number, number, number, number,
 ];
 
+export const DEFAULT_TOOL_TRANSFORM: Mat4 = [
+  1, 0, 0, 75,
+  0, 1, 0, 0,
+  0, 0, 1, 0,
+  0, 0, 0, 1,
+];
+
 /** Punto 3D + orientación (resultado de FK) */
 export interface Pose {
   x: number; y: number; z: number;
@@ -33,5 +40,5 @@ export interface RobotDef {
   name: string;
   segments: Segment[];
   baseTransform: [number, number, number];   // [x, y, z] mm
-  toolTransform: [number, number, number];  // [x, y, z] mm
+  toolTransform: Mat4;
 }
