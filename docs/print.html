@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0312c53c.js";
+            window.path_to_searchindex_js = "searchindex-207142e2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-606f078d.js"></script>
+        <script src="toc-abe62b1a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2011,6 +2011,7 @@ itself, the ADRs document the decisions.</p>
 <tr><td><a href="#adr-0003-tests-in-separate-files-code-is-documented-not-commented">0003</a></td><td>Tests in separate files; docs, not comments</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0004-tool-frame-roll-only-invariant">0004</a></td><td>Tool-frame roll-only invariant</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0005-svd-singularity-gate-per-waypoint">0005</a></td><td>SVD singularity gate per waypoint</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0006-deterministic-workspace-analysis-cloud">0006</a></td><td>Deterministic workspace analysis cloud</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -2291,6 +2292,135 @@ draw-anyway requires explicit user confirmation and leaves the trajectory
 unchanged.</li>
 <li>Thresholds are parameters; a future tool or robot re-calibrates them in the
 web wrapper and this ADR, not in core code.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0006-deterministic-workspace-analysis-cloud"><a class="header" href="#adr-0006-deterministic-workspace-analysis-cloud">ADR-0006: Deterministic Workspace Analysis Cloud</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context-5"><a class="header" href="#context-5">Context</a></h2>
+<p>The web app historically rendered a fake “workspace” cloud: <code>generateWorkspace</code>
+sampled every joint uniformly with <code>Math.random()</code> and ran JS-side forward
+kinematics — 2000 points with no relationship to the drawing constraint, no
+repeatability, no per-point conditioning metrics, and no statistics.</p>
+<p>The actual workspace of the FABRI Creator is a constrained variety for drawing:</p>
+<pre><code>M = { q1, q2, q3 uniform in joint limits; q4 = 0; q5 = −(q2+q3) }
+</code></pre>
+<p>(ADR-0001) with the J5 pitch limit rejecting q5 outside [−115°, 55°]. The
+meaningful analysis is not “where can the TCP go” but “how well-conditioned is
+the drawing-plane motion there”: every sample should carry the reduced-Jacobian
+singularity metrics (ADR-0005) so the cloud becomes a conditioning map, not a
+random scatter.</p>
+<p>A second constraint comes from the platform: the sampler runs in Rust core and
+is called from the web through wasm-bindgen. Transferring 10k–50k per-sample
+objects across the boundary is GC churn; a flat numeric buffer is the natural
+contract. And because the RNG lives in Rust, the web can no longer rely on
+<code>Math.random()</code> — seed handling and determinism must be explicit contracts.</p>
+<h2 id="decision-5"><a class="header" href="#decision-5">Decision</a></h2>
+<p>Replace the JS random cloud with a stateful <code>WorkspaceSampler</code> in
+<code>bombolab-core</code> (kinematics/workspace.rs) driven by a hand-rolled
+xoshiro256** RNG (math/rng.rs, zero deps, wasm-safe). The web runs “Run
+Analysis”: it creates a sampler, pulls 1k-sample chunks with a yield between
+chunks, aggregates the cloud, and renders it colored by conditioning.</p>
+<h3 id="sampling-modes"><a class="header" href="#sampling-modes">Sampling modes</a></h3>
+<ul>
+<li><strong>DrawingPlane (default)</strong>: q1..q3 uniform within joint limits, q4 = 0,
+q5 = −(q2+q3). Samples whose q5 falls outside the J5 limits [−115°, 55°]
+are rejected and counted in <code>n_rejected</code>. <code>N</code> counts attempted samples;
+<code>n_valid = N − n_rejected</code>.</li>
+<li><strong>Full5Dof</strong>: all five joints uniform within limits, no rejection. Keeps
+the legacy “all joints free” cloud semantics available for comparison.</li>
+</ul>
+<h3 id="determinism-and-seed"><a class="header" href="#determinism-and-seed">Determinism and seed</a></h3>
+<p>The core sampler ALWAYS takes an explicit u64 seed (<code>WorkspaceSampler::new( seed, mode)</code>) and is bit-identical for the same seed and mode — randomness is
+a caller concern. The web wrapper supplies the seed from <code>Date.now()</code> when the
+user runs an analysis (D3), so consecutive runs differ unless the caller pins
+a seed. The CLI <code>workspace-report</code> derives its default seed from the system
+clock.</p>
+<h3 id="flat-transfer-format-stride-5"><a class="header" href="#flat-transfer-format-stride-5">Flat transfer format (stride-5)</a></h3>
+<p>Batch results cross the wasm boundary as a single <code>Float64Array</code> with a fixed
+per-sample layout, no per-sample objects:</p>
+<pre><code>[x, y, z, sigma_min, kappa]   (mm, mm, mm, mm, dimensionless)
+</code></pre>
+<p><code>sample_batch(id, k)</code> returns one record per ACCEPTED sample (rejected
+attempts never appear in the buffer; they only increment <code>n_rejected</code>). The
+web wrapper parses the stride: positions with the DH→three.js swap
+(x, y, z) → (x, z, y) and per-point colors derived from <code>sigma_min</code>.</p>
+<h3 id="display-bands-5025-vs-gate-thresholds-25205100"><a class="header" href="#display-bands-5025-vs-gate-thresholds-25205100">Display bands (50/25) vs gate thresholds (25/20/5/100)</a></h3>
+<p>The singularity gate (ADR-0005) classifies waypoints with
+<code>warn: sigma_min &lt; 25 mm OR kappa &gt; 20</code> and <code>block: sigma_min &lt; 5 mm OR kappa &gt; 100</code>. Those thresholds are calibrated for trajectory gating: the
+reachable workspace has a conditioning floor of sigma_min ≈ 19.8 mm, so the
+gate’s warn band is 1.25× above the worst in-band measurement and the demo
+paths are verified silent.</p>
+<p>The cloud is a display artifact, not a decision gate, and the two purposes
+need different bands:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Display band</th><th>sigma_min</th><th>Visual</th></tr>
+</thead>
+<tbody>
+<tr><td>high</td><td>≥ 50 mm</td><td>red</td></tr>
+<tr><td>medium</td><td>25–50 mm</td><td>yellow</td></tr>
+<tr><td>low</td><td>&lt; 25 mm</td><td>blue</td></tr>
+</tbody>
+</table>
+</div>
+<p>The 50/25 bands are intentionally coarser than the gate’s 25/20/5/100:
+applying the gate bands to a cloud would paint almost every point “warn”
+(floor ≈ 19.8 mm &lt; 25) and the drawing-plane range never reaches sigma_min
+&lt; 10, so the “block” color would never appear. The display bands spread the
+probe range [19.8, 82] mm across three discernible buckets instead. The gate
+thresholds are NEVER used for coloring: the two band systems are separate by
+contract, and this ADR is the single source of truth for both.</p>
+<h3 id="per-sample-metrics"><a class="header" href="#per-sample-metrics">Per-sample metrics</a></h3>
+<p>Each accepted sample computes TCP xyz via forward kinematics, the reduced
+Jacobian Jr = [J1, J2 − J5, J3 − J5] (ADR-0001), and <code>waypoint_metrics</code> +
+<code>classify</code> (ADR-0005): sigma_min, kappa, and level. Level is used by the CLI
+report; the web colors from sigma_min only.</p>
+<h3 id="statistics-single-pass"><a class="header" href="#statistics-single-pass">Statistics (single pass)</a></h3>
+<p><code>sampler_stats()</code> returns, accumulated in one O(n) pass over accepted
+samples:</p>
+<ul>
+<li><code>bounds_min</code> / <code>bounds_max</code>: per-axis min/max, absent when n_valid = 0</li>
+<li><code>centroid</code>: mean TCP position, absent when n_valid = 0</li>
+<li><code>reach</code>: maximum TCP distance from the base origin, absent when n_valid = 0</li>
+<li><code>n_valid</code>, <code>n_rejected</code></li>
+</ul>
+<h3 id="wasm-registry"><a class="header" href="#wasm-registry">Wasm registry</a></h3>
+<p>Samplers live in a <code>Mutex&lt;Vec&lt;Option&lt;WorkspaceSampler&gt;&gt;&gt;</code> id registry
+(motion-player pattern). <code>sampler_new(seed, mode)</code> returns an id,
+<code>sample_batch(id, k)</code> / <code>sampler_stats(id)</code> operate on it,
+<code>sampler_drop(id)</code> frees the slot. Unknown or dropped ids return a JS error
+(“sampler not found”), never a panic; unknown modes error at creation.
+Sampling is JS-driven chunked streaming: the web requests 1k samples per
+chunk and awaits a microtask between chunks so the UI stays responsive and
+progress is observable after every chunk.</p>
+<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
+<p><code>workspace-report</code> (bombolab-core bin) samples with
+<code>--mode drawing-plane|full-5dof --seed N --n N</code> and prints the stats plus the
+worst-10 samples by sigma_min. Invalid mode exits non-zero with usage on
+stderr. The robot model is always the internal FABRI Creator with its base
+transform — consumers cannot inject a different robot.</p>
+<h2 id="consequences-5"><a class="header" href="#consequences-5">Consequences</a></h2>
+<ul>
+<li>The web cloud is now a real, repeatable conditioning map: same seed, same
+cloud, bit-identical arrays; <code>Date.now()</code> seeds keep interactive runs
+varied.</li>
+<li>DrawingPlane clouds visibly show the constrained variety (q5 rejection
+removes roughly a quarter of attempts in the far corners), while Full5Dof
+preserves the old free-joint look for comparison.</li>
+<li>10k–50k points transfer as flat buffers with zero per-sample allocation;
+the 1k chunking with yield keeps the main thread free between chunks and
+supports cancellation (a cancel flag checked between chunks).</li>
+<li>Colors are display-only: changing them never affects the gate decision,
+and the gate thresholds remain the only arbiter of warn/block behavior.</li>
+<li><code>generateWorkspace</code> is deleted; the app’s old “mostrar/ocultar workspace”
+toggle is replaced by the Run Analysis panel (N selector 1k/5k/10k/50k,
+mode selector, progress, cancel, stats, N &gt; 0 validation).</li>
+<li>The RNG is a 40-line zero-dependency module; the sampler adds no new
+dependencies to core or wasm.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>
