@@ -1,6 +1,7 @@
 use super::errors::{Error, Result};
 use super::joint::{Joint, JointType};
 use super::link::DHParams;
+use super::tool_frame::ToolFrame;
 
 pub struct Segment {
     pub joint: Joint,
@@ -15,6 +16,8 @@ pub struct Robot {
     pub servo_offsets: Vec<f64>,
 
     pub servo_directions: Vec<f64>,
+
+    tool: ToolFrame,
 }
 
 impl Segment {
@@ -45,6 +48,7 @@ impl Robot {
             home_pose: vec![0.0; n],
             servo_offsets: vec![0.0; n],
             servo_directions: vec![1.0; n],
+            tool: ToolFrame::marker_perpendicular(),
         }
     }
 
@@ -59,6 +63,7 @@ impl Robot {
             home_pose,
             servo_offsets,
             servo_directions: vec![1.0; n],
+            tool: ToolFrame::marker_perpendicular(),
         }
     }
 
@@ -73,7 +78,17 @@ impl Robot {
             home_pose,
             servo_offsets,
             servo_directions,
+            tool: ToolFrame::marker_perpendicular(),
         }
+    }
+
+    pub fn with_tool(mut self, tool: ToolFrame) -> Self {
+        self.tool = tool;
+        self
+    }
+
+    pub fn tool(&self) -> &ToolFrame {
+        &self.tool
     }
 
     pub fn q_to_servo(&self, q: &[f64]) -> Vec<f64> {

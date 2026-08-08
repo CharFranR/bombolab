@@ -1,6 +1,8 @@
 //! Unit tests for `segment_tests`.
 
 use super::*;
+use crate::math::Iso3;
+use crate::robot::ToolFrame;
 
 fn make_test_segment(joint_type: JointType, value: f64) -> Segment {
     let joint = Joint::new(joint_type, value, 1.0, -1.0);
@@ -89,4 +91,22 @@ fn test_robot_reset_to_zero() {
     let mut robot = Robot::new(segments);
     robot.reset_to_zero();
     assert_eq!(robot.segments[0].joint.value, 0.0);
+}
+
+#[test]
+fn test_robot_tool_default_marker_perpendicular() {
+    let robot = Robot::new(vec![make_test_segment(JointType::Revolute, 0.0)]);
+    let tool = robot.tool();
+    assert_eq!(tool.name(), "marker_perpendicular");
+    assert_eq!(tool.pose().translation.vector.x, 75.0);
+    assert_eq!(tool.pose().translation.vector.y, 0.0);
+    assert_eq!(tool.pose().translation.vector.z, 0.0);
+}
+
+#[test]
+fn test_robot_with_tool_custom() {
+    let custom = ToolFrame::new(Iso3::translation(40.0, 0.0, 0.0), "custom".to_string());
+    let robot = Robot::new(vec![]).with_tool(custom);
+    assert_eq!(robot.tool().name(), "custom");
+    assert_eq!(robot.tool().pose().translation.vector.x, 40.0);
 }

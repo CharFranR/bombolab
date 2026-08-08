@@ -116,6 +116,7 @@ fn robot_from_js(js_robot: &JsRobotDef) -> Robot {
         })
         .collect();
     Robot::new(segments)
+        .with_tool(ToolFrame::new(array_to_iso3(&js_robot.tool_transform), "js".to_string()))
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ fn robot_from_js_value(js_robot: &JsValue) -> Result<JsRobotDef, JsValue> {
 pub fn fabri_creator() -> Result<JsValue, JsValue> {
     let robot = make_fabri_creator();
     let base = make_base_transform();
-    let tool = *ToolFrame::marker_perpendicular().pose();
+    let tool = *robot.tool().pose();
 
     let js_robot = JsRobotDef {
         segments: robot
@@ -184,7 +185,7 @@ pub fn forward_kinematics(js_robot: &JsValue) -> Result<JsValue, JsValue> {
 
     let (frames, _ee) = fk(base, &robot);
 
-    let tool = array_to_iso3(&js_robot.tool_transform);
+    let tool = *robot.tool().pose();
     let tool_pose = match frames.last() {
         Some(frame) => *frame * tool,
         None => return Err(JsValue::from_str("robot has no segments")),
@@ -207,7 +208,7 @@ pub fn solve_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> Result<Js
     let js_robot = robot_from_js_value(js_robot)?;
     let robot = robot_from_js(&js_robot);
     let base = array_to_iso3(&js_robot.base_transform);
-    let tool = array_to_iso3(&js_robot.tool_transform);
+    let tool = *robot.tool().pose();
 
     if target.len() < 3 {
         return Err(JsValue::from_str("target must have at least 3 values"));
@@ -234,7 +235,7 @@ pub fn solve_ik(js_robot: &JsValue, target: &[f64], q_init: &[f64]) -> Result<Js
                         Segment::new(joint, seg.dh) // DHParams es Copy
                     })
                     .collect();
-                Robot::new(segments)
+                Robot::new(segments).with_tool(robot.tool().clone())
             };
             let (frames, _) = fk(base, &solved_robot);
             let tool_pose = frames
@@ -287,7 +288,7 @@ pub fn solve_drawing_ik(
     let js_robot = robot_from_js_value(js_robot)?;
     let robot = robot_from_js(&js_robot);
     let base = array_to_iso3(&js_robot.base_transform);
-    let tool = array_to_iso3(&js_robot.tool_transform);
+    let tool = *robot.tool().pose();
 
     if target.len() < 3 {
         return Err(JsValue::from_str("target must have at least 3 values"));
@@ -363,7 +364,7 @@ pub fn solve_drawing_ik_v2(
     let js_robot = robot_from_js_value(js_robot)?;
     let robot = robot_from_js(&js_robot);
     let base = array_to_iso3(&js_robot.base_transform);
-    let tool = array_to_iso3(&js_robot.tool_transform);
+    let tool = *robot.tool().pose();
 
     if target.len() < 3 {
         return Err(JsValue::from_str("target must have at least 3 values"));
@@ -435,7 +436,7 @@ pub fn solve_drawing_plane_ik(
     let js_robot = robot_from_js_value(js_robot)?;
     let robot = robot_from_js(&js_robot);
     let base = array_to_iso3(&js_robot.base_transform);
-    let tool = array_to_iso3(&js_robot.tool_transform);
+    let tool = *robot.tool().pose();
 
     if target.len() < 3 {
         return Err(JsValue::from_str("target must have at least 3 values"));
@@ -506,7 +507,7 @@ fn compute_position_error(
                 Segment::new(joint, seg.dh) // DHParams es Copy
             })
             .collect();
-        Robot::new(segments)
+        Robot::new(segments).with_tool(robot.tool().clone())
     };
     let (frames, _) = fk(*base, &solved);
     let tool_pose = frames

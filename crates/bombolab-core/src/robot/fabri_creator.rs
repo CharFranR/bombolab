@@ -55,13 +55,9 @@ pub fn fabri_creator() -> Robot {
     let servo_directions = vec![-1.0, -1.0, 1.0, -1.0, -1.0];
 
     Robot::with_directions(segments, home_pose, servo_offsets, servo_directions)
+        .with_tool(ToolFrame::marker_perpendicular())
 }
 
 pub fn base_transform() -> Iso3 {
     Iso3::translation(0.0, 0.0, 57.0)
-}
-
-#[deprecated(since = "0.2.0", note = "use ToolFrame::marker_perpendicular().pose()")]
-pub fn tool_transform() -> Iso3 {
-    *ToolFrame::marker_perpendicular().pose()
 }

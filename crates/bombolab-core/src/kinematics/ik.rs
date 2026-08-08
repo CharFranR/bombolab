@@ -70,6 +70,7 @@ fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
         robot.servo_offsets.clone(),
         robot.servo_directions.clone(),
     )
+    .with_tool(robot.tool().clone())
 }
 
 fn position_error(robot: &Robot, target: &[f64; 3], base: &Iso3, tool: &Iso3) -> f64 {
