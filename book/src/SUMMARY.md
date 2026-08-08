@@ -26,6 +26,7 @@
   - [ADR-0002: Serial Protocol in Microseconds](./adr/0002-serial-protocol-microseconds.md)
   - [ADR-0003: Tests Separate; Docs Not Comments](./adr/0003-tests-separate-docs-not-comments.md)
   - [ADR-0004: Tool-Frame Roll-Only Invariant](./adr/0004-tool-frame-roll-only-invariant.md)
+  - [ADR-0005: SVD Singularity Gate per Waypoint](./adr/0005-singularity-gate.md)
 
 # CLI Tools
 

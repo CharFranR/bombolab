@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>ADRs - Bombolab</title>
+        <title>ADR-0005: SVD Singularity Gate per Waypoint - Bombolab</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/charfranr/bombolab" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/charfranr/bombolab/edit/main/docs/src/book/src/adr/index.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/charfranr/bombolab/edit/main/docs/src/book/src/adr/0005-singularity-gate.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,44 +180,130 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture Decision Records</a></h1>
-<p>Architecture Decision Records (ADRs) capture the significant decisions of
-bombolab: the problem, the chosen option, and the consequences. They follow the
-classic format (Status, Context, Decision, Consequences) and are the primary
-mechanism for recording <em>why</em> the code is the way it is — the code documents
-itself, the ADRs document the decisions.</p>
+                        <h1 id="adr-0005-svd-singularity-gate-per-waypoint"><a class="header" href="#adr-0005-svd-singularity-gate-per-waypoint">ADR-0005: SVD Singularity Gate per Waypoint</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>ADR-0001 derives the constrained drawing IK on the variety</p>
+<pre><code>M = { q4 = 0, q5 = −(q2+q3) }
+</code></pre>
+<p>using the chain-rule reduced Jacobian</p>
+<pre><code>Jᵣ = [ J₁ , J₂ − J₅ , J₃ − J₅ ].
+</code></pre>
+<p>The web pre-flight <code>validateDrawingCommands</code> proves every sampled waypoint
+sits inside the reachable drawing band, but reachability says nothing about
+the conditioning of <code>Jᵣ</code> at that waypoint. A trajectory whose waypoints are
+all reachable can still force the arm through a pose where the drawing-plane
+motion loses a degree of freedom — the Jacobian degenerates and the IK solve
+becomes ill-conditioned or diverges.</p>
+<p>A numerical probe of the FABRI Creator (4 mm sampling, warm-started solves,
+finite-difference verification of <code>Jᵣ</code> with d = 1e-6) establishes the
+singularity landscape before any gate thresholds are chosen:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>ADR</th><th>Topic</th><th>Status</th></tr>
+<tr><th>Probe</th><th>Result</th></tr>
 </thead>
 <tbody>
-<tr><td><a href="./0001-constrained-drawing-ik.html">0001</a></td><td>Constrained drawing IK with reduced Jacobian</td><td>Accepted</td></tr>
-<tr><td><a href="./0002-serial-protocol-microseconds.html">0002</a></td><td>Serial wire protocol in microseconds</td><td>Accepted</td></tr>
-<tr><td><a href="./0003-tests-separate-docs-not-comments.html">0003</a></td><td>Tests in separate files; docs, not comments</td><td>Accepted</td></tr>
-<tr><td><a href="./0004-tool-frame-roll-only-invariant.html">0004</a></td><td>Tool-frame roll-only invariant</td><td>Accepted</td></tr>
-<tr><td><a href="./0005-singularity-gate.html">0005</a></td><td>SVD singularity gate per waypoint</td><td>Accepted</td></tr>
+<tr><td>Square 5x5 cm @ (200,0) z80, 40 pts</td><td>sigma_min in [81.96, 82.05] mm, kappa &lt;= 2.77 — silent</td></tr>
+<tr><td>Lines demo, 483 pts</td><td>sigma_min &gt;= 76.47 mm, kappa &lt;= 3.10 — silent</td></tr>
+<tr><td>Arc r180, 141 pts</td><td>sigma_min &gt;= 83.15 mm, kappa &lt;= 2.18 — silent</td></tr>
+<tr><td>Grid z in [60..120], r &lt;= 320 mm</td><td>min sigma_min 19.76 mm at z120 outer corner; max kappa 16.72</td></tr>
+<tr><td>Radial theta=0 z80</td><td>IK fails for r &lt; 160 (J5 pitch limit q5 = −q23 -&gt; ±115°); at r = 160, q23 ≈ 107°, sigma_min = 78 mm</td></tr>
+<tr><td>Artificial double-fold q23 -&gt; 180° (metrics only)</td><td>sigma_min: 63 mm at 115°, 45 at 135°, 31 at 150°, 15 at 165°, 0.0 at 180° (det -&gt; 3.4e-11)</td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="how-to-add-an-adr"><a class="header" href="#how-to-add-an-adr">How to add an ADR</a></h2>
+<p>Two facts follow:</p>
 <ol>
-<li>Create <code>book/src/adr/NNNN-short-title.md</code> following the format of the
-existing records.</li>
-<li>Add it to this index and to <code>SUMMARY.md</code>.</li>
-<li>Record the status honestly: <code>Proposed</code> while under discussion, <code>Accepted</code>
-once adopted, <code>Superseded</code> when replaced.</li>
+<li><strong>The singularity locus det Jᵣ = 0 is the double-fold q23 -&gt; 180°</strong> (TCP
+collapses onto the J1 axis). It is unreachable: the J5 pitch hard stop at
+q23 = ±115° halts the arm at r ≈ 139 mm with sigma_min ≈ 63 mm. That stop
+is a joint limit, NOT a Jacobian degeneracy.</li>
+<li><strong>Inside joint limits the arm has a conditioning floor</strong>: sigma_min &gt;=
+~19.8 mm and kappa &lt;= ~17 across the reachable workspace. The historical
+“77 mm corner” is not singular either — corners measure sigma_min ≈ 82 mm;
+the 77 mm value was the pre-ADR-0001 free-wrist z-deviation.</li>
 </ol>
+<p>The only realistic block event for this arm is therefore warm-started IK
+non-convergence (pitch-limit crossing or a q jump between samples). The
+sigma_min/kappa block thresholds remain as a safety net for other tools and
+robots.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Gate every drawing trajectory between reachability validation and playback
+creation. The core owns the analysis: it samples the path, solves warm-started
+IK, computes <code>Jᵣ</code>, and classifies every sampled waypoint with the SVD of
+<code>Jᵣ</code> (nalgebra, wasm-safe). The web layer renders the result and never
+re-derives it.</p>
+<ul>
+<li><strong>Thresholds</strong> (calibrated, parameterized, defaults in <code>SingularityThresholds</code>):
+<ul>
+<li>warn: sigma_min &lt; 25 mm OR kappa &gt; 20</li>
+<li>block: sigma_min &lt; 5 mm OR kappa &gt; 100 OR warm-started IK non-convergence</li>
+<li>The warn values are 1.25x above the worst in-band measurements (19.8 mm /
+16.7) and the shipped demo paths are verified silent.</li>
+</ul>
+</li>
+<li><strong>Sampling</strong>: 4 mm step, capped at 5000 solved points (step grows past the
+cap), warm-started from the previous waypoint’s converged q — never from
+ZERO_Q — with the first point at <code>kinematic_home()</code>. Worst-N = 10 waypoints
+sorted by sigma_min. Deterministic by construction: no RNG anywhere in the
+gate.</li>
+<li><strong>Classification policy</strong>: one block waypoint blocks the whole trajectory;
+otherwise one warn waypoint warns; otherwise the gate is silent.</li>
+<li><strong>Web behavior</strong>: block sets <code>drawingBlock</code> (reason + offending waypoint +
+canRefit for gcode) and playback never starts; warn appends to
+<code>gcodeWarnings</code> and asks a draw-anyway confirm, after which playback
+proceeds with the ORIGINAL command list — the gate never mutates the
+trajectory (MP-1). Non-convergence rows report the last converged q and zero
+metrics, mirroring the binding’s <code>converged: false</code> convention.</li>
+</ul>
+<h3 id="payload-contract-analyze_path_singularity"><a class="header" href="#payload-contract-analyze_path_singularity">Payload contract (<code>analyze_path_singularity</code>)</a></h3>
+<pre><code>{
+  "sampled": number,
+  "worst": [
+    {
+      "index": number,
+      "target": [x, y, z],
+      "q": [q1, q2, q3, q4, q5],
+      "sigma_min": number,
+      "kappa": number,
+      "yoshikawa": number,
+      "level": "ok" | "warn" | "block",
+      "reason": "metrics" | "ik_non_convergence"
+    }
+  ]
+}
+</code></pre>
+<p><code>worst</code> holds at most 10 waypoints. <code>level</code> is the waypoint classification;
+<code>reason</code> distinguishes a threshold violation from a failed warm-started IK
+solve. Thresholds travel from the web wrapper, never hardcoded in core.</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>The demo paths (square, lines, arc) stay silent; a real gcode job crossing
+the pitch limit is blocked with a concrete reason instead of failing
+mid-drawing.</li>
+<li>Because the J5 pitch stop is a joint limit, not a degeneracy, block events
+are reported as IK non-convergence — the reason field makes this
+diagnosable in the UI.</li>
+<li>The gate is a pre-flight guarantee: no forbidden movement is ever commanded;
+draw-anyway requires explicit user confirmation and leaves the trajectory
+unchanged.</li>
+<li>Thresholds are parameters; a future tool or robot re-calibrates them in the
+web wrapper and this ADR, not in core code.</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../architecture/design-decisions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../adr/0004-tool-frame-roll-only-invariant.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../adr/0001-constrained-drawing-ik.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../cli/dh-solve.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -227,11 +313,11 @@ once adopted, <code>Superseded</code> when replaced.</li>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../architecture/design-decisions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../adr/0004-tool-frame-roll-only-invariant.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../adr/0001-constrained-drawing-ik.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../cli/dh-solve.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
