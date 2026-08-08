@@ -10,6 +10,7 @@ import { runSingularityGate } from './motion/singularityGate';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
+import { planTimeline, type PlanSample } from './motion/planTimeline';
 import { downloadTraceCsv } from './motion/csv';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
@@ -18,6 +19,7 @@ import JointControls from './components/JointControls';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
+import PlanExecPanel from './components/PlanExecPanel';
 import { loadGcodeText, mapDrawFailureToErrorCode, type LoadGcodeTextResult } from './cipra/loadGcodeText';
 import { jobReducer, initialJobState, queueFull, shouldCompleteCipraDraw, type CipraJob } from './cipra/jobStore';
 import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
@@ -63,6 +65,7 @@ export default function App() {
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
+  const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
   const [gcodeName, setGcodeName] = useState<string | null>(null);
@@ -364,6 +367,7 @@ export default function App() {
     setDrawingBlock(null);
     traceRecorderRef.current?.discard();
     setTraceResult(null);
+    setTracePlan(null);
     setValidating(false);
     setRobotMode('normal');
     setIkMode(false);
@@ -509,12 +513,21 @@ export default function App() {
     lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
+    setTracePlan(
+      planTimeline(cmds, {
+        ik: drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk,
+        robot,
+        startQ: robot.segments.map((s) => s.q),
+        gripperPct: gripper,
+        startTcp: start,
+      }),
+    );
     traceRecorderRef.current?.start();
     setTraceResult(null);
     setPlayerState('running');
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
     return true;
-  }, [playerId, transitioning, robot, robotMode, gcodeName]);
+  }, [playerId, transitioning, robot, robotMode, drawingMode, gripper, gcodeName]);
 
   // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
   // picker and the CIPRA arrival "Dibujar" action both go through this so
@@ -665,6 +678,7 @@ export default function App() {
     setTracePath([]);
     traceRecorderRef.current?.discard();
     setTraceResult(null);
+    setTracePlan(null);
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
       setPlayerId(null);
@@ -1831,6 +1845,7 @@ export default function App() {
                   </div>
                 )}
               </div>
+              <PlanExecPanel trace={traceResult} plan={tracePlan} />
               <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
                 Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
                 {playerId !== null && playerState !== 'idle' && (

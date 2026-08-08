@@ -174,3 +174,30 @@ describe('render — CS-4 vocabulario honesto (X-1)', () => {
     expect(html).not.toContain('desviación por joint');
   });
 });
+
+describe('render — charts inline-SVG (D7, patrón ServoCalibAnalyzer)', () => {
+  it('renders jitter and per-joint deviation charts when a plan is present', () => {
+    const html = renderToStaticMarkup(<PlanExecPanel trace={TRACE} plan={PLAN} />);
+    expect(html).toContain('data-chart="jitter"');
+    expect(html).toContain('data-chart="deviation"');
+    expect(html).toContain('Error de envío por muestra (jitter)');
+    expect(html).toContain('Desviación por joint (comandado vs planificado)');
+    expect((html.match(/<circle/g) ?? []).length).toBe(21);
+  });
+
+  it('renders the gaps chart when valid gaps exist, with the 1 s reference', () => {
+    const html = renderToStaticMarkup(<PlanExecPanel trace={GAP_TRACE} plan={PLAN5} />);
+    expect(html).toContain('data-chart="gaps"');
+    expect(html).toContain('Gaps entre frames');
+    expect(html).toContain('ref 1 s');
+    expect((html.match(/<circle/g) ?? []).length).toBe(38);
+  });
+
+  it('omits compared charts without a plan but keeps the trace-derived gaps chart', () => {
+    const html = renderToStaticMarkup(<PlanExecPanel trace={GAP_TRACE} plan={null} />);
+    expect(html).toContain('data-chart="gaps"');
+    expect(html).not.toContain('data-chart="jitter"');
+    expect(html).not.toContain('data-chart="deviation"');
+    expect((html.match(/<circle/g) ?? []).length).toBe(3);
+  });
+});

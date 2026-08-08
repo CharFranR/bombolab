@@ -106,8 +106,38 @@ function fmtUs(v: number): string {
   return v.toFixed(0);
 }
 
+function SeriesChart({ values, unit, refValue }: { values: number[]; unit: string; refValue?: number }) {
+  const W = 380;
+  const H = 110;
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values, 1);
+  const x = (i: number) => (values.length > 1 ? (i / (values.length - 1)) * W : W / 2);
+  const y = (v: number) => H - 10 - ((v - min) / (max - min)) * (H - 18);
+  return (
+    <svg width={W} height={H} style={{ marginTop: 4, background: '#1a1a1e', borderRadius: 4 }}>
+      <line x1={0} y1={y(0)} x2={W} y2={y(0)} stroke="#2c2c32" strokeWidth={1} />
+      {[0.25, 0.5, 0.75].map((f) => (
+        <line key={f} x1={W * f} y1={4} x2={W * f} y2={H - 10} stroke="#2c2c32" strokeWidth={1} />
+      ))}
+      {refValue !== undefined && (
+        <line x1={0} y1={y(refValue)} x2={W} y2={y(refValue)} stroke="#884" strokeWidth={1} strokeDasharray="4 3" />
+      )}
+      {values.map((v, i) => (
+        <circle key={i} cx={x(i)} cy={y(v)} r={2.5} fill="#c98" />
+      ))}
+      <text x={4} y={10} fontSize={8} fill="#777">
+        {unit}
+        {refValue !== undefined ? ` · ref ${refValue / MS_PER_S} s` : ''}
+      </text>
+    </svg>
+  );
+}
+
 function PanelBody({ active, plan }: { active: TraceResult; plan: PlanSample[] | null }) {
   const summary = summaryOf(active, plan);
+  const gaps = useMemo(() => gapsOf(active.samples), [active]);
+  const jitter = useMemo(() => (plan ? sendTimeErrors(plan, active.samples) : null), [active, plan]);
+  const deviation = useMemo(() => (plan ? deviationSeries(plan, active.samples) : null), [active, plan]);
   return (
     <>
       <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#aaa', marginBottom: 4 }}>
@@ -138,6 +168,31 @@ function PanelBody({ active, plan }: { active: TraceResult; plan: PlanSample[] |
             .join(' · ')}
           {' · global media '}
           {fmtUs(summary.deviation.globalMean)} µs · máx {fmtUs(summary.deviation.globalMax)} µs
+        </div>
+      )}
+      {jitter !== null && (
+        <div data-chart="jitter" style={{ marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: '#888' }}>Error de envío por muestra (jitter)</div>
+          <SeriesChart values={jitter} unit="ms" />
+        </div>
+      )}
+      {gaps.length > 0 && (
+        <div data-chart="gaps" style={{ marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: '#888' }}>Gaps entre frames · ref 1 s</div>
+          <SeriesChart values={gaps} unit="ms" refValue={1000} />
+        </div>
+      )}
+      {deviation !== null && (
+        <div data-chart="deviation" style={{ marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 2 }}>
+            Desviación por joint (comandado vs planificado)
+          </div>
+          {deviation.map((series, j) => (
+            <div key={j} style={{ marginBottom: 4 }}>
+              <span style={{ fontSize: 9, color: '#666' }}>{JOINT_LABELS[j]}</span>
+              <SeriesChart values={series} unit="µs" />
+            </div>
+          ))}
         </div>
       )}
     </>
