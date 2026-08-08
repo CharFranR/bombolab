@@ -1,4 +1,4 @@
-import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk, motion_player_new as wasmMotionPlayerNew, motion_player_play as wasmMotionPlayerPlay, motion_player_pause as wasmMotionPlayerPause, motion_player_resume as wasmMotionPlayerResume, motion_player_stop as wasmMotionPlayerStop, motion_player_update as wasmMotionPlayerUpdate, motion_player_state as wasmMotionPlayerState, motion_player_target as wasmMotionPlayerTarget, motion_player_progress as wasmMotionPlayerProgress, motion_player_drop as wasmMotionPlayerDrop } from './pkg/bombolab_wasm';
+import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk, analyze_path_singularity as wasmAnalyzePathSingularity, motion_player_new as wasmMotionPlayerNew, motion_player_play as wasmMotionPlayerPlay, motion_player_pause as wasmMotionPlayerPause, motion_player_resume as wasmMotionPlayerResume, motion_player_stop as wasmMotionPlayerStop, motion_player_update as wasmMotionPlayerUpdate, motion_player_state as wasmMotionPlayerState, motion_player_target as wasmMotionPlayerTarget, motion_player_progress as wasmMotionPlayerProgress, motion_player_drop as wasmMotionPlayerDrop } from './pkg/bombolab_wasm';
 import type { RobotDef, Segment, Mat4 } from './kinematics/types';
 import { DEFAULT_TOOL_TRANSFORM } from './kinematics/types';
 import type { MotionCommandJS } from './motion/commands';
@@ -165,6 +165,53 @@ export function solveDrawingPlaneIk(
 ): { q: number[]; converged: boolean; error: number } {
   const wasmRobot = robotToWasm(robot);
   const result = wasmSolveDrawingPlaneIk(wasmRobot, new Float64Array(target), new Float64Array(qInit)) as unknown as WasmIkResult;
+  return result;
+}
+
+export type SingularityLevelJs = 'ok' | 'warn' | 'block';
+export type SingularityReasonJs = 'metrics' | 'ik_non_convergence';
+
+export interface SingularityWaypointJS {
+  index: number;
+  target: [number, number, number];
+  q: [number, number, number, number, number];
+  sigma_min: number;
+  kappa: number;
+  yoshikawa: number;
+  level: SingularityLevelJs;
+  reason: SingularityReasonJs;
+}
+
+export interface SingularityReportJS {
+  sampled: number;
+  worst: SingularityWaypointJS[];
+}
+
+export interface SingularityThresholdsJS {
+  warn_sigma_min: number;
+  warn_kappa: number;
+  block_sigma_min: number;
+  block_kappa: number;
+}
+
+export const DEFAULT_SINGULARITY_THRESHOLDS: SingularityThresholdsJS = {
+  warn_sigma_min: 25,
+  warn_kappa: 20,
+  block_sigma_min: 5,
+  block_kappa: 100,
+};
+
+export function analyzePathSingularity(
+  robot: RobotDef,
+  commands: MotionCommandJS[],
+  thresholds: SingularityThresholdsJS = DEFAULT_SINGULARITY_THRESHOLDS,
+): SingularityReportJS {
+  const wasmRobot = robotToWasm(robot);
+  const result = wasmAnalyzePathSingularity(
+    wasmRobot,
+    commands as unknown as object,
+    thresholds,
+  ) as unknown as SingularityReportJS;
   return result;
 }
 

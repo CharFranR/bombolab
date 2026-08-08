@@ -5,6 +5,7 @@ import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, sol
 import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type MotionCommandJS } from './motion/commands';
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
+import { runSingularityGate } from './motion/singularityGate';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
@@ -443,6 +444,7 @@ export default function App() {
       return false;
     }
     setValidating(false);
+    const canRefit = key === 'gcode' && (lastGcodeRef.current?.name ?? gcodeName) != null;
 
     if (!reach.ok) {
       const isDemo = key !== 'gcode';
@@ -453,10 +455,18 @@ export default function App() {
           ' punto(s) fuera del rango de trabajo del robot. No se dibuja para evitar movimientos prohibidos.' +
           (isDemo ? ' Prueba con otro tamaño o posición del demo.' : ''),
         points: reach.failures,
-        canRefit: key === 'gcode' && (lastGcodeRef.current?.name ?? gcodeName) != null,
+        canRefit,
       });
       return false;
     }
+
+    const gateProceed = await runSingularityGate(robot, cmds, {
+      canRefit,
+      confirmFn: (message) => window.confirm(message + '\n\n¿Dibujar de todos modos?'),
+      setDrawingBlock,
+      setGcodeWarnings: (updater) => setGcodeWarnings(updater),
+    });
+    if (!gateProceed) return false;
 
     // Start the trajectory from the robot's current tool-tip pose (the TCP),
     // NOT the base. fk.ee is the tool pose (frame_last * tool_transform); in the

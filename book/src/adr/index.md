@@ -12,6 +12,7 @@ itself, the ADRs document the decisions.
 | [0002](./0002-serial-protocol-microseconds.md) | Serial wire protocol in microseconds | Accepted |
 | [0003](./0003-tests-separate-docs-not-comments.md) | Tests in separate files; docs, not comments | Accepted |
 | [0004](./0004-tool-frame-roll-only-invariant.md) | Tool-frame roll-only invariant | Accepted |
+| [0005](./0005-singularity-gate.md) | SVD singularity gate per waypoint | Accepted |
 
 ## How to add an ADR
 
