@@ -6,6 +6,7 @@ pub const PEN_LENGTH: f64 = 90.0;
 
 pub const GRIPPER_LENGTH: f64 = 45.0;
 
+#[derive(Clone)]
 pub struct ToolFrame {
     pose: Iso3,
     name: String,

@@ -1,7 +1,7 @@
 //! Unit tests for `ik_tests`.
 
 use super::*;
-use crate::robot::fabri_creator;
+use crate::robot::{ToolFrame, fabri_creator};
 
 fn make_test() -> (IkSolver, Robot, Iso3, Iso3) {
     let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
@@ -198,4 +198,14 @@ fn solve_unreachable_returns_max_iterations() {
 
     let result = solver.solve_position(&target, &q_init, &robot, &base, &tool);
     assert!(matches!(result, Err(IkError::MaxIterationsReached { .. })));
+}
+
+#[test]
+fn build_robot_preserves_custom_tool() {
+    let custom = ToolFrame::new(Iso3::translation(120.0, 5.0, 0.0), "custom".to_string());
+    let robot = fabri_creator().with_tool(custom);
+    let rebuilt = build_robot(&robot, &[0.0; 5]);
+    assert_eq!(rebuilt.tool().name(), "custom");
+    assert_eq!(rebuilt.tool().pose().translation.vector.x, 120.0);
+    assert_eq!(rebuilt.tool().pose().translation.vector.y, 5.0);
 }

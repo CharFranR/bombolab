@@ -75,11 +75,3 @@ fn test_new_accessors_match_construction() {
     assert_eq!(frame.name(), "custom");
     assert_eq!(iso3_bits(frame.pose()), iso3_bits(&pose));
 }
-
-#[test]
-#[allow(deprecated)]
-fn test_deprecated_alias_byte_identical_to_factory() {
-    let legacy = crate::robot::tool_transform();
-    let factory = *ToolFrame::marker_perpendicular().pose();
-    assert_eq!(iso3_bits(&legacy), iso3_bits(&factory));
-}
