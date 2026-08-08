@@ -575,10 +575,6 @@ fn js_report_from_core(report: &GateReport) -> JsGateReport {
     }
 }
 
-/// Per-waypoint singularity analysis over a command list.
-///
-/// Returns `{sampled, worst: [{index, target, q, sigma_min, kappa,
-/// yoshikawa, level, reason}]}`; `level` is "ok" | "warn" | "block".
 #[wasm_bindgen]
 pub fn analyze_path_singularity(
     js_robot: &JsValue,
