@@ -9,6 +9,7 @@ import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_
 import { runSingularityGate } from './motion/singularityGate';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
+import { TraceRecorder } from './motion/trace';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
@@ -95,6 +96,7 @@ export default function App() {
   const [calibLog, setCalibLog] = useState<{ joint: number; from: number; to: number; moved: boolean }[]>([]);
   const portRef = useRef<SerialPort | null>(null);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
+  const traceRecorderRef = useRef<TraceRecorder | null>(null);
 
   // Backlash take-up per channel — EXPERIMENTAL and DISABLED by default:
   // the A/B test showed a fixed 2°/1° compensation made the drawing WORSE
@@ -222,8 +224,12 @@ export default function App() {
       // Start the interpolation scheduler from the current pose and push
       // one frame so the firmware leaves its boot/home state.
       const initial = [...qToServoUs(robot.segments.map(s => s.q)), gripperToServoUs(gripper)];
+      if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
       servoInterpolatorRef.current = new ServoInterpolator(
-        (wire) => sendSerial(port, wire),
+        (wire) => {
+          traceRecorderRef.current?.record(wire);
+          sendSerial(port, wire);
+        },
         initial,
         { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
       );
@@ -494,6 +500,7 @@ export default function App() {
     lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
+    traceRecorderRef.current?.start();
     setPlayerState('running');
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
     return true;
