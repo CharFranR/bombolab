@@ -161,11 +161,6 @@ pub fn fabri_creator() -> Result<JsValue, JsValue> {
     to_js_value(&js_robot)
 }
 
-/// Tool-frame preset pose by name: `"marker"`, `"pen"` or `"gripper"`.
-///
-/// Returns the pose in the same 12-float wire format as
-/// `JsRobotDef.tool_transform` (rotation + translation). Unknown names are
-/// rejected. Additive seam for a future tool selector.
 #[wasm_bindgen]
 pub fn tool_frame_preset(name: &str) -> Result<JsValue, JsValue> {
     let frame = match name {

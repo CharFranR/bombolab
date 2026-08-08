@@ -1,5 +1,3 @@
-//! Unit tests for `tool_frame`.
-
 use super::*;
 use crate::math::Iso3;
 

@@ -61,9 +61,6 @@ pub fn base_transform() -> Iso3 {
     Iso3::translation(0.0, 0.0, 57.0)
 }
 
-/// Legacy marker tool pose: 75 mm along X with identity rotation.
-///
-/// Deprecated in favor of [`ToolFrame::marker_perpendicular`].
 #[deprecated(since = "0.2.0", note = "use ToolFrame::marker_perpendicular().pose()")]
 pub fn tool_transform() -> Iso3 {
     *ToolFrame::marker_perpendicular().pose()
