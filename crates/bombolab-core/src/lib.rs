@@ -17,8 +17,10 @@ pub use math::{
     DEG_TO_RAD, DualQuaternion, Iso3, LinkParams, PI, RAD_TO_DEG, Rot3, gravity_vector,
     inertia_matrix,
 };
+#[allow(deprecated)]
+pub use robot::tool_transform;
 pub use robot::{
     DHParams, Error, Joint, JointType, Result, Robot, Segment, ToolFrame, base_transform,
-    fabri_creator, tool_transform,
+    fabri_creator,
 };
 pub use trajectory::{MAX_DT, MotionCommand, MotionPlayer, PlayerState, TrajectoryPlanner};

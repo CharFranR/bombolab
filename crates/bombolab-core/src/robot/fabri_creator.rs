@@ -5,6 +5,7 @@ use crate::math::Iso3;
 use super::joint::{Joint, JointType};
 use super::link::DHParams;
 use super::segment::{Robot, Segment};
+use super::tool_frame::ToolFrame;
 
 pub fn fabri_creator() -> Robot {
     let q_j1_j2 = 85.0_f64.to_radians();
@@ -60,6 +61,10 @@ pub fn base_transform() -> Iso3 {
     Iso3::translation(0.0, 0.0, 57.0)
 }
 
+/// Legacy marker tool pose: 75 mm along X with identity rotation.
+///
+/// Deprecated in favor of [`ToolFrame::marker_perpendicular`].
+#[deprecated(since = "0.2.0", note = "use ToolFrame::marker_perpendicular().pose()")]
 pub fn tool_transform() -> Iso3 {
-    Iso3::translation(75.0, 0.0, 0.0)
+    *ToolFrame::marker_perpendicular().pose()
 }

@@ -7,7 +7,7 @@ fn make_test() -> (IkSolver, Robot, Iso3, Iso3) {
     let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
     let robot = fabri_creator();
     let base = crate::robot::base_transform();
-    let tool = crate::robot::tool_transform();
+    let tool = *crate::robot::ToolFrame::marker_perpendicular().pose();
     (solver, robot, base, tool)
 }
 
