@@ -27,10 +27,11 @@ are added.
 2. **Binary tests** (`src/bin/...`) cannot use sibling files: Cargo
    auto-discovers every `*.rs` in `src/bin/` as an independent binary. They
    live in `src/bin/<bin>/<bin>_tests.rs`.
-3. **Code is documented, not commented.** No inline comments that restate the
-   *what*. Explanation lives in: rustdoc on public API, ADRs (this directory),
-   and the mdbook documentation. Inline comments are reserved for non-obvious
-   mathematical invariants, and even those prefer the docs.
+3. **Code is documented, not commented — and carries zero doc comments.**
+   No inline comments and no rustdoc (`///`, `//!`) in source files. All
+   explanation lives in the ADRs (this directory) and the mdbook
+   documentation. Non-obvious invariants (e.g. the roll-only constraint in
+   ADR-0004) are recorded in ADRs, never as prose inside the code.
 
 ## Consequences
 

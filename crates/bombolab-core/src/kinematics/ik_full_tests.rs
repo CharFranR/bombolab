@@ -12,7 +12,7 @@ fn make_base() -> Iso3 {
 }
 
 fn make_tool() -> Iso3 {
-    crate::robot::tool_transform()
+    *crate::robot::ToolFrame::marker_perpendicular().pose()
 }
 
 fn get_rot3(iso: &Iso3) -> Rot3 {
@@ -544,7 +544,7 @@ fn constrained_tcp(robot: &Robot, base: Iso3, q13: &[f64; 3]) -> Vec3 {
     let q = [q13[0], q13[1], q13[2], 0.0, -(q13[1] + q13[2])];
     let robot_q = build_robot(robot, &q);
     let (frames, _) = forward_kinematics(base, &robot_q);
-    let tool = crate::robot::tool_transform();
+    let tool = *crate::robot::ToolFrame::marker_perpendicular().pose();
     (frames.last().unwrap() * tool).translation.vector
 }
 

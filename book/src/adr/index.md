@@ -11,6 +11,7 @@ itself, the ADRs document the decisions.
 | [0001](./0001-constrained-drawing-ik.md) | Constrained drawing IK with reduced Jacobian | Accepted |
 | [0002](./0002-serial-protocol-microseconds.md) | Serial wire protocol in microseconds | Accepted |
 | [0003](./0003-tests-separate-docs-not-comments.md) | Tests in separate files; docs, not comments | Accepted |
+| [0004](./0004-tool-frame-roll-only-invariant.md) | Tool-frame roll-only invariant | Accepted |
 
 ## How to add an ADR
 
