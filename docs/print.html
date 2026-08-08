@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-207142e2.js";
+            window.path_to_searchindex_js = "searchindex-c3d80eca.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-abe62b1a.js"></script>
+        <script src="toc-23254f79.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2012,6 +2012,7 @@ itself, the ADRs document the decisions.</p>
 <tr><td><a href="#adr-0004-tool-frame-roll-only-invariant">0004</a></td><td>Tool-frame roll-only invariant</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0005-svd-singularity-gate-per-waypoint">0005</a></td><td>SVD singularity gate per waypoint</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0006-deterministic-workspace-analysis-cloud">0006</a></td><td>Deterministic workspace analysis cloud</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0007-plan-vs-execution-trace">0007</a></td><td>Plan vs. execution trace and comparison</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -2421,6 +2422,145 @@ toggle is replaced by the Run Analysis panel (N selector 1k/5k/10k/50k,
 mode selector, progress, cancel, stats, N &gt; 0 validation).</li>
 <li>The RNG is a 40-line zero-dependency module; the sampler adds no new
 dependencies to core or wasm.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0007-plan-vs-execution-trace"><a class="header" href="#adr-0007-plan-vs-execution-trace">ADR-0007: Plan vs. Execution Trace</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context-6"><a class="header" href="#context-6">Context</a></h2>
+<p>The web app commands the arm through a single serial write path (the
+<code>ServoInterpolator</code> send callback in <code>App.tsx</code>): every commanded frame —
+interpolator steps and the one-second keep-alive heartbeat — leaves through
+that callback. When a drawing run looks wrong, the only evidence is the drawn
+output or a live look at the viewer. There is no record of what was actually
+commanded, when, or how the commanded stream differed from the intended plan.</p>
+<p>The platform has no encoders: the firmware reports nothing about the arm’s
+physical pose. Any metric derived here is a statement about the COMMANDED wire
+stream versus the PLANNED stream — never about physical accuracy, repeatability,
+or servo response. This vocabulary constraint is load-bearing: labeling a
+wire-vs-plan delta as “accuracy” would claim a measurement the hardware cannot
+make.</p>
+<h2 id="decision-6"><a class="header" href="#decision-6">Decision</a></h2>
+<p>Record every wire frame host-side by wrapping the single interpolator send
+callback, build an analytic plan timeline from the same command list, compare
+the two, and export the trace as CSV. Four pure TypeScript modules in
+<code>web/src/motion/</code> (<code>trace.ts</code>, <code>planTimeline.ts</code>, <code>comparator.ts</code>, <code>csv.ts</code>),
+thin React glue in <code>App.tsx</code>, and one export button beside the playback
+controls. Slice 2 adds an import panel with per-joint SVG charts.</p>
+<h3 id="vocabulary"><a class="header" href="#vocabulary">Vocabulary</a></h3>
+<ul>
+<li><strong>Commanded</strong>: what the wire actually carried — a frame written to the serial
+port (measured, with timestamps).</li>
+<li><strong>Planned</strong>: the analytic expectation derived from the command list and the
+robot’s IK — a model, not a measurement.</li>
+<li><strong>Deviation</strong>: |commanded − planned| in wire units (µs). It measures how the
+commanded stream differs from the plan. It is NOT accuracy, precision, or
+error of the physical arm.</li>
+<li><strong>Send-time error</strong>: commanded timestamp − expected plan timestamp. It
+measures when the wire frame left the host, not when the servo moved.</li>
+</ul>
+<p>“Accuracy” and “precision” phrasing is banned in UI labels and docs for this
+feature: there are no encoders, so nothing here measures the physical arm.</p>
+<h3 id="trace-model-dedupe-heartbeat"><a class="header" href="#trace-model-dedupe-heartbeat">Trace model (dedupe heartbeat)</a></h3>
+<p>Each recorded frame becomes <code>{ ts_ms, q_us[6], count }</code>:</p>
+<ul>
+<li><code>ts_ms</code> — first send time relative to the run start (<code>performance.now()</code>,
+µs resolution in ms).</li>
+<li><code>q_us</code> — the six wire values as integer µs (J1..J5 + gripper).</li>
+<li><code>count</code> — consecutive identical frames coalesced into one sample (the
+one-second keep-alive heartbeat re-sends the same frame, so a held pose
+accumulates count instead of inflating the timeline).</li>
+</ul>
+<p>The model deliberately keeps only the FIRST timestamp plus count: gap
+statistics consume first-ts and count only, which keeps the CSV round-trip
+exact. Coalescing is strictly consecutive — an identical frame after a
+different frame is a new sample.</p>
+<p>Capacity is capped at 100 000 samples (≈10 h at 20 frames/s). Overflow stops
+recording and flags the run as <code>truncated</code>.</p>
+<h3 id="plan-timeline"><a class="header" href="#plan-timeline">Plan timeline</a></h3>
+<p><code>planTimeline(cmds, { ik, robot, startQ, gripperPct, dt = 0.05, startTcp })</code>
+samples the analytic trajectory every <code>dt</code> seconds:</p>
+<ul>
+<li><code>move</code> → linear segment at <code>speed</code> (duration = distance / speed);</li>
+<li><code>wait</code> → hold the last commanded pose;</li>
+<li><code>penUp</code> / <code>penDown</code> → instant, no time, no pose change.</li>
+</ul>
+<p>The IK function is injected so tests use deterministic fakes; production passes
+the same solver wrapper the app uses. Playback semantics are mirrored exactly:
+a target that moved less than 0.5 mm skips the solve, a failed solve holds the
+previous q, and q is converted to wire µs via <code>qToServoUs</code> + <code>gripperToServoUs</code>
+so plan and trace share units. Consecutive identical samples coalesce with a
+count, exactly like the trace, so a wait becomes one sample with <code>count ≈ duration/dt</code>.</p>
+<h3 id="comparator-ordinal-alignment"><a class="header" href="#comparator-ordinal-alignment">Comparator (ordinal alignment)</a></h3>
+<p>Both sequences are aligned ordinally (index to index) on their common t0 —
+plan time is in seconds, trace time in ms; the comparator converts plan times
+to ms. Metrics:</p>
+<ul>
+<li><strong>send-time error</strong> per paired sample: <code>trace.ts_ms − plan.t*1000</code>, reported
+as mean, max |error|, and sample σ (n−1).</li>
+<li><strong>inter-frame gaps</strong> over the full trace: min/mean/max/σ, count, and how many
+exceed 1 s. Pairs adjacent to a <code>count &gt; 1</code> sample are excluded — that is the
+heartbeat-dedupe exclusion, so a held pose never inflates gap stats.
+Throttled gaps (browser background tabs clamp the rAF delta to MAX_DT 0.1)
+stay in the stats raw; nothing is normalized away.</li>
+<li><strong>commanded-vs-planned deviation</strong> per joint (mean, max) and global
+(mean, max), in µs of wire value.</li>
+<li><strong>duration</strong>: plan (last plan sample time plus coalesced hold ticks at the
+plan dt) vs real (last observed frame timestamp).</li>
+</ul>
+<p>Paired samples only cover <code>min(plan, trace)</code> indices; gap and duration metrics
+always use observed timestamps only — never an assumed tick rate. The trace’s
+interpolator sub-frames (5° steps) and heartbeat frames mean the trace is
+typically longer than the plan; ordinal pairing is a deliberate, documented
+approximation, not a time-warped alignment.</p>
+<h3 id="csv-format"><a class="header" href="#csv-format">CSV format</a></h3>
+<pre><code>ts_ms,j1_us,j2_us,j3_us,j4_us,j5_us,j6_us,count
+0,544,1472,1379,1523,1162,1678,1
+50.1234567890123,1472,1472,1379,1523,1162,1678,2
+</code></pre>
+<ul>
+<li>One row per sample, header fixed as above.</li>
+<li><code>ts_ms</code> is the first send time relative to the run start; joint values and
+count are integers.</li>
+<li>Import parses symmetrically and reproduces samples, counts, and the derived
+fields (<code>framesWritten = Σ count</code>, <code>dedupe = Σ (count−1)</code>). Malformed rows
+(wrong arity, non-numeric, non-positive count, wrong header) throw without
+any partial state. <code>t0</code> and <code>truncated</code> are not part of the CSV: <code>t0</code> is an
+absolute wall-clock anchor meaningless across sessions, and truncation is
+a runtime flag, so an imported trace reports <code>truncated = false</code>.</li>
+<li>Export is a pure function of the trace: exporting twice yields byte-identical
+files and never mutates state.</li>
+</ul>
+<h3 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h3>
+<ul>
+<li>A playback run resets and starts the recorder after <code>motionPlayerPlay</code>.</li>
+<li>Pause, stop, and the completed state finalize the trace (finalized = frozen,
+exportable).</li>
+<li>Pause → resume keeps the trace finalized: the resumed segment is untraced —
+honest, and ordinal alignment is preserved because the trace keeps only
+distinct commanded frames.</li>
+<li>Replay (from stopped/completed) starts a fresh trace.</li>
+<li>Discard paths (clear block, failed CIPRA draw, exit drawing mode) drop the
+trace and disable export.</li>
+</ul>
+<h2 id="consequences-6"><a class="header" href="#consequences-6">Consequences</a></h2>
+<ul>
+<li>The app gains a record of every commanded frame with host timestamps, an
+analytic plan to compare against, and an honest vocabulary for what the
+comparison means.</li>
+<li>No protocol, firmware, or core changes: the hook wraps the existing send
+callback, so the wire path is untouched (rollback = unhook the callback and
+delete the modules).</li>
+<li>Deviation is measured in wire µs, which conflates plan-model error with
+quantization and clamping; the ADR documents that the plan is a model, not
+ground truth.</li>
+<li>The trace has no encoders, so nothing can be said about the physical arm —
+any future “did the servo actually move” question requires different
+hardware, not more host-side statistics.</li>
+<li>Duration comparisons are lower bounds: the trace knows when frames left the
+host, not when the arm finished moving.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>
