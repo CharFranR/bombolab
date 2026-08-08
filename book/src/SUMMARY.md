@@ -21,6 +21,10 @@
 
 - [Project Structure](./architecture/project-structure.md)
 - [Design Decisions](./architecture/design-decisions.md)
+- [ADRs](./adr/index.md)
+  - [ADR-0001: Constrained Drawing IK](./adr/0001-constrained-drawing-ik.md)
+  - [ADR-0002: Serial Protocol in Microseconds](./adr/0002-serial-protocol-microseconds.md)
+  - [ADR-0003: Tests Separate; Docs Not Comments](./adr/0003-tests-separate-docs-not-comments.md)
 
 # CLI Tools
 

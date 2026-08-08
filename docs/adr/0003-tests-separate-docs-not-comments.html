@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>DH Parameters - Bombolab</title>
+        <title>ADR-0003: Tests Separate; Docs Not Comments - Bombolab</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/charfranr/bombolab" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/charfranr/bombolab/edit/main/docs/src/book/src/core-concepts/dh-parameters.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/charfranr/bombolab/edit/main/docs/src/book/src/adr/0003-tests-separate-docs-not-comments.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,146 +180,60 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="dh-parameters"><a class="header" href="#dh-parameters">DH Parameters</a></h1>
-<p><strong>Denavit-Hartenberg parameters describe the geometry between consecutive joints in a robot arm.</strong> Each link has exactly four parameters that define how one frame is positioned relative to the next.</p>
-<p>Bombolab uses the <strong>Craig convention</strong> (also called the modified DH convention).</p>
-<h2 id="the-four-parameters"><a class="header" href="#the-four-parameters">The Four Parameters</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Parameter</th><th>Symbol</th><th>Meaning</th><th>Unit</th></tr>
-</thead>
-<tbody>
-<tr><td><strong>theta</strong></td><td>θ</td><td>Rotation around Z axis</td><td>radians</td></tr>
-<tr><td><strong>d</strong></td><td>d</td><td>Translation along Z axis</td><td>length (m, mm)</td></tr>
-<tr><td><strong>a</strong></td><td>a</td><td>Translation along X axis (link length)</td><td>length (m, mm)</td></tr>
-<tr><td><strong>alpha</strong></td><td>α</td><td>Rotation around X axis (twist)</td><td>radians</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="what-each-parameter-does"><a class="header" href="#what-each-parameter-does">What Each Parameter Does</a></h2>
-<h3 id="theta-θ--rotation-around-z"><a class="header" href="#theta-θ--rotation-around-z">theta (θ) – Rotation Around Z</a></h3>
-<p>The angle the current frame rotates around its Z axis. For revolute joints, this is the joint variable.</p>
-<pre><code>theta = 0       →  link points in +X direction
-theta = π/2     →  link points in +Y direction
-theta = π       →  link points in -X direction
-</code></pre>
-<h3 id="d--translation-along-z"><a class="header" href="#d--translation-along-z">d – Translation Along Z</a></h3>
-<p>How far the current frame is offset from the previous one along Z. For prismatic joints, this is the joint variable.</p>
+                        <h1 id="adr-0003-tests-in-separate-files-code-is-documented-not-commented"><a class="header" href="#adr-0003-tests-in-separate-files-code-is-documented-not-commented">ADR-0003: Tests in Separate Files; Code Is Documented, Not Commented</a></h1>
 <ul>
-<li><code>d = 5</code> → the base is 5 units tall</li>
-<li><code>d = 0</code> → no vertical offset</li>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
 </ul>
-<h3 id="a--link-length-translation-along-x"><a class="header" href="#a--link-length-translation-along-x">a – Link Length (Translation Along X)</a></h3>
-<p>The distance from the current Z axis to the next Z axis, measured along X. This is the physical length of the link.</p>
-<p>When theta changes, the link length projects into the XY plane:</p>
-<pre><code>X component = a * cos(theta)
-Y component = a * sin(theta)
-</code></pre>
-<h3 id="alpha-α--twist-between-z-axes"><a class="header" href="#alpha-α--twist-between-z-axes">alpha (α) – Twist Between Z Axes</a></h3>
-<p><strong>This is the key to 3D robots.</strong> Alpha rotates the frame around X to reorient Z for the next joint.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>alpha</th><th>Effect</th></tr>
-</thead>
-<tbody>
-<tr><td>0</td><td>Z axes are parallel – arm stays in one plane</td></tr>
-<tr><td>π/2</td><td>Next Z is perpendicular – arm changes plane</td></tr>
-<tr><td>-π/2</td><td>Next Z is perpendicular (opposite direction)</td></tr>
-<tr><td>π</td><td>Z axes are anti-parallel</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Without alpha, all joints rotate in the same 2D plane.</strong> With alpha, you can model real 3D robots like articulated arms with shoulder elbows.</p>
-<h2 id="the-a-matrix"><a class="header" href="#the-a-matrix">The A Matrix</a></h2>
-<p>Each set of DH parameters produces a 4x4 transformation matrix:</p>
-<pre><code>A_i = RotZ(θ) · TransZ(d) · TransX(a) · RotX(α)
-</code></pre>
-<p>Expanded:</p>
-<pre><code>A_i = ┌ cos(θ)  -sin(θ)cos(α)   sin(θ)sin(α)   a·cos(θ) ┐
-      │ sin(θ)   cos(θ)cos(α)  -cos(θ)sin(α)   a·sin(θ) │
-      │   0        sin(α)          cos(α)           d      │
-      └   0          0                0              1      ┘
-</code></pre>
-<p>Bombolab computes this with <code>compute_a_matrix()</code>:</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p><code>ik.rs</code> had grown to 1,608 lines, roughly half of them tests, and the codebase
+carried a large amount of inline comments (many of them AI-generated boilerplate
+that restated what the code already showed). Reviewers spent effort on whitespace
+and noise instead of behavior. The team also wanted a durable answer to
+“where do tests live” as new analysis features (SVD gates, workspace sampling)
+are added.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<ol>
+<li><strong>Tests live in sibling files</strong> <code>foo_tests.rs</code> next to the source module.
+They are declared as child modules of the module under test so they keep
+access to private items:
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use bombolab_core::{DHParameter, compute_a_matrix};
-
-let p = DHParameter::new(0.0, 1.0, 0.5, 0.0); // alpha, a, d, theta
-let a_matrix = compute_a_matrix(p);
-// a_matrix is a nalgebra::Matrix4&lt;f64&gt;
+</span>#[cfg(test)]
+#[path = "ik_tests.rs"]
+mod ik_tests;
 <span class="boring">}</span></code></pre>
-<h2 id="dhparameter-vs-dhparams"><a class="header" href="#dhparameter-vs-dhparams">DHParameter vs DHParams</a></h2>
-<p>Bombolab has two DH parameter types for different contexts:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th>Module</th><th>Purpose</th></tr>
-</thead>
-<tbody>
-<tr><td><code>DHParameter</code></td><td><code>math::dh</code></td><td>Standalone numeric parameters for the solver</td></tr>
-<tr><td><code>DHParams</code></td><td><code>robot::link</code></td><td>Fixed geometry stored in a robot segment</td></tr>
-</tbody>
-</table>
-</div>
-<p>They have the same four fields but live in different parts of the system. <code>DHParameter</code> is used by the math solver; <code>DHParams</code> is part of the robot model.</p>
-<h2 id="symbolic-support"><a class="header" href="#symbolic-support">Symbolic Support</a></h2>
-<p>The <code>dh-solve</code> CLI supports symbolic values. Instead of numbers, you can enter variable names:</p>
-<pre><code>α: 0
-a: L1
-d: 0
-θ: theta1
-</code></pre>
-<p>This produces symbolic A matrices showing the trigonometric expressions rather than numeric values. Useful for deriving closed-form solutions.</p>
-<p>The symbolic type is <code>DHParameterSymbolic</code> with <code>DHValue::Num(f64) | DHValue::Sym(String)</code>.</p>
-<h2 id="example-2-link-planar-arm"><a class="header" href="#example-2-link-planar-arm">Example: 2-Link Planar Arm</a></h2>
-<p>A simple arm with two revolute joints, both rotating in the XY plane:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Link</th><th>α</th><th>a</th><th>d</th><th>θ</th></tr>
-</thead>
-<tbody>
-<tr><td>1</td><td>0</td><td>1.0</td><td>0</td><td>θ₁</td></tr>
-<tr><td>2</td><td>0</td><td>1.0</td><td>0</td><td>θ₂</td></tr>
-</tbody>
-</table>
-</div>
-<p>With θ₁ = 0, θ₂ = 0: end-effector at (2.0, 0.0, 0.0)
-With θ₁ = π/2, θ₂ = 0: end-effector at (0.0, 2.0, 0.0)</p>
-<h2 id="example-3d-arm-with-plane-change"><a class="header" href="#example-3d-arm-with-plane-change">Example: 3D Arm with Plane Change</a></h2>
-<p>A shoulder-elbow robot that moves in 3D:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Link</th><th>α</th><th>a</th><th>d</th><th>θ</th></tr>
-</thead>
-<tbody>
-<tr><td>1 (base)</td><td>0</td><td>0</td><td>5.0</td><td>θ₁</td></tr>
-<tr><td>2 (shoulder)</td><td>π/2</td><td>3.0</td><td>0</td><td>θ₂</td></tr>
-<tr><td>3 (elbow)</td><td>0</td><td>2.0</td><td>0</td><td>θ₃</td></tr>
-</tbody>
-</table>
-</div>
-<p>The α = π/2 at the shoulder twists the plane so the arm can reach up and out.</p>
-<h2 id="references"><a class="header" href="#references">References</a></h2>
+Rust edition 2024 requires the <code>#[path]</code> attribute because <code>mod X;</code> inside
+<code>foo.rs</code> resolves to <code>foo/X.rs</code> (a subdirectory), not a sibling file.</li>
+<li><strong>Binary tests</strong> (<code>src/bin/...</code>) cannot use sibling files: Cargo
+auto-discovers every <code>*.rs</code> in <code>src/bin/</code> as an independent binary. They
+live in <code>src/bin/&lt;bin&gt;/&lt;bin&gt;_tests.rs</code>.</li>
+<li><strong>Code is documented, not commented.</strong> No inline comments that restate the
+<em>what</em>. Explanation lives in: rustdoc on public API, ADRs (this directory),
+and the mdbook documentation. Inline comments are reserved for non-obvious
+mathematical invariants, and even those prefer the docs.</li>
+</ol>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
 <ul>
-<li><a href="./forward-kinematics.html">Forward Kinematics</a> – how A matrices compose into the full solution</li>
-<li><a href="./robot-model.html">Robot Model</a> – how DH parameters fit into the Segment/Robot structs</li>
-<li><a href="../cli/dh-solve.html">dh-solve CLI</a> – interactive DH table solver</li>
+<li><code>ik.rs</code> shrank from 1,608 to 529 lines; the extracted test modules are
+byte-identical in content.</li>
+<li>161 unit tests + 1 integration test + 6 ws-bridge tests remain green;
+<code>clippy -D warnings</code> and <code>cargo fmt --check</code> stay clean.</li>
+<li>Test names now include the module path
+(<code>math::jacobian::jacobian_tests::...</code>), which makes failure output more
+specific.</li>
+<li>New code must follow the rule: documentation artifacts, not comments.</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../getting-started/quick-start.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../adr/0002-serial-protocol-microseconds.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../core-concepts/forward-kinematics.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../cli/dh-solve.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -329,11 +243,11 @@ With θ₁ = π/2, θ₂ = 0: end-effector at (0.0, 2.0, 0.0)</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../getting-started/quick-start.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../adr/0002-serial-protocol-microseconds.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../core-concepts/forward-kinematics.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../cli/dh-solve.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

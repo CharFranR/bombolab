@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-65767c36.js";
+            window.path_to_searchindex_js = "searchindex-01a7f806.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4e9e8c5a.js"></script>
+        <script src="toc-b353f33e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -920,75 +920,78 @@ let pos = tool.translation.vector;
 println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 <span class="boring">}</span></code></pre>
 <h2 id="dh-parameters-1"><a class="header" href="#dh-parameters-1">DH Parameters</a></h2>
-<p>Craig convention, units: millimeters. These values come from <strong>physical measurements</strong> of the actual FABRI Creator robot — link lengths, joint offsets, and twist angles measured with calipers and protractors.</p>
+<p>Standard DH convention, units: millimeters. These values are defined in <code>crates/bombolab-core/src/robot/fabri_creator.rs</code> and verified against the physical robot through the web simulator.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Type</th><th>Source</th></tr>
+<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Type</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>-90°</td><td>15</td><td>95</td><td>θ₁</td><td>Revolute</td><td>15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z</td></tr>
-<tr><td>2</td><td>0°</td><td>0</td><td>162</td><td>θ₂</td><td>Revolute</td><td>162mm vertical link (J2→J3); no horizontal offset (pure vertical)</td></tr>
-<tr><td>3</td><td>-90°</td><td>111</td><td>0</td><td>θ₃</td><td>Revolute</td><td>111mm horizontal link (J3→J4); twist -90° reorients rotation plane</td></tr>
-<tr><td>4</td><td>90°</td><td>35</td><td>0</td><td>—</td><td><strong>Twist</strong></td><td>35mm horizontal link (J4→J5); joint value adds to α, rotates about X</td></tr>
-<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>θ₅</td><td>Revolute</td><td>Zero-length final joint (wrist pitch); tool transform handles the rest</td></tr>
+<tr><td>1</td><td>-90°</td><td>15</td><td>85</td><td>q₁</td><td>Revolute</td></tr>
+<tr><td>2</td><td>0°</td><td>120</td><td>0</td><td>q₂ − 90°</td><td>Revolute</td></tr>
+<tr><td>3</td><td>-90°</td><td>90</td><td>0</td><td>q₃ + 90°</td><td>Revolute</td></tr>
+<tr><td>4</td><td>90°</td><td>35</td><td>15</td><td>—</td><td><strong>Twist</strong> (α = q₄ + 90°)</td></tr>
+<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>q₅</td><td>Revolute</td></tr>
 </tbody>
 </table>
 </div>
 <p><strong>Why these values?</strong></p>
 <ul>
-<li><strong>α₁ = -90°</strong>: J1 rotates around Z (yaw), but J2 rotates around a horizontal axis. The -90° twist reorients from vertical to horizontal.</li>
-<li><strong>a₁ = 15mm</strong>: The physical offset between J1’s rotation axis and J2’s rotation axis. Measured from the center of the base servo horn to the shoulder servo horn.</li>
-<li><strong>d₂ = 162mm</strong>: The longest link — the “upper arm” connecting shoulder to elbow. This is the main vertical segment.</li>
-<li><strong>a₃ = 111mm</strong>: The “forearm” link from elbow to wrist. Combined with a₄, gives the robot its reach.</li>
-<li><strong>a₄ = 35mm</strong>: Short link from wrist roll to wrist pitch. The 35mm offset is the physical distance between the two wrist servo axes.</li>
+<li><strong>α₁ = -90°</strong>: J1 rotates around Z (yaw). The -90° twist reorients the next Z axis from vertical to horizontal so J2 can pitch the arm up and down.</li>
+<li><strong>a₁ = 15 mm</strong>: Horizontal offset from J1 rotation axis to J2 axis, measured from the center of the base servo horn.</li>
+<li><strong>d₁ = 85 mm</strong>: Vertical offset from J1 to J2 along Z₁ (7 cm base plate + 15 mm hardware).</li>
+<li><strong>a₂ = 120 mm</strong>: The “upper arm” link from shoulder to elbow. This is the main reaching segment. In home pose this link points upward (Z direction after the accumulated rotation).</li>
+<li><strong>a₃ = 90 mm</strong>: The “forearm” link from elbow to wrist. Combined with a₄ this gives the robot its horizontal reach.</li>
+<li><strong>a₄ = 35 mm</strong>: Short link from wrist roll to wrist pitch. The physical distance between the two wrist servo axes.</li>
+<li><strong>d₄ = 15 mm</strong>: Lateral offset of the wrist assembly from the forearm axis.</li>
 </ul>
 <p><strong>Joint types:</strong></p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Joint</th><th>Type</th><th>Motion</th><th>DH Formula</th></tr>
+<tr><th>Joint</th><th>Type</th><th>Motion</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td>J1</td><td>Revolute</td><td>Base yaw</td><td><code>RotZ(θ₁+q) · TransZ(d₁) · TransX(a₁) · RotX(α₁)</code></td></tr>
-<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch</td><td><code>RotZ(θ₂+q) · TransZ(d₂) · TransX(a₂) · RotX(α₂)</code></td></tr>
-<tr><td>J3</td><td>Revolute</td><td>Elbow pitch</td><td><code>RotZ(θ₃+q) · TransZ(d₃) · TransX(a₃) · RotX(α₃)</code></td></tr>
-<tr><td>J4</td><td><strong>Twist</strong></td><td>Wrist roll (X-axis)</td><td><strong><code>RotX(α₄+q) · TransX(a₄)</code></strong></td></tr>
-<tr><td>J5</td><td>Revolute</td><td>Wrist pitch</td><td><code>RotZ(θ₅+q) · TransZ(d₅) · TransX(a₅) · RotX(α₅)</code></td></tr>
+<tr><td>J1</td><td>Revolute</td><td>Base yaw (Z₀)</td><td>Standard DH: <code>RotZ(q₁) · TransZ(85) · TransX(15) · RotX(-90°)</code></td></tr>
+<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch (Z₁)</td><td>Standard DH: <code>RotZ(q₂−90°) · TransZ(0) · TransX(120) · RotX(0)</code></td></tr>
+<tr><td>J3</td><td>Revolute</td><td>Elbow pitch (Z₂)</td><td>Standard DH: <code>RotZ(q₃+90°) · TransZ(0) · TransX(90) · RotX(-90°)</code></td></tr>
+<tr><td>J4</td><td><strong>Twist</strong></td><td>Wrist roll (X₃)</td><td><strong><code>Iso3::from_parts((35,15,0), Rot_X(q₄+90°))</code></strong></td></tr>
+<tr><td>J5</td><td>Revolute</td><td>Wrist pitch (Z₄)</td><td>Standard DH: <code>RotZ(q₅) · TransZ(0) · TransX(0) · RotX(0)</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>J4 uses <code>Twist</code> instead of <code>Revolute</code> because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type swaps the rotation axis from Z to X, and the joint value adds directly to <code>alpha</code> instead of <code>theta</code>.</p>
+<p>J4 uses <code>Twist</code> instead of <code>Revolute</code> because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type rotates around the X axis of the previous frame, and the translation is applied as <code>(a, d, 0)</code> in the local frame without further rotation — this is the behavior of <code>Iso3::from_parts(translation, rotation)</code> in nalgebra. The joint variable q₄ adds to α₄ rather than θ₄.</p>
 <h2 id="physical-dimensions"><a class="header" href="#physical-dimensions">Physical Dimensions</a></h2>
-<pre><code>        marcador
-           ↑ 75mm (tool transform)
-           |
-        J5 ──── J4 ──── J3
-                         |
-                         | 111mm (a₃)
-                         |
-                        J2
-                       /
-                      / 162mm (d₂)
+<pre><code>         marcador
+            ↑ 75mm (tool transform)
+            |
+         J5 ──── J4 ──── J3
+                          |
+                          | 90mm (a₃)
+                          |
+                         J2
+                        /
+                       / 120mm (a₂, vertical in home)
+                      /
                      /
-                    /
-                   J1 ← 15mm offset (a₁)
-                   |
-              57mm base (base transform)
+                    J1 ← 15mm offset (a₁)
+                    |
+               57mm base (base transform)
 </code></pre>
 <p>The robot stands 57mm above its mounting surface. The base servo (J1) rotates the entire arm. The shoulder (J2) and elbow (J3) provide the main reach. The wrist has two degrees of freedom: roll (J4) and pitch (J5).</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Parameter</th><th>Value</th><th>Measurement Source</th></tr>
+<tr><th>Parameter</th><th>Value</th><th>Source</th></tr>
 </thead>
 <tbody>
-<tr><td>Base height</td><td>57mm</td><td>Distance from mounting surface to J1 rotation axis</td></tr>
-<tr><td>J1→J2</td><td>15mm horizontal, 95mm vertical</td><td>Caliper measurement of base-to-shoulder offset</td></tr>
-<tr><td>J2→J3</td><td>162mm vertical</td><td>Length of upper arm link</td></tr>
-<tr><td>J3→J4</td><td>111mm horizontal</td><td>Length of forearm link</td></tr>
-<tr><td>J4→J5</td><td>35mm horizontal</td><td>Distance between wrist servo axes</td></tr>
-<tr><td>Tool (J5→marker)</td><td>75mm along X</td><td>Marker holder length; perpendicular to end effector</td></tr>
+<tr><td>Base height</td><td>57 mm</td><td>Distance from mounting surface to J1 rotation axis</td></tr>
+<tr><td>J1→J2 horizontal</td><td>15 mm</td><td>Measured from base servo center to shoulder servo horn</td></tr>
+<tr><td>J1→J2 vertical</td><td>85 mm</td><td>Base plate (70 mm) + hardware offset (15 mm)</td></tr>
+<tr><td>J2→J3 (upper arm)</td><td>120 mm</td><td>Length of upper arm link (vertical in home pose)</td></tr>
+<tr><td>J3→J4 (forearm)</td><td>90 mm</td><td>Length of forearm link (horizontal in home pose)</td></tr>
+<tr><td>J4→J5 (wrist)</td><td>35 mm horizontal, 15 mm lateral</td><td>Distance between wrist servo axes</td></tr>
+<tr><td>Tool (J5→marker)</td><td>75 mm along X</td><td>Marker holder length; perpendicular to end effector</td></tr>
 </tbody>
 </table>
 </div>
@@ -1028,14 +1031,13 @@ for seg in &amp;robot.segments {
 </thead>
 <tbody>
 <tr><td>J1</td><td>90°</td><td>Base centered (servo midpoint)</td></tr>
-<tr><td>J2</td><td>115°</td><td>Shoulder slightly raised (not vertical)</td></tr>
-<tr><td>J3</td><td>110°</td><td>Elbow bent (arm folded back slightly)</td></tr>
-<tr><td>J4</td><td>170°</td><td>Wrist rolled (corrected from Arduino default of 175°)</td></tr>
-<tr><td>J5</td><td>90°</td><td>Wrist pitch centered (servo midpoint)</td></tr>
+<tr><td>J2</td><td>90°</td><td>Shoulder at kinematic zero</td></tr>
+<tr><td>J3</td><td>81°</td><td>Elbow adjusted for physical alignment</td></tr>
+<tr><td>J4</td><td>95°</td><td>Wrist roll centered</td></tr>
+<tr><td>J5</td><td>60°</td><td>Wrist pitch with asymmetric limits</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Why J4 = 170° instead of 175°?</strong> The Arduino firmware originally defaulted J4 to 175°, but this exceeds <code>JOINT_MAX</code> (170°). The value was corrected to 170° to stay within mechanical safety limits. If your physical robot has J4 at 175°, the servo may be slightly misaligned — check the mechanical stop.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>let robot = fabri_creator();
@@ -1325,7 +1327,7 @@ assert_eq!(cmd.to_wire(), "90,115,110,170,90,90\n");
 
 let config = InterpolationConfig {
     step_size: 5,   // degrees per step
-    delay_ms: 40,   // milliseconds between steps
+    delay_ms: 100,  // milliseconds between steps (default)
 };
 <span class="boring">}</span></code></pre>
 <h3 id="single-joint"><a class="header" href="#single-joint">Single Joint</a></h3>
@@ -1551,10 +1553,32 @@ assert_eq!(j.ncols(), 2);
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="inverse-kinematics"><a class="header" href="#inverse-kinematics">Inverse Kinematics</a></h1>
-<p><strong>The IK solver finds joint angles that place the end effector at a desired position.</strong> You specify a 3D target, and the solver iteratively adjusts joint angles until the robot reaches it.</p>
-<h2 id="the-core-idea-1"><a class="header" href="#the-core-idea-1">The Core Idea</a></h2>
-<p>Forward kinematics answers: <em>given joint values, where is the end effector?</em> Inverse kinematics answers the opposite: <em>given a target position, what joint values get me there?</em></p>
-<p>For serial chains with more than a few joints, there’s no closed-form solution. Bombolab uses a <strong>damped pseudoinverse (Levenberg–Marquardt)</strong> approach:</p>
+<p><strong>The IK solver finds joint angles that place the end effector at a desired position and orientation.</strong> You specify a 3D target + rotation, and the solver returns joint angles.</p>
+<h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
+<p>The IK is split into two independent solvers composed into a pipeline:</p>
+<pre><code>TargetPose (position + rotation)
+      │
+      ▼
+ PositionSolver (DLS 3×n, posición)
+      │
+    q₁,q₂,q₃
+      │
+      ▼
+ FK parcial → R₀₃
+      │
+      ▼
+ OrientationSolver (analítico, 2-DOF wrist)
+   R₃₅ = R₀₃ᵀ · R_target
+   q₄ = atan2(-R₃₅[2,2], -R₃₅[1,2])
+   q₅ = atan2(-R₃₅[0,1],  R₃₅[0,0])
+      │
+    q₄,q₅
+      │
+      ▼
+ Solución: [q₁, q₂, q₃, q₄, q₅]
+</code></pre>
+<h2 id="position-solver-iksolver"><a class="header" href="#position-solver-iksolver">Position Solver (IkSolver)</a></h2>
+<p>The position solver uses a <strong>damped pseudoinverse (Levenberg–Marquardt)</strong> approach:</p>
 <pre><code>Δq = Jᵀ(J·Jᵀ + λ²·I)⁻¹ · Δx
 </code></pre>
 <p>Where:</p>
@@ -1665,11 +1689,74 @@ for (i, &amp;val) in q.iter().enumerate() {
     assert!(val.abs() &lt; 0.05, "J{} should be near 0", i + 1);
 }
 <span class="boring">}</span></code></pre>
-<h2 id="when-it-fails"><a class="header" href="#when-it-fails">When It Fails</a></h2>
+<h2 id="orientation-solver"><a class="header" href="#orientation-solver">Orientation Solver</a></h2>
+<p>The <code>OrientationSolver</code> handles the wrist analytically. Given R₀₃ (from the position solution) and R_target (desired tool orientation):</p>
+<pre><code>R₃₅ = R₀₃ᵀ · R_target
+
+q₄ = atan2(-R₃₅[2,2], -R₃₅[1,2])
+q₅ = atan2(-R₃₅[0,1],  R₃₅[0,0])
+</code></pre>
+<p>The FABRI Creator has a 2-DOF wrist (roll on X via Twist, pitch on Z via Revolute). There is <strong>no yaw</strong> — the condition <code>|R₃₅[0,2]| &lt; ε</code> tests reachability. If violated, the orientation is physically impossible.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{OrientationSolver, OrientationError};
+
+let orient_solver = OrientationSolver::new(1e-6);
+match orient_solver.solve(&amp;r03, &amp;r_target, &amp;robot) {
+    Ok([q4, q5]) =&gt; { /* wrist solution */ }
+    Err(OrientationError::UnreachableOrientation { .. }) =&gt; { /* not reachable */ }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="full-ik-pipeline"><a class="header" href="#full-ik-pipeline">Full IK Pipeline</a></h2>
+<p><code>solve_full_ik</code> composes position + orientation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{solve_full_ik, IkSolver, OrientationSolver};
+
+let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+let orient_solver = OrientationSolver::new(1e-6);
+let target = [200.0, 0.0, 80.0];
+let target_rot = /* any Rot3 */;
+
+let result = solve_full_ik(
+    &amp;pos_solver, &amp;orient_solver,
+    &amp;target, &amp;target_rot, &amp;[0.0; 5],
+    &amp;robot, &amp;base, &amp;tool,
+);
+<span class="boring">}</span></code></pre>
+<h2 id="drawing-mode"><a class="header" href="#drawing-mode">Drawing Mode</a></h2>
+<p>The <code>PoseGenerator</code> layer generates target poses for specific tasks without modifying the IK.</p>
+<h3 id="drawing-pose-modo-1--marker-along-x₅"><a class="header" href="#drawing-pose-modo-1--marker-along-x₅">Drawing Pose (Modo 1 — marker along X₅)</a></h3>
+<p>Constant orientation, works for centered positions (q₁ ≈ 0):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::PoseGenerator;
+
+let pose = PoseGenerator::drawing_pose([200.0, 0.0, 80.0]);
+// pose.rotation has X₅ = [0, 0, -1] (marker down)
+<span class="boring">}</span></code></pre>
+<h3 id="adaptive-drawing-pose-modo-2--marker-along-y₅"><a class="header" href="#adaptive-drawing-pose-modo-2--marker-along-y₅">Adaptive Drawing Pose (Modo 2 — marker along Y₅)</a></h3>
+<p>Orientation adapts to q₁: R_target(q₁) makes Y₅ = [0, 0, -1]. Works for <strong>any</strong> arm position where |q₂+q₃| &lt; 80°:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let pose = PoseGenerator::drawing_pose_v2([200.0, 80.0, 80.0], q1);
+<span class="boring">}</span></code></pre>
+<h3 id="convenience-functions"><a class="header" href="#convenience-functions">Convenience Functions</a></h3>
+<p><code>solve_drawing_ik</code> (modo 1) and <code>solve_drawing_ik_v2</code> (modo 2) run the full pipeline without manually composing:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{solve_drawing_ik_v2};
+
+let result = solve_drawing_ik_v2(
+    &amp;pos_solver, &amp;orient_solver,
+    &amp;target, &amp;[0.0; 5], &amp;robot, &amp;base, &amp;tool,
+);
+// Returns [q1, q2, q3, q4, q5] with the marker vertical
+<span class="boring">}</span></code></pre>
+<h3 id="when-it-fails"><a class="header" href="#when-it-fails">When It Fails</a></h3>
 <ul>
-<li><strong>Far from a reachable target:</strong> the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better <code>q_init</code> or use a multi-start strategy.</li>
-<li><strong>Near singularities:</strong> the solver handles this with damping, but extremely high joint speeds may still appear. Increase <code>damping</code> if the solver becomes unstable.</li>
-<li><strong>Unreachable target:</strong> the solver will hit <code>max_iterations</code> and return the best attempt with <code>MaxIterationsReached</code>.</li>
+<li><strong>Unreachable orientation:</strong> <code>IkError::UnreachableOrientation</code> — the target orientation cannot be achieved within joint limits. Falls back to position-only IK.</li>
+<li><strong>Unreachable position:</strong> same as position solver — <code>MaxIterationsReached</code>.</li>
 </ul>
 <h2 id="references-3"><a class="header" href="#references-3">References</a></h2>
 <ul>
@@ -1905,6 +1992,149 @@ for (i, &amp;val) in q.iter().enumerate() {
 <li><a href="#project-structure-1">Project Structure</a> – how these decisions map to the code layout</li>
 <li><a href="#dh-parameters">DH Parameters</a> – the Craig convention explained</li>
 <li><a href="#forward-kinematics">Forward Kinematics</a> – how multiplication order works</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture Decision Records</a></h1>
+<p>Architecture Decision Records (ADRs) capture the significant decisions of
+bombolab: the problem, the chosen option, and the consequences. They follow the
+classic format (Status, Context, Decision, Consequences) and are the primary
+mechanism for recording <em>why</em> the code is the way it is — the code documents
+itself, the ADRs document the decisions.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>ADR</th><th>Topic</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="#adr-0001-constrained-drawing-ik-with-reduced-jacobian">0001</a></td><td>Constrained drawing IK with reduced Jacobian</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0002-serial-wire-protocol-in-microseconds">0002</a></td><td>Serial wire protocol in microseconds</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0003-tests-in-separate-files-code-is-documented-not-commented">0003</a></td><td>Tests in separate files; docs, not comments</td><td>Accepted</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="how-to-add-an-adr"><a class="header" href="#how-to-add-an-adr">How to add an ADR</a></h2>
+<ol>
+<li>Create <code>book/src/adr/NNNN-short-title.md</code> following the format of the
+existing records.</li>
+<li>Add it to this index and to <code>SUMMARY.md</code>.</li>
+<li>Record the status honestly: <code>Proposed</code> while under discussion, <code>Accepted</code>
+once adopted, <code>Superseded</code> when replaced.</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0001-constrained-drawing-ik-with-reduced-jacobian"><a class="header" href="#adr-0001-constrained-drawing-ik-with-reduced-jacobian">ADR-0001: Constrained Drawing IK with Reduced Jacobian</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>The drawing mode solves inverse kinematics for a 5-DOF arm carrying a marker
+mounted perpendicular to the last joint axis. The original two-step solver
+(<code>solve_drawing_ik_v2</code>) first solved position with a free wrist (DLS, 5-DOF,
+1 mm tolerance) and then replaced q4/q5 with the analytic wrist orientation.
+This left the TCP deviating <strong>60–77 mm in z</strong> at the demo corner: the free-wrist
+solve converged to a pose whose wrist was ~60° away from the drawing posture.</p>
+<p>A second analysis showed that for a target reached with the drawing constraint,
+the orientation residual <code>R35 = R03ᵀ · R_target</code> is analytically
+<code>[c,s,0; 0,1,0; −s,c,0]</code>, which forces <strong>q4 = 0 and q5 = −(q2+q3) exactly</strong>
+(mod 2π). The search could therefore be restricted to a 3-DOF manifold.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Solve directly on the constrained variety</p>
+<pre><code>M = { q4 = 0, q5 = −(q2+q3) }
+</code></pre>
+<p>using the chain-rule reduced Jacobian</p>
+<pre><code>Jᵣ = [ J₁ , J₂ − J₅ , J₃ − J₅ ]
+</code></pre>
+<p>verified by finite differences (error ~2e-8). Reachability is checked before
+iterating with the test <code>|R35[0,2]| &lt; tol</code>, which is the exact reachability
+condition on the constrained variety.</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li>TCP deviation dropped to <strong>0.09–0.57 mm</strong> in the demo.</li>
+<li>The arm has <strong>no yaw axis</strong>: not all orientations in SO(3) are reachable;
+unreachable orientations are rejected deterministically.</li>
+<li>The wrist is never free during drawing: every iteration is a physically valid
+drawing posture.</li>
+<li>Null-space optimization does <strong>not apply</strong> to drawing mode: the wrist DOF are
+fixed by the constraint, not redundant.</li>
+<li>The drawing workspace is bounded by the J5 pitch limits (<code>q5 = −q23</code> must be
+within its range).</li>
+<li>The reduced Jacobian is also the basis for future per-waypoint analysis
+(singularity detection), since it is the exact linearization of the
+constrained motion.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0002-serial-wire-protocol-in-microseconds"><a class="header" href="#adr-0002-serial-wire-protocol-in-microseconds">ADR-0002: Serial Wire Protocol in Microseconds</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context-1"><a class="header" href="#context-1">Context</a></h2>
+<p>The serial protocol between the host (Rust core / web app) and the Arduino Nano
+started in joint degrees. Servo hardware is natively addressed in pulse widths
+(microseconds), so every degree value had to be converted at the firmware
+boundary, losing resolution and adding a unit convention to keep consistent on
+both sides.</p>
+<h2 id="decision-1"><a class="header" href="#decision-1">Decision</a></h2>
+<p>The wire now carries <strong>servo pulse widths in microseconds (500–2400 µs)</strong>, one
+channel per joint plus gripper (6 channels total). The firmware auto-detects
+units per frame: values ≤ 175 are interpreted as degrees (backward compatible),
+values ≥ 500 as microseconds. A heartbeat keeps the link failure detection
+fast and deterministic.</p>
+<h2 id="consequences-1"><a class="header" href="#consequences-1">Consequences</a></h2>
+<ul>
+<li>Full servo resolution on the wire (1 µs steps instead of 1° steps).</li>
+<li>The firmware conversion layer disappeared; it stores and forwards native
+pulse widths.</li>
+<li>Unit ambiguity is resolved by range detection, documented in
+<code>book/src/core-concepts/communication.md</code> and covered by the
+<code>cli_serial_test</code> integration test.</li>
+<li>Host pacing remains the responsibility of the host (interpolation delay and
+motion player <code>update(dt)</code>); the firmware is a deterministic executor.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0003-tests-in-separate-files-code-is-documented-not-commented"><a class="header" href="#adr-0003-tests-in-separate-files-code-is-documented-not-commented">ADR-0003: Tests in Separate Files; Code Is Documented, Not Commented</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context-2"><a class="header" href="#context-2">Context</a></h2>
+<p><code>ik.rs</code> had grown to 1,608 lines, roughly half of them tests, and the codebase
+carried a large amount of inline comments (many of them AI-generated boilerplate
+that restated what the code already showed). Reviewers spent effort on whitespace
+and noise instead of behavior. The team also wanted a durable answer to
+“where do tests live” as new analysis features (SVD gates, workspace sampling)
+are added.</p>
+<h2 id="decision-2"><a class="header" href="#decision-2">Decision</a></h2>
+<ol>
+<li><strong>Tests live in sibling files</strong> <code>foo_tests.rs</code> next to the source module.
+They are declared as child modules of the module under test so they keep
+access to private items:
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(test)]
+#[path = "ik_tests.rs"]
+mod ik_tests;
+<span class="boring">}</span></code></pre>
+Rust edition 2024 requires the <code>#[path]</code> attribute because <code>mod X;</code> inside
+<code>foo.rs</code> resolves to <code>foo/X.rs</code> (a subdirectory), not a sibling file.</li>
+<li><strong>Binary tests</strong> (<code>src/bin/...</code>) cannot use sibling files: Cargo
+auto-discovers every <code>*.rs</code> in <code>src/bin/</code> as an independent binary. They
+live in <code>src/bin/&lt;bin&gt;/&lt;bin&gt;_tests.rs</code>.</li>
+<li><strong>Code is documented, not commented.</strong> No inline comments that restate the
+<em>what</em>. Explanation lives in: rustdoc on public API, ADRs (this directory),
+and the mdbook documentation. Inline comments are reserved for non-obvious
+mathematical invariants, and even those prefer the docs.</li>
+</ol>
+<h2 id="consequences-2"><a class="header" href="#consequences-2">Consequences</a></h2>
+<ul>
+<li><code>ik.rs</code> shrank from 1,608 to 529 lines; the extracted test modules are
+byte-identical in content.</li>
+<li>161 unit tests + 1 integration test + 6 ws-bridge tests remain green;
+<code>clippy -D warnings</code> and <code>cargo fmt --check</code> stay clean.</li>
+<li>Test names now include the module path
+(<code>math::jacobian::jacobian_tests::...</code>), which makes failure output more
+specific.</li>
+<li>New code must follow the rule: documentation artifacts, not comments.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-65767c36.js";
+            window.path_to_searchindex_js = "../searchindex-01a7f806.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4e9e8c5a.js"></script>
+        <script src="../toc-b353f33e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,10 +181,32 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="inverse-kinematics"><a class="header" href="#inverse-kinematics">Inverse Kinematics</a></h1>
-<p><strong>The IK solver finds joint angles that place the end effector at a desired position.</strong> You specify a 3D target, and the solver iteratively adjusts joint angles until the robot reaches it.</p>
-<h2 id="the-core-idea"><a class="header" href="#the-core-idea">The Core Idea</a></h2>
-<p>Forward kinematics answers: <em>given joint values, where is the end effector?</em> Inverse kinematics answers the opposite: <em>given a target position, what joint values get me there?</em></p>
-<p>For serial chains with more than a few joints, there’s no closed-form solution. Bombolab uses a <strong>damped pseudoinverse (Levenberg–Marquardt)</strong> approach:</p>
+<p><strong>The IK solver finds joint angles that place the end effector at a desired position and orientation.</strong> You specify a 3D target + rotation, and the solver returns joint angles.</p>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<p>The IK is split into two independent solvers composed into a pipeline:</p>
+<pre><code>TargetPose (position + rotation)
+      │
+      ▼
+ PositionSolver (DLS 3×n, posición)
+      │
+    q₁,q₂,q₃
+      │
+      ▼
+ FK parcial → R₀₃
+      │
+      ▼
+ OrientationSolver (analítico, 2-DOF wrist)
+   R₃₅ = R₀₃ᵀ · R_target
+   q₄ = atan2(-R₃₅[2,2], -R₃₅[1,2])
+   q₅ = atan2(-R₃₅[0,1],  R₃₅[0,0])
+      │
+    q₄,q₅
+      │
+      ▼
+ Solución: [q₁, q₂, q₃, q₄, q₅]
+</code></pre>
+<h2 id="position-solver-iksolver"><a class="header" href="#position-solver-iksolver">Position Solver (IkSolver)</a></h2>
+<p>The position solver uses a <strong>damped pseudoinverse (Levenberg–Marquardt)</strong> approach:</p>
 <pre><code>Δq = Jᵀ(J·Jᵀ + λ²·I)⁻¹ · Δx
 </code></pre>
 <p>Where:</p>
@@ -295,11 +317,74 @@ for (i, &amp;val) in q.iter().enumerate() {
     assert!(val.abs() &lt; 0.05, "J{} should be near 0", i + 1);
 }
 <span class="boring">}</span></code></pre>
-<h2 id="when-it-fails"><a class="header" href="#when-it-fails">When It Fails</a></h2>
+<h2 id="orientation-solver"><a class="header" href="#orientation-solver">Orientation Solver</a></h2>
+<p>The <code>OrientationSolver</code> handles the wrist analytically. Given R₀₃ (from the position solution) and R_target (desired tool orientation):</p>
+<pre><code>R₃₅ = R₀₃ᵀ · R_target
+
+q₄ = atan2(-R₃₅[2,2], -R₃₅[1,2])
+q₅ = atan2(-R₃₅[0,1],  R₃₅[0,0])
+</code></pre>
+<p>The FABRI Creator has a 2-DOF wrist (roll on X via Twist, pitch on Z via Revolute). There is <strong>no yaw</strong> — the condition <code>|R₃₅[0,2]| &lt; ε</code> tests reachability. If violated, the orientation is physically impossible.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{OrientationSolver, OrientationError};
+
+let orient_solver = OrientationSolver::new(1e-6);
+match orient_solver.solve(&amp;r03, &amp;r_target, &amp;robot) {
+    Ok([q4, q5]) =&gt; { /* wrist solution */ }
+    Err(OrientationError::UnreachableOrientation { .. }) =&gt; { /* not reachable */ }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="full-ik-pipeline"><a class="header" href="#full-ik-pipeline">Full IK Pipeline</a></h2>
+<p><code>solve_full_ik</code> composes position + orientation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{solve_full_ik, IkSolver, OrientationSolver};
+
+let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
+let orient_solver = OrientationSolver::new(1e-6);
+let target = [200.0, 0.0, 80.0];
+let target_rot = /* any Rot3 */;
+
+let result = solve_full_ik(
+    &amp;pos_solver, &amp;orient_solver,
+    &amp;target, &amp;target_rot, &amp;[0.0; 5],
+    &amp;robot, &amp;base, &amp;tool,
+);
+<span class="boring">}</span></code></pre>
+<h2 id="drawing-mode"><a class="header" href="#drawing-mode">Drawing Mode</a></h2>
+<p>The <code>PoseGenerator</code> layer generates target poses for specific tasks without modifying the IK.</p>
+<h3 id="drawing-pose-modo-1--marker-along-x₅"><a class="header" href="#drawing-pose-modo-1--marker-along-x₅">Drawing Pose (Modo 1 — marker along X₅)</a></h3>
+<p>Constant orientation, works for centered positions (q₁ ≈ 0):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::PoseGenerator;
+
+let pose = PoseGenerator::drawing_pose([200.0, 0.0, 80.0]);
+// pose.rotation has X₅ = [0, 0, -1] (marker down)
+<span class="boring">}</span></code></pre>
+<h3 id="adaptive-drawing-pose-modo-2--marker-along-y₅"><a class="header" href="#adaptive-drawing-pose-modo-2--marker-along-y₅">Adaptive Drawing Pose (Modo 2 — marker along Y₅)</a></h3>
+<p>Orientation adapts to q₁: R_target(q₁) makes Y₅ = [0, 0, -1]. Works for <strong>any</strong> arm position where |q₂+q₃| &lt; 80°:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let pose = PoseGenerator::drawing_pose_v2([200.0, 80.0, 80.0], q1);
+<span class="boring">}</span></code></pre>
+<h3 id="convenience-functions"><a class="header" href="#convenience-functions">Convenience Functions</a></h3>
+<p><code>solve_drawing_ik</code> (modo 1) and <code>solve_drawing_ik_v2</code> (modo 2) run the full pipeline without manually composing:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bombolab_core::{solve_drawing_ik_v2};
+
+let result = solve_drawing_ik_v2(
+    &amp;pos_solver, &amp;orient_solver,
+    &amp;target, &amp;[0.0; 5], &amp;robot, &amp;base, &amp;tool,
+);
+// Returns [q1, q2, q3, q4, q5] with the marker vertical
+<span class="boring">}</span></code></pre>
+<h3 id="when-it-fails"><a class="header" href="#when-it-fails">When It Fails</a></h3>
 <ul>
-<li><strong>Far from a reachable target:</strong> the damped pseudoinverse converges locally. If the target is unreachable or the initial guess is far off, try a better <code>q_init</code> or use a multi-start strategy.</li>
-<li><strong>Near singularities:</strong> the solver handles this with damping, but extremely high joint speeds may still appear. Increase <code>damping</code> if the solver becomes unstable.</li>
-<li><strong>Unreachable target:</strong> the solver will hit <code>max_iterations</code> and return the best attempt with <code>MaxIterationsReached</code>.</li>
+<li><strong>Unreachable orientation:</strong> <code>IkError::UnreachableOrientation</code> — the target orientation cannot be achieved within joint limits. Falls back to position-only IK.</li>
+<li><strong>Unreachable position:</strong> same as position solver — <code>MaxIterationsReached</code>.</li>
 </ul>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>

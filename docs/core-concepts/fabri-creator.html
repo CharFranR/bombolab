@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-65767c36.js";
+            window.path_to_searchindex_js = "../searchindex-01a7f806.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4e9e8c5a.js"></script>
+        <script src="../toc-b353f33e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -210,75 +210,78 @@ let pos = tool.translation.vector;
 println!("Marker at: ({:.1}, {:.1}, {:.1})", pos.x, pos.y, pos.z);
 <span class="boring">}</span></code></pre>
 <h2 id="dh-parameters"><a class="header" href="#dh-parameters">DH Parameters</a></h2>
-<p>Craig convention, units: millimeters. These values come from <strong>physical measurements</strong> of the actual FABRI Creator robot — link lengths, joint offsets, and twist angles measured with calipers and protractors.</p>
+<p>Standard DH convention, units: millimeters. These values are defined in <code>crates/bombolab-core/src/robot/fabri_creator.rs</code> and verified against the physical robot through the web simulator.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Type</th><th>Source</th></tr>
+<tr><th>i</th><th>α</th><th>a</th><th>d</th><th>θ</th><th>Type</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>-90°</td><td>15</td><td>95</td><td>θ₁</td><td>Revolute</td><td>15mm horizontal offset from J1 axis to J2 axis; 95mm from J1 to J2 along Z</td></tr>
-<tr><td>2</td><td>0°</td><td>0</td><td>162</td><td>θ₂</td><td>Revolute</td><td>162mm vertical link (J2→J3); no horizontal offset (pure vertical)</td></tr>
-<tr><td>3</td><td>-90°</td><td>111</td><td>0</td><td>θ₃</td><td>Revolute</td><td>111mm horizontal link (J3→J4); twist -90° reorients rotation plane</td></tr>
-<tr><td>4</td><td>90°</td><td>35</td><td>0</td><td>—</td><td><strong>Twist</strong></td><td>35mm horizontal link (J4→J5); joint value adds to α, rotates about X</td></tr>
-<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>θ₅</td><td>Revolute</td><td>Zero-length final joint (wrist pitch); tool transform handles the rest</td></tr>
+<tr><td>1</td><td>-90°</td><td>15</td><td>85</td><td>q₁</td><td>Revolute</td></tr>
+<tr><td>2</td><td>0°</td><td>120</td><td>0</td><td>q₂ − 90°</td><td>Revolute</td></tr>
+<tr><td>3</td><td>-90°</td><td>90</td><td>0</td><td>q₃ + 90°</td><td>Revolute</td></tr>
+<tr><td>4</td><td>90°</td><td>35</td><td>15</td><td>—</td><td><strong>Twist</strong> (α = q₄ + 90°)</td></tr>
+<tr><td>5</td><td>0°</td><td>0</td><td>0</td><td>q₅</td><td>Revolute</td></tr>
 </tbody>
 </table>
 </div>
 <p><strong>Why these values?</strong></p>
 <ul>
-<li><strong>α₁ = -90°</strong>: J1 rotates around Z (yaw), but J2 rotates around a horizontal axis. The -90° twist reorients from vertical to horizontal.</li>
-<li><strong>a₁ = 15mm</strong>: The physical offset between J1’s rotation axis and J2’s rotation axis. Measured from the center of the base servo horn to the shoulder servo horn.</li>
-<li><strong>d₂ = 162mm</strong>: The longest link — the “upper arm” connecting shoulder to elbow. This is the main vertical segment.</li>
-<li><strong>a₃ = 111mm</strong>: The “forearm” link from elbow to wrist. Combined with a₄, gives the robot its reach.</li>
-<li><strong>a₄ = 35mm</strong>: Short link from wrist roll to wrist pitch. The 35mm offset is the physical distance between the two wrist servo axes.</li>
+<li><strong>α₁ = -90°</strong>: J1 rotates around Z (yaw). The -90° twist reorients the next Z axis from vertical to horizontal so J2 can pitch the arm up and down.</li>
+<li><strong>a₁ = 15 mm</strong>: Horizontal offset from J1 rotation axis to J2 axis, measured from the center of the base servo horn.</li>
+<li><strong>d₁ = 85 mm</strong>: Vertical offset from J1 to J2 along Z₁ (7 cm base plate + 15 mm hardware).</li>
+<li><strong>a₂ = 120 mm</strong>: The “upper arm” link from shoulder to elbow. This is the main reaching segment. In home pose this link points upward (Z direction after the accumulated rotation).</li>
+<li><strong>a₃ = 90 mm</strong>: The “forearm” link from elbow to wrist. Combined with a₄ this gives the robot its horizontal reach.</li>
+<li><strong>a₄ = 35 mm</strong>: Short link from wrist roll to wrist pitch. The physical distance between the two wrist servo axes.</li>
+<li><strong>d₄ = 15 mm</strong>: Lateral offset of the wrist assembly from the forearm axis.</li>
 </ul>
 <p><strong>Joint types:</strong></p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Joint</th><th>Type</th><th>Motion</th><th>DH Formula</th></tr>
+<tr><th>Joint</th><th>Type</th><th>Motion</th><th>Implementation</th></tr>
 </thead>
 <tbody>
-<tr><td>J1</td><td>Revolute</td><td>Base yaw</td><td><code>RotZ(θ₁+q) · TransZ(d₁) · TransX(a₁) · RotX(α₁)</code></td></tr>
-<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch</td><td><code>RotZ(θ₂+q) · TransZ(d₂) · TransX(a₂) · RotX(α₂)</code></td></tr>
-<tr><td>J3</td><td>Revolute</td><td>Elbow pitch</td><td><code>RotZ(θ₃+q) · TransZ(d₃) · TransX(a₃) · RotX(α₃)</code></td></tr>
-<tr><td>J4</td><td><strong>Twist</strong></td><td>Wrist roll (X-axis)</td><td><strong><code>RotX(α₄+q) · TransX(a₄)</code></strong></td></tr>
-<tr><td>J5</td><td>Revolute</td><td>Wrist pitch</td><td><code>RotZ(θ₅+q) · TransZ(d₅) · TransX(a₅) · RotX(α₅)</code></td></tr>
+<tr><td>J1</td><td>Revolute</td><td>Base yaw (Z₀)</td><td>Standard DH: <code>RotZ(q₁) · TransZ(85) · TransX(15) · RotX(-90°)</code></td></tr>
+<tr><td>J2</td><td>Revolute</td><td>Shoulder pitch (Z₁)</td><td>Standard DH: <code>RotZ(q₂−90°) · TransZ(0) · TransX(120) · RotX(0)</code></td></tr>
+<tr><td>J3</td><td>Revolute</td><td>Elbow pitch (Z₂)</td><td>Standard DH: <code>RotZ(q₃+90°) · TransZ(0) · TransX(90) · RotX(-90°)</code></td></tr>
+<tr><td>J4</td><td><strong>Twist</strong></td><td>Wrist roll (X₃)</td><td><strong><code>Iso3::from_parts((35,15,0), Rot_X(q₄+90°))</code></strong></td></tr>
+<tr><td>J5</td><td>Revolute</td><td>Wrist pitch (Z₄)</td><td>Standard DH: <code>RotZ(q₅) · TransZ(0) · TransX(0) · RotX(0)</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>J4 uses <code>Twist</code> instead of <code>Revolute</code> because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type swaps the rotation axis from Z to X, and the joint value adds directly to <code>alpha</code> instead of <code>theta</code>.</p>
+<p>J4 uses <code>Twist</code> instead of <code>Revolute</code> because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type rotates around the X axis of the previous frame, and the translation is applied as <code>(a, d, 0)</code> in the local frame without further rotation — this is the behavior of <code>Iso3::from_parts(translation, rotation)</code> in nalgebra. The joint variable q₄ adds to α₄ rather than θ₄.</p>
 <h2 id="physical-dimensions"><a class="header" href="#physical-dimensions">Physical Dimensions</a></h2>
-<pre><code>        marcador
-           ↑ 75mm (tool transform)
-           |
-        J5 ──── J4 ──── J3
-                         |
-                         | 111mm (a₃)
-                         |
-                        J2
-                       /
-                      / 162mm (d₂)
+<pre><code>         marcador
+            ↑ 75mm (tool transform)
+            |
+         J5 ──── J4 ──── J3
+                          |
+                          | 90mm (a₃)
+                          |
+                         J2
+                        /
+                       / 120mm (a₂, vertical in home)
+                      /
                      /
-                    /
-                   J1 ← 15mm offset (a₁)
-                   |
-              57mm base (base transform)
+                    J1 ← 15mm offset (a₁)
+                    |
+               57mm base (base transform)
 </code></pre>
 <p>The robot stands 57mm above its mounting surface. The base servo (J1) rotates the entire arm. The shoulder (J2) and elbow (J3) provide the main reach. The wrist has two degrees of freedom: roll (J4) and pitch (J5).</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Parameter</th><th>Value</th><th>Measurement Source</th></tr>
+<tr><th>Parameter</th><th>Value</th><th>Source</th></tr>
 </thead>
 <tbody>
-<tr><td>Base height</td><td>57mm</td><td>Distance from mounting surface to J1 rotation axis</td></tr>
-<tr><td>J1→J2</td><td>15mm horizontal, 95mm vertical</td><td>Caliper measurement of base-to-shoulder offset</td></tr>
-<tr><td>J2→J3</td><td>162mm vertical</td><td>Length of upper arm link</td></tr>
-<tr><td>J3→J4</td><td>111mm horizontal</td><td>Length of forearm link</td></tr>
-<tr><td>J4→J5</td><td>35mm horizontal</td><td>Distance between wrist servo axes</td></tr>
-<tr><td>Tool (J5→marker)</td><td>75mm along X</td><td>Marker holder length; perpendicular to end effector</td></tr>
+<tr><td>Base height</td><td>57 mm</td><td>Distance from mounting surface to J1 rotation axis</td></tr>
+<tr><td>J1→J2 horizontal</td><td>15 mm</td><td>Measured from base servo center to shoulder servo horn</td></tr>
+<tr><td>J1→J2 vertical</td><td>85 mm</td><td>Base plate (70 mm) + hardware offset (15 mm)</td></tr>
+<tr><td>J2→J3 (upper arm)</td><td>120 mm</td><td>Length of upper arm link (vertical in home pose)</td></tr>
+<tr><td>J3→J4 (forearm)</td><td>90 mm</td><td>Length of forearm link (horizontal in home pose)</td></tr>
+<tr><td>J4→J5 (wrist)</td><td>35 mm horizontal, 15 mm lateral</td><td>Distance between wrist servo axes</td></tr>
+<tr><td>Tool (J5→marker)</td><td>75 mm along X</td><td>Marker holder length; perpendicular to end effector</td></tr>
 </tbody>
 </table>
 </div>
@@ -318,14 +321,13 @@ for seg in &amp;robot.segments {
 </thead>
 <tbody>
 <tr><td>J1</td><td>90°</td><td>Base centered (servo midpoint)</td></tr>
-<tr><td>J2</td><td>115°</td><td>Shoulder slightly raised (not vertical)</td></tr>
-<tr><td>J3</td><td>110°</td><td>Elbow bent (arm folded back slightly)</td></tr>
-<tr><td>J4</td><td>170°</td><td>Wrist rolled (corrected from Arduino default of 175°)</td></tr>
-<tr><td>J5</td><td>90°</td><td>Wrist pitch centered (servo midpoint)</td></tr>
+<tr><td>J2</td><td>90°</td><td>Shoulder at kinematic zero</td></tr>
+<tr><td>J3</td><td>81°</td><td>Elbow adjusted for physical alignment</td></tr>
+<tr><td>J4</td><td>95°</td><td>Wrist roll centered</td></tr>
+<tr><td>J5</td><td>60°</td><td>Wrist pitch with asymmetric limits</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Why J4 = 170° instead of 175°?</strong> The Arduino firmware originally defaulted J4 to 175°, but this exceeds <code>JOINT_MAX</code> (170°). The value was corrected to 170° to stay within mechanical safety limits. If your physical robot has J4 at 175°, the servo may be slightly misaligned — check the mechanical stop.</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>let robot = fabri_creator();
