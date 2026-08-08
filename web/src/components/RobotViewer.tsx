@@ -68,13 +68,7 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints =
   );
   const frames: Mat4[] = rawFrames ?? computedFrames;
 
-  // 2. Tool-transform matrix (translation along X only)
-  const toolTransform: Mat4 = useMemo(() => [
-    1, 0, 0, robot.toolTransform[0],
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
-  ], [robot.toolTransform]);
+  const toolTransform: Mat4 = robot.toolTransform;
 
   // 3. Convert all FK frames + tool tip → FramePose[]
   const poses = useMemo(() => {

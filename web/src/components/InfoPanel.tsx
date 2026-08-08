@@ -12,13 +12,7 @@ export default function InfoPanel({ robot, rawFrames }: { robot: RobotDef; rawFr
       }
       // Aplicar tool transform
       const tool = rawFrames[rawFrames.length - 1];
-      const toolMat: Mat4 = [
-        1, 0, 0, robot.toolTransform[0],
-        0, 1, 0, robot.toolTransform[1],
-        0, 0, 1, robot.toolTransform[2],
-        0, 0, 0, 1,
-      ];
-      const m = mulMat4(tool, toolMat);
+      const m = mulMat4(tool, robot.toolTransform);
       return { ee: poseFromMat4(rawFrames[rawFrames.length - 1]), tool: poseFromMat4(m) };
     },
     [rawFrames, robot.toolTransform],
