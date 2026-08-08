@@ -13,6 +13,7 @@ itself, the ADRs document the decisions.
 | [0003](./0003-tests-separate-docs-not-comments.md) | Tests in separate files; docs, not comments | Accepted |
 | [0004](./0004-tool-frame-roll-only-invariant.md) | Tool-frame roll-only invariant | Accepted |
 | [0005](./0005-singularity-gate.md) | SVD singularity gate per waypoint | Accepted |
+| [0006](./0006-workspace-analysis.md) | Deterministic workspace analysis cloud | Accepted |
 
 ## How to add an ADR
 

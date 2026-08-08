@@ -6,6 +6,7 @@ use bombolab_core::kinematics::{
     solve_drawing_ik_v2 as solve_drawing_v2,
 };
 use bombolab_core::math::Iso3;
+use bombolab_core::kinematics::{WorkspaceMode, WorkspaceSampler};
 use bombolab_core::robot::{
     Joint, JointType, Robot, Segment, ToolFrame, base_transform as make_base_transform,
     fabri_creator as make_fabri_creator,
@@ -736,6 +737,99 @@ pub fn motion_player_drop(id: usize) {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct JsWorkspaceStats {
+    pub bounds_min: Option<[f64; 3]>,
+    pub bounds_max: Option<[f64; 3]>,
+    pub centroid: Option<[f64; 3]>,
+    pub reach: Option<f64>,
+    pub n_valid: usize,
+    pub n_rejected: usize,
+}
+
+static SAMPLERS: std::sync::Mutex<Vec<Option<WorkspaceSampler>>> = std::sync::Mutex::new(Vec::new());
+
+fn sampler_mode_from_str(s: &str) -> Option<WorkspaceMode> {
+    match s {
+        "drawing-plane" => Some(WorkspaceMode::DrawingPlane),
+        "full-5dof" => Some(WorkspaceMode::Full5Dof),
+        _ => None,
+    }
+}
+
+fn sampler_new_impl(seed: u64, mode: &str) -> Result<usize, String> {
+    let mode = sampler_mode_from_str(mode).ok_or_else(|| "unknown workspace mode".to_string())?;
+    let sampler = WorkspaceSampler::new(seed, mode);
+    let mut reg = SAMPLERS.lock().unwrap();
+    let id = reg
+        .iter()
+        .position(|s| s.is_none())
+        .unwrap_or_else(|| {
+            reg.push(None);
+            reg.len() - 1
+        });
+    reg[id] = Some(sampler);
+    Ok(id)
+}
+
+#[wasm_bindgen]
+pub fn sampler_new(seed: u64, mode: &str) -> Result<usize, JsValue> {
+    sampler_new_impl(seed, mode).map_err(|e| JsValue::from_str(&e))
+}
+
+fn sample_batch_impl(id: usize, k: usize) -> Result<Vec<f64>, String> {
+    let mut reg = SAMPLERS.lock().unwrap();
+    let sampler = reg
+        .get_mut(id)
+        .and_then(|s| s.as_mut())
+        .ok_or_else(|| "sampler not found".to_string())?;
+    Ok(sampler.sample_batch(k))
+}
+
+#[wasm_bindgen]
+pub fn sample_batch(id: usize, k: usize) -> Result<Vec<f64>, JsValue> {
+    sample_batch_impl(id, k).map_err(|e| JsValue::from_str(&e))
+}
+
+fn sampler_stats_impl(id: usize) -> Result<JsWorkspaceStats, String> {
+    let reg = SAMPLERS.lock().unwrap();
+    let sampler = reg
+        .get(id)
+        .and_then(|s| s.as_ref())
+        .ok_or_else(|| "sampler not found".to_string())?;
+    let stats = sampler.stats();
+    Ok(JsWorkspaceStats {
+        bounds_min: stats.bounds_min,
+        bounds_max: stats.bounds_max,
+        centroid: stats.centroid,
+        reach: stats.reach,
+        n_valid: stats.n_valid,
+        n_rejected: stats.n_rejected,
+    })
+}
+
+#[wasm_bindgen]
+pub fn sampler_stats(id: usize) -> Result<JsValue, JsValue> {
+    let stats = sampler_stats_impl(id).map_err(|e| JsValue::from_str(&e))?;
+    to_js_value(&stats)
+}
+
+fn sampler_drop_impl(id: usize) -> Result<(), String> {
+    let mut reg = SAMPLERS.lock().unwrap();
+    let live = reg.get_mut(id).and_then(|s| s.as_mut()).is_some();
+    if live {
+        reg[id] = None;
+        Ok(())
+    } else {
+        Err("sampler not found".to_string())
+    }
+}
+
+#[wasm_bindgen]
+pub fn sampler_drop(id: usize) -> Result<(), JsValue> {
+    sampler_drop_impl(id).map_err(|e| JsValue::from_str(&e))
+}
+
 
 #[cfg(test)]
 mod singularity_binding_tests {
@@ -781,5 +875,72 @@ mod singularity_binding_tests {
         assert!(healthy.kappa > 0.0);
         assert_eq!(healthy.reason, "metrics");
         assert!(payload.worst.iter().all(|w| w.q.len() == 5));
+    }
+}
+
+#[cfg(test)]
+mod workspace_sampler_binding_tests {
+    use super::*;
+
+    fn batch_points(batch: &[f64]) -> usize {
+        batch.len() / 5
+    }
+
+    #[test]
+    fn lifecycle_batch_stats_drop() {
+        let id = sampler_new_impl(42, "drawing-plane").expect("new sampler");
+        let batch = sample_batch_impl(id, 1000).expect("first batch");
+        assert!(batch_points(&batch) > 0, "drawing-plane must accept samples");
+        assert!(batch_points(&batch) < 1000, "drawing-plane must reject some q5 samples");
+        let stats = sampler_stats_impl(id).expect("stats before drop");
+        assert_eq!(stats.n_valid + stats.n_rejected, 1000, "N counts attempted samples");
+        assert!(stats.bounds_min.is_some(), "non-empty sampler must report bounds");
+        assert!(stats.centroid.is_some());
+        assert!(stats.reach.is_some());
+        sampler_drop_impl(id).expect("drop live sampler");
+        assert!(sample_batch_impl(id, 1).is_err(), "batch after drop must error");
+        assert!(sampler_stats_impl(id).is_err(), "stats after drop must error");
+        assert!(sampler_drop_impl(id).is_err(), "double drop must error");
+    }
+
+    #[test]
+    fn unknown_id_errors_never_panics() {
+        assert!(sample_batch_impl(999, 10).is_err());
+        assert!(sampler_stats_impl(999).is_err());
+        assert!(sampler_drop_impl(999).is_err());
+    }
+
+    #[test]
+    fn invalid_mode_errors() {
+        assert!(sampler_new_impl(1, "bogus").is_err());
+    }
+
+    #[test]
+    fn same_seed_yields_bit_identical_batches() {
+        let a = sampler_new_impl(7, "drawing-plane").expect("sampler a");
+        let b = sampler_new_impl(7, "drawing-plane").expect("sampler b");
+        let ba = sample_batch_impl(a, 500).expect("batch a");
+        let bb = sample_batch_impl(b, 500).expect("batch b");
+        assert_eq!(ba, bb, "same seed must replay bit-identical batches");
+        let sa = sampler_stats_impl(a).expect("stats a");
+        let sb = sampler_stats_impl(b).expect("stats b");
+        assert_eq!(sa.n_valid, sb.n_valid);
+        assert_eq!(sa.centroid, sb.centroid);
+        sampler_drop_impl(a).expect("drop a");
+        sampler_drop_impl(b).expect("drop b");
+    }
+
+    #[test]
+    fn full_5dof_rejects_nothing_and_reuses_slots() {
+        let id = sampler_new_impl(1, "full-5dof").expect("full-5dof sampler");
+        let batch = sample_batch_impl(id, 1000).expect("full-5dof batch");
+        assert_eq!(batch_points(&batch), 1000, "full-5dof must accept every sample");
+        let stats = sampler_stats_impl(id).expect("stats");
+        assert_eq!(stats.n_rejected, 0);
+        assert_eq!(stats.n_valid, 1000);
+        sampler_drop_impl(id).expect("drop");
+        let reused = sampler_new_impl(1, "full-5dof").expect("reuse freed slot");
+        assert_eq!(reused, id, "drop must free the slot for reuse");
+        sampler_drop_impl(reused).expect("drop reused");
     }
 }

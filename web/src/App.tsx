@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo, useReducer } from 'react';
 import * as THREE from 'three';
 import type { RobotDef, Segment } from './kinematics/types';
-import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, type PlayerStateJs } from './wasm';
+import { initWasm, fabriCreator, forwardKinematics, solveIk, solveDrawingIk, solveDrawingIkV2, solveDrawingPlaneIk, motionPlayerNew, motionPlayerPlay, motionPlayerPause, motionPlayerResume, motionPlayerStop, motionPlayerUpdate, motionPlayerState, motionPlayerTarget, motionPlayerProgress, motionPlayerDrop, samplerNew, sampleBatch, samplerStats, samplerDrop, type PlayerStateJs, type WorkspaceMode, type WorkspaceStats } from './wasm';
+import { parseWorkspaceBatch, concatWorkspaceChunks, validateSampleCount, type WorkspacePoints } from './workspace/colors';
 import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type MotionCommandJS } from './motion/commands';
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
@@ -38,7 +39,14 @@ export default function App() {
   const [gripper, setGripper] = useState(50);
   const [connected, setConnected] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
-  const [showWorkspace, setShowWorkspace] = useState(false);
+  const [workspaceCount, setWorkspaceCount] = useState(10000);
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('drawing-plane');
+  const [workspaceRunning, setWorkspaceRunning] = useState(false);
+  const [workspaceProgress, setWorkspaceProgress] = useState(0);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspacePoints, setWorkspacePoints] = useState<WorkspacePoints | null>(null);
+  const [workspaceStats, setWorkspaceStats] = useState<WorkspaceStats | null>(null);
+  const workspaceCancelRef = useRef(false);
   const [ikMode, setIkMode] = useState(false);
   const [drawingMode, setDrawingMode] = useState(0); // 0=off, 1=modo1, 2=modo2
   const [drawingActive, setDrawingActive] = useState(false);
@@ -900,10 +908,49 @@ export default function App() {
       });
   }, []);
 
-  const workspacePoints = useMemo(
-    () => showWorkspace ? generateWorkspace(2000) : [],
-    [showWorkspace],
-  );
+  const cancelWorkspace = useCallback(() => {
+    workspaceCancelRef.current = true;
+  }, []);
+
+  const runWorkspace = useCallback(async () => {
+    const validationError = validateSampleCount(workspaceCount);
+    if (validationError) {
+      setWorkspaceError(validationError);
+      return;
+    }
+    workspaceCancelRef.current = false;
+    setWorkspaceRunning(true);
+    setWorkspaceError(null);
+    setWorkspaceStats(null);
+    setWorkspacePoints(null);
+    setWorkspaceProgress(0);
+    let samplerId: number | null = null;
+    try {
+      samplerId = samplerNew(Date.now(), workspaceMode);
+      const chunks: WorkspacePoints[] = [];
+      const chunkSize = 1000;
+      for (let done = 0; done < workspaceCount; done += chunkSize) {
+        if (workspaceCancelRef.current) break;
+        const k = Math.min(chunkSize, workspaceCount - done);
+        chunks.push(parseWorkspaceBatch(sampleBatch(samplerId, k)));
+        setWorkspaceProgress(Math.round(((done + k) / workspaceCount) * 100));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      if (workspaceCancelRef.current) {
+        setWorkspaceProgress(0);
+        return;
+      }
+      setWorkspacePoints(chunks.length > 0 ? concatWorkspaceChunks(chunks) : null);
+      setWorkspaceStats(samplerStats(samplerId));
+    } catch (e) {
+      setWorkspaceError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (samplerId !== null) {
+        samplerDrop(samplerId);
+      }
+      setWorkspaceRunning(false);
+    }
+  }, [workspaceCount, workspaceMode]);
 
   // P2 (Stage 3C): FK calculado UNA vez en App y distribuido a los
   // consumidores (RobotViewer + InfoPanel). App no interpreta ni modifica
@@ -1318,23 +1365,108 @@ export default function App() {
           )}
         </div>
 
-        {/* Workspace toggle */}
+        {/* Run Analysis */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: '#888' }}>Análisis de workspace</span>
+            {workspaceRunning && (
+              <button
+                onClick={cancelWorkspace}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  background: '#553',
+                  border: 'none',
+                  borderRadius: 3,
+                  color: '#dc8',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>N muestras</div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            {[1000, 5000, 10000, 50000].map((n) => (
+              <button
+                key={n}
+                onClick={() => setWorkspaceCount(n)}
+                style={{
+                  flex: 1,
+                  padding: '3px 0',
+                  fontSize: 11,
+                  background: workspaceCount === n ? '#553' : '#3a3a3a',
+                  border: '1px solid ' + (workspaceCount === n ? '#885' : '#444'),
+                  borderRadius: 3,
+                  color: '#ccc',
+                  cursor: 'pointer',
+                }}
+              >
+                {n / 1000}k
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>Modo</div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            <button
+              onClick={() => setWorkspaceMode('drawing-plane')}
+              style={{
+                flex: 1,
+                padding: '3px 0',
+                fontSize: 11,
+                background: workspaceMode === 'drawing-plane' ? '#553' : '#3a3a3a',
+                border: '1px solid ' + (workspaceMode === 'drawing-plane' ? '#885' : '#444'),
+                borderRadius: 3,
+                color: '#ccc',
+                cursor: 'pointer',
+              }}
+            >
+              Plano de dibujo
+            </button>
+            <button
+              onClick={() => setWorkspaceMode('full-5dof')}
+              style={{
+                flex: 1,
+                padding: '3px 0',
+                fontSize: 11,
+                background: workspaceMode === 'full-5dof' ? '#553' : '#3a3a3a',
+                border: '1px solid ' + (workspaceMode === 'full-5dof' ? '#885' : '#444'),
+                borderRadius: 3,
+                color: '#ccc',
+                cursor: 'pointer',
+              }}
+            >
+              5 DOF
+            </button>
+          </div>
           <button
-            onClick={() => setShowWorkspace(!showWorkspace)}
+            onClick={() => { void runWorkspace(); }}
+            disabled={workspaceRunning}
             style={{
               width: '100%',
               padding: 8,
-              background: showWorkspace ? '#553' : '#444',
+              background: workspaceRunning ? '#3a3a3a' : '#464',
               border: 'none',
               borderRadius: 4,
               color: '#ccc',
               fontSize: 13,
-              cursor: 'pointer',
+              cursor: workspaceRunning ? 'default' : 'pointer',
             }}
           >
-            {showWorkspace ? 'Ocultar workspace' : 'Mostrar workspace'}
+            {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
           </button>
+          {workspaceError && (
+            <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
+              {workspaceError}
+            </div>
+          )}
+          {workspaceStats && (
+            <div style={{ fontSize: 10, color: '#888', marginTop: 6, fontFamily: 'monospace' }}>
+              válidos {workspaceStats.n_valid} · rechazados {workspaceStats.n_rejected} · reach{' '}
+              {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
+            </div>
+          )}
         </div>
 
         {/* Modo dibujo */}
@@ -1698,7 +1830,7 @@ export default function App() {
           robot={robot}
           rawFrames={rawFrames}
           gripper={gripper}
-          workspacePoints={workspacePoints}
+          workspacePoints={workspacePoints ?? undefined}
           tracePath={tracePath}
           traceProgressRef={traceProgressRef}
           ikTarget={ikTarget}
@@ -1738,21 +1870,4 @@ export default function App() {
  *  Same mapping used by framePose() in renderers/types.ts and IkTarget. */
 function robotToThree(p: [number, number, number]): [number, number, number] {
   return [p[0], p[2], p[1]];
-}
-
-function generateWorkspace(samples: number): [number, number, number][] {
-  const points: [number, number, number][] = [];
-  const robot = fabriCreator();
-  const DEG = Math.PI / 180;
-  for (let i = 0; i < samples; i++) {
-    const q = robot.segments.map((s) => {
-      const lo = s.q_min ?? -80 * DEG;
-      const hi = s.q_max ?? 80 * DEG;
-      return Math.random() * (hi - lo) + lo;
-    });
-    const segs = robot.segments.map((s, j) => ({ ...s, q: q[j] }));
-    const fk = forwardKinematics(segs, robot.baseTransform);
-    points.push([fk.ee[3], fk.ee[11], fk.ee[7]]);
-  }
-  return points;
 }
