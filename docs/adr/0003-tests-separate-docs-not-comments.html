@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4be38f74.js";
+            window.path_to_searchindex_js = "../searchindex-42f0bab4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fe45787e.js"></script>
@@ -208,10 +208,11 @@ Rust edition 2024 requires the <code>#[path]</code> attribute because <code>mod 
 <li><strong>Binary tests</strong> (<code>src/bin/...</code>) cannot use sibling files: Cargo
 auto-discovers every <code>*.rs</code> in <code>src/bin/</code> as an independent binary. They
 live in <code>src/bin/&lt;bin&gt;/&lt;bin&gt;_tests.rs</code>.</li>
-<li><strong>Code is documented, not commented.</strong> No inline comments that restate the
-<em>what</em>. Explanation lives in: rustdoc on public API, ADRs (this directory),
-and the mdbook documentation. Inline comments are reserved for non-obvious
-mathematical invariants, and even those prefer the docs.</li>
+<li><strong>Code is documented, not commented — and carries zero doc comments.</strong>
+No inline comments and no rustdoc (<code>///</code>, <code>//!</code>) in source files. All
+explanation lives in the ADRs (this directory) and the mdbook
+documentation. Non-obvious invariants (e.g. the roll-only constraint in
+ADR-0004) are recorded in ADRs, never as prose inside the code.</li>
 </ol>
 <h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
 <ul>
