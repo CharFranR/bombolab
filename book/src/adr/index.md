@@ -14,6 +14,7 @@ itself, the ADRs document the decisions.
 | [0004](./0004-tool-frame-roll-only-invariant.md) | Tool-frame roll-only invariant | Accepted |
 | [0005](./0005-singularity-gate.md) | SVD singularity gate per waypoint | Accepted |
 | [0006](./0006-workspace-analysis.md) | Deterministic workspace analysis cloud | Accepted |
+| [0007](./0007-plan-vs-execution-trace.md) | Plan vs. execution trace and comparison | Accepted |
 
 ## How to add an ADR
 

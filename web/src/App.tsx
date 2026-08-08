@@ -9,6 +9,8 @@ import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_
 import { runSingularityGate } from './motion/singularityGate';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
+import { TraceRecorder, type TraceResult } from './motion/trace';
+import { downloadTraceCsv } from './motion/csv';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
@@ -60,6 +62,7 @@ export default function App() {
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
+  const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
   const [gcodeName, setGcodeName] = useState<string | null>(null);
@@ -95,6 +98,7 @@ export default function App() {
   const [calibLog, setCalibLog] = useState<{ joint: number; from: number; to: number; moved: boolean }[]>([]);
   const portRef = useRef<SerialPort | null>(null);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
+  const traceRecorderRef = useRef<TraceRecorder | null>(null);
 
   // Backlash take-up per channel — EXPERIMENTAL and DISABLED by default:
   // the A/B test showed a fixed 2°/1° compensation made the drawing WORSE
@@ -222,8 +226,12 @@ export default function App() {
       // Start the interpolation scheduler from the current pose and push
       // one frame so the firmware leaves its boot/home state.
       const initial = [...qToServoUs(robot.segments.map(s => s.q)), gripperToServoUs(gripper)];
+      if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
       servoInterpolatorRef.current = new ServoInterpolator(
-        (wire) => sendSerial(port, wire),
+        (wire) => {
+          traceRecorderRef.current?.record(wire);
+          sendSerial(port, wire);
+        },
         initial,
         { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
       );
@@ -354,6 +362,8 @@ export default function App() {
     setGcodeError(null);
     lastGcodeRef.current = null;
     setDrawingBlock(null);
+    traceRecorderRef.current?.discard();
+    setTraceResult(null);
     setValidating(false);
     setRobotMode('normal');
     setIkMode(false);
@@ -419,6 +429,11 @@ export default function App() {
       cancelAnimationFrame(raf);
     };
   }, [playerId]);
+
+  const finalizeTrace = useCallback(() => {
+    const result = traceRecorderRef.current?.stop();
+    if (result) setTraceResult(result);
+  }, []);
 
   // Starts a drawing trajectory ONLY after a pre-flight reachability check
   // confirms every waypoint (and sampled mid-segment points) fits inside the
@@ -494,6 +509,8 @@ export default function App() {
     lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
+    traceRecorderRef.current?.start();
+    setTraceResult(null);
     setPlayerState('running');
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
     return true;
@@ -636,15 +653,18 @@ export default function App() {
   // (playerId === cipraDrawPlayerIdRef). A demo/file/refit playback finishing
   // must not complete a CIPRA job that is not actually playing it.
   useEffect(() => {
+    if (playerState === 'completed') finalizeTrace();
     if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
       cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
       cipraDrawPlayerIdRef.current = null;
     }
-  }, [cipraJobs, playerState, playerId]);
+  }, [cipraJobs, playerState, playerId, finalizeTrace]);
 
   const handleClearDrawingBlock = useCallback(() => {
     setDrawingBlock(null);
     setTracePath([]);
+    traceRecorderRef.current?.discard();
+    setTraceResult(null);
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
       setPlayerId(null);
@@ -732,27 +752,36 @@ export default function App() {
       if (playerState === 'running') {
         motionPlayerPause(playerId);
         setPlayerState('paused');
+        finalizeTrace();
       } else if (playerState === 'paused') {
         motionPlayerResume(playerId);
         setPlayerState('running');
       } else {
         motionPlayerPlay(playerId);
+        traceRecorderRef.current?.start();
+        setTraceResult(null);
         setPlayerState('running');
       }
     } catch (e) {
       console.error('[motion]', e);
     }
-  }, [playerId, playerState]);
+  }, [playerId, playerState, finalizeTrace]);
 
   const handleStopDemo = useCallback(() => {
     if (playerId === null) return;
     try {
       motionPlayerStop(playerId);
       setPlayerState('stopped');
+      finalizeTrace();
     } catch (e) {
       console.error('[motion]', e);
     }
-  }, [playerId]);
+  }, [playerId, finalizeTrace]);
+
+  const handleExportTrace = useCallback(() => {
+    if (traceResult === null || traceResult.samples.length === 0) return;
+    downloadTraceCsv(traceResult);
+  }, [traceResult]);
 
   // ─── Servo calibration (deadband / backlash) — manual mode ─────────────
   // User-paced: each button press sends ONE raw 1° step (bypassing the
@@ -1778,6 +1807,29 @@ export default function App() {
                 >
                   Stop
                 </button>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
+                  onClick={handleExportTrace}
+                  disabled={traceResult === null || traceResult.samples.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#3a3a3a',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#ccc',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Exportar traza CSV
+                </button>
+                {traceResult !== null && traceResult.samples.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
+                    {traceResult.samples.length} muestras
+                    {traceResult.truncated ? ' · traza truncada' : ''}
+                  </div>
+                )}
               </div>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
                 Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>

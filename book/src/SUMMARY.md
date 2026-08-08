@@ -28,6 +28,7 @@
   - [ADR-0004: Tool-Frame Roll-Only Invariant](./adr/0004-tool-frame-roll-only-invariant.md)
   - [ADR-0005: SVD Singularity Gate per Waypoint](./adr/0005-singularity-gate.md)
   - [ADR-0006: Deterministic Workspace Analysis Cloud](./adr/0006-workspace-analysis.md)
+  - [ADR-0007: Plan vs. Execution Trace](./adr/0007-plan-vs-execution-trace.md)
 
 # CLI Tools
 
