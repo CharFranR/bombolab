@@ -45,7 +45,6 @@ impl Quaternion {
         Self::new(self.a / n, -self.b / n, -self.c / n, -self.d / n)
     }
 
-    
     pub fn mul(&self, other: &Self) -> Self {
         Self::new(
             self.a * other.a - self.b * other.b - self.c * other.c - self.d * other.d,
@@ -55,7 +54,6 @@ impl Quaternion {
         )
     }
 
-    
     pub fn scale(&self, factor: f64) -> Self {
         Self::new(
             self.a * factor,
@@ -65,8 +63,6 @@ impl Quaternion {
         )
     }
 
-    
-    
     pub fn from_rotation_matrix(r: &Mat3) -> Self {
         let tr = r.trace();
         let q = if tr > 0.0 {
@@ -112,10 +108,6 @@ impl fmt::Display for Quaternion {
     }
 }
 
-
-
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct DualQuaternion {
     pub real: Quaternion,
@@ -123,7 +115,6 @@ pub struct DualQuaternion {
 }
 
 impl DualQuaternion {
-    
     pub fn from_pose(rotation: &Mat3, translation: &Vec3) -> Self {
         let real = Quaternion::from_rotation_matrix(rotation);
         let t = Quaternion::new(0.0, translation.x, translation.y, translation.z);
@@ -131,7 +122,6 @@ impl DualQuaternion {
         Self { real, dual }
     }
 
-    
     pub fn translation(&self) -> Vec3 {
         let v = self.dual.mul(&self.real.conjugate()).scale(2.0);
         Vec3::new(v.b, v.c, v.d)
@@ -290,7 +280,7 @@ mod tests {
     fn test_subtract_two() {
         let q1 = Quaternion::new(5.0, 6.0, 7.0, 8.0);
         let q2 = Quaternion::new(1.0, 2.0, 3.0, 4.0);
-        
+
         let result = solve_subtract(&[q1, q2]);
         assert!(quat_approx_eq(
             &result,
@@ -307,10 +297,10 @@ mod tests {
 
     #[test]
     fn test_multiply_two() {
-        let q1 = Quaternion::new(1.0, 1.0, 0.0, 0.0); 
-        let q2 = Quaternion::new(1.0, 0.0, 0.0, 1.0); 
+        let q1 = Quaternion::new(1.0, 1.0, 0.0, 0.0);
+        let q2 = Quaternion::new(1.0, 0.0, 0.0, 1.0);
         let result = solve_multiply(&[q1, q2]);
-        
+
         assert!(approx_eq(result.a, 1.0));
         assert!(approx_eq(result.b, 1.0));
         assert!(approx_eq(result.c, -1.0));
@@ -320,7 +310,7 @@ mod tests {
     #[test]
     fn test_divide_single() {
         let q = Quaternion::new(1.0, 2.0, 0.0, 0.0);
-        
+
         let result = solve_divide(&[q.clone()]);
         assert!(quat_approx_eq(&result, &q.inverse()));
     }
@@ -362,10 +352,9 @@ mod tests {
 
     #[test]
     fn test_from_rotation_matrix_rotx_90() {
-        
         let r = Mat3::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0);
         let q = Quaternion::from_rotation_matrix(&r);
-        
+
         let h = std::f64::consts::FRAC_1_SQRT_2;
         assert!((q.a - h).abs() < 1e-9);
         assert!((q.b + h).abs() < 1e-9);
@@ -376,7 +365,6 @@ mod tests {
 
     #[test]
     fn test_dual_quaternion_pose_reconstruction() {
-        
         let r = Mat3::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0);
         let t = Vec3::new(140.0, -15.0, 205.0);
         let dq = DualQuaternion::from_pose(&r, &t);

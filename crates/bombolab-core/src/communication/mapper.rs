@@ -1,8 +1,6 @@
 use super::command::ServoCommand;
 use crate::robot::Robot;
 
-
-
 pub struct ServoMapper<'a> {
     robot: &'a Robot,
     angle_min: f64,
@@ -10,7 +8,6 @@ pub struct ServoMapper<'a> {
 }
 
 impl<'a> ServoMapper<'a> {
-    
     pub fn new(robot: &'a Robot) -> Self {
         Self {
             robot,
@@ -19,7 +16,6 @@ impl<'a> ServoMapper<'a> {
         }
     }
 
-    
     pub fn map_q(&self, q: &[f64], gripper: u8) -> Result<ServoCommand, &'static str> {
         let servo_rad = self.robot.q_to_servo(q);
         let mut joints = [0.0_f64; 5];
@@ -53,7 +49,7 @@ mod tests {
                 DHParams::new(0.0, 0.0, 0.0, 0.0),
             )
         };
-        let offset = std::f64::consts::FRAC_PI_2; 
+        let offset = std::f64::consts::FRAC_PI_2;
         Robot::with_offsets(
             (0..5).map(|_| seg()).collect(),
             vec![offset; 5],
@@ -65,7 +61,7 @@ mod tests {
     fn test_home_pose_maps_correctly() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        
+
         let cmd = mapper.map_q(&[0.0; 5], 90).unwrap();
         assert!((cmd.joints[0] - 90.0).abs() < 1e-6);
         assert!((cmd.joints[1] - 90.0).abs() < 1e-6);
@@ -79,8 +75,7 @@ mod tests {
     fn test_clamp_below_min() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        
-        
+
         let cmd = mapper.map_q(&[-1.5, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
         assert!((cmd.joints[0] - 5.0).abs() < 1e-6);
     }
@@ -89,8 +84,7 @@ mod tests {
     fn test_clamp_above_max() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        
-        
+
         let cmd = mapper.map_q(&[1.6, 0.0, 0.0, 0.0, 0.0], 90).unwrap();
         assert!((cmd.joints[0] - 175.0).abs() < 1e-6);
     }
@@ -107,12 +101,8 @@ mod tests {
     fn test_non_home_q_maps_with_offset() {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
-        
-        
-        
+
         let cmd = mapper.map_q(&[0.1, -0.2, 0.0, 0.15, -0.1], 45).unwrap();
-        
-        
 
         assert!((cmd.joints[0] - 95.73).abs() < 0.1);
         assert!((cmd.joints[1] - 78.56).abs() < 0.1);
@@ -126,7 +116,7 @@ mod tests {
         let robot = make_robot();
         let mapper = ServoMapper::new(&robot);
         let cmd = mapper.map_q(&[0.1, -0.2, 0.3, -0.1, 0.15], 45).unwrap();
-        
+
         let wire = cmd.to_wire();
         assert!(wire.ends_with('\n'));
         assert_eq!(wire.split(',').count(), 6);
@@ -160,8 +150,6 @@ mod tests {
         let robot = crate::robot::fabri_creator();
         let mapper = ServoMapper::new(&robot);
 
-        
-        
         let mut q_min = [0.0; 5];
         for (i, seg) in robot.segments.iter().enumerate() {
             q_min[i] = seg.joint.value_min;
@@ -174,15 +162,12 @@ mod tests {
         let cmd_max = mapper.map_q(&q_max, 90).unwrap();
 
         for i in 0..5 {
-            
-            
             let mut q_single = [0.0; 5];
             q_single[i] = q_min[i];
             let min_deg = robot.q_to_servo(&q_single)[i].to_degrees();
             q_single[i] = q_max[i];
             let max_deg = robot.q_to_servo(&q_single)[i].to_degrees();
-            
-            
+
             const TOL: f64 = 1e-9;
             assert!(
                 (5.0 - TOL..=175.0 + TOL).contains(&min_deg),
@@ -198,8 +183,7 @@ mod tests {
                 q_max[i].to_degrees(),
                 max_deg
             );
-            
-            
+
             assert!(
                 (cmd_min.joints[i] - min_deg).abs() < 1e-6,
                 "J{}: mapper modificó q_min ({:.2}° → {:.2}°)",
@@ -217,8 +201,6 @@ mod tests {
         }
     }
 
-    
-    
     #[test]
     fn fabri_q_servo_round_trip() {
         let robot = crate::robot::fabri_creator();

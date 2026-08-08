@@ -1,8 +1,5 @@
 use crate::kinematics::DHParameter;
 
-
-
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DHParams {
     pub theta: f64,
@@ -12,14 +9,10 @@ pub struct DHParams {
 }
 
 impl DHParams {
-    
-    
-    
     pub fn new(theta: f64, d: f64, a: f64, alpha: f64) -> Self {
         Self { theta, d, a, alpha }
     }
 }
-
 
 impl From<DHParameter> for DHParams {
     fn from(p: DHParameter) -> Self {
@@ -31,7 +24,6 @@ impl From<DHParameter> for DHParams {
         }
     }
 }
-
 
 impl From<DHParams> for DHParameter {
     fn from(p: DHParams) -> Self {
@@ -48,11 +40,9 @@ impl From<DHParams> for DHParameter {
 mod tests {
     use super::*;
 
-    
-    
     #[test]
     fn from_dh_parameter_maps_fields_by_name() {
-        let generic = DHParameter::new(1.0, 2.0, 3.0, 4.0); 
+        let generic = DHParameter::new(1.0, 2.0, 3.0, 4.0);
         let concrete = DHParams::from(generic);
         assert_eq!(concrete.alpha, 1.0);
         assert_eq!(concrete.a, 2.0);
@@ -62,7 +52,7 @@ mod tests {
 
     #[test]
     fn from_dh_params_maps_fields_by_name() {
-        let concrete = DHParams::new(1.0, 2.0, 3.0, 4.0); 
+        let concrete = DHParams::new(1.0, 2.0, 3.0, 4.0);
         let generic = DHParameter::from(concrete);
         assert_eq!(generic.theta, 1.0);
         assert_eq!(generic.d, 2.0);
@@ -80,11 +70,10 @@ mod tests {
         assert_eq!(back.alpha, p.alpha);
     }
 
-    
     #[test]
     fn dh_params_is_copy() {
         let a = DHParams::new(0.0, 1.0, 2.0, 3.0);
-        let b = a; 
+        let b = a;
         assert_eq!(a.theta, b.theta);
     }
 }

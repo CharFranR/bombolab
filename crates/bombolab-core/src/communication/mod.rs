@@ -7,7 +7,6 @@
 //! | 13  | S5    | J5      | Wrist pitch  |
 //! | A5  | S6    | Gripper | —            |
 
-
 #[cfg(feature = "serial")]
 pub mod arduino_nano;
 pub mod command;
@@ -24,17 +23,13 @@ pub use interpolation::{
 };
 pub use mapper::ServoMapper;
 
-
 pub const BAUD_RATE: u32 = 115_200;
 
 pub const JOINT_COUNT: usize = 6;
 
-
 pub const ANGLE_MIN: i32 = 5;
 
-
 pub const ANGLE_MAX: i32 = 175;
-
 
 pub const READ_TIMEOUT_MS: u64 = 1000;
 

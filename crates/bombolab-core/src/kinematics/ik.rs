@@ -7,29 +7,16 @@ use crate::robot::{Joint, JointType, Robot, Segment};
 
 use super::forward::forward_kinematics;
 
-
-
 #[derive(Debug, Clone)]
 pub enum IkError {
     DegenerateChain,
-    MaxIterationsReached {
-        error: f64,
-    },
-    
-    UnreachableOrientation {
-        r35_02: f64,
-        tolerance: f64,
-    },
-    
-    
-    DrawingConstraintViolated {
-        q23: f64,
-    },
-    
-    InvalidInitLength {
-        expected: usize,
-        got: usize,
-    },
+    MaxIterationsReached { error: f64 },
+
+    UnreachableOrientation { r35_02: f64, tolerance: f64 },
+
+    DrawingConstraintViolated { q23: f64 },
+
+    InvalidInitLength { expected: usize, got: usize },
 }
 
 impl fmt::Display for IkError {
@@ -61,9 +48,6 @@ impl fmt::Display for IkError {
 
 impl std::error::Error for IkError {}
 
-
-
-
 fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
     let segments: Vec<Segment> = robot
         .segments
@@ -76,7 +60,7 @@ fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
                 seg.joint.value_max,
                 seg.joint.value_min,
             );
-            let dh = seg.dh; 
+            let dh = seg.dh;
             Segment::new(joint, dh)
         })
         .collect();
@@ -88,7 +72,6 @@ fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
     )
 }
 
-
 fn position_error(robot: &Robot, target: &[f64; 3], base: &Iso3, tool: &Iso3) -> f64 {
     let (frames, _) = forward_kinematics(*base, robot);
     let tool_pose = frames.last().unwrap() * tool;
@@ -96,7 +79,6 @@ fn position_error(robot: &Robot, target: &[f64; 3], base: &Iso3, tool: &Iso3) ->
     let target_v = Vec3::new(target[0], target[1], target[2]);
     (target_v - p_ee).norm()
 }
-
 
 pub struct IkSolver {
     pub max_iterations: usize,
@@ -115,8 +97,6 @@ impl IkSolver {
         }
     }
 
-    
-    
     pub fn solve_position(
         &self,
         target: &[f64; 3],
@@ -129,7 +109,6 @@ impl IkSolver {
             return Err(IkError::DegenerateChain);
         }
 
-        
         if q_init.len() != robot.dof() {
             return Err(IkError::InvalidInitLength {
                 expected: robot.dof(),
@@ -145,22 +124,18 @@ impl IkSolver {
         for _iter in 0..self.max_iterations {
             let robot_q = build_robot(robot, &q);
 
-            
             let (frames, _) = forward_kinematics(*base, &robot_q);
             let tool_pose = frames.last().unwrap() * tool;
             let p_ee = tool_pose.translation.vector;
 
-            
             let error = target_v - p_ee;
             let err_norm = error.norm();
             if err_norm < self.tolerance {
                 return Ok(q);
             }
 
-            
             let j = position_jacobian(&robot_q, &frames, &p_ee, base, n);
 
-            
             let jjt = j * j.transpose();
             let reg = jjt + SMatrix::<f64, 3, 3>::identity() * damping_sq;
 
@@ -176,25 +151,22 @@ impl IkSolver {
                 };
                 for idx in 0..n {
                     q[idx] += delta_q[idx] * scale;
-                    
+
                     q[idx] = q[idx].clamp(
                         robot.segments[idx].joint.value_min,
                         robot.segments[idx].joint.value_max,
                     );
                 }
             } else {
-                
                 return Ok(q);
             }
         }
 
-        
         let robot_q = build_robot(robot, &q);
         let final_err = position_error(&robot_q, target, base, tool);
         Err(IkError::MaxIterationsReached { error: final_err })
     }
 }
-
 
 fn position_jacobian(
     robot_q: &Robot,
@@ -213,8 +185,7 @@ fn position_jacobian(
                 JointType::Twist => base_x,
                 _ => base_z,
             };
-            
-            
+
             let p = match robot_q.segments[i].joint.joint_type {
                 JointType::Twist => frames[i].translation.vector,
                 _ => base_p,
@@ -226,8 +197,7 @@ fn position_jacobian(
                 JointType::Twist => prev * Vec3::x(),
                 _ => prev * Vec3::z(),
             };
-            
-            
+
             let p = match robot_q.segments[i].joint.joint_type {
                 JointType::Twist => frames[i].translation.vector,
                 _ => prev.translation.vector,
@@ -239,25 +209,19 @@ fn position_jacobian(
     j
 }
 
-
-
 impl Default for IkSolver {
     fn default() -> Self {
         Self {
             max_iterations: 50,
-            tolerance: 1.0, 
+            tolerance: 1.0,
             damping: 0.1,
-            step_size: 0.5, 
+            step_size: 0.5,
         }
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub enum OrientationError {
-    
-    
     UnreachableOrientation { r35_02: f64, tolerance: f64 },
 }
 
@@ -277,9 +241,7 @@ impl fmt::Display for OrientationError {
 
 impl std::error::Error for OrientationError {}
 
-
 pub struct OrientationSolver {
-    
     pub tolerance: f64,
 }
 
@@ -287,18 +249,16 @@ impl OrientationSolver {
     pub fn new(tolerance: f64) -> Self {
         Self { tolerance }
     }
- 
+
     pub fn solve(
         &self,
         r03: &Rot3,
         r_target: &Rot3,
         robot: &Robot,
     ) -> Result<[f64; 2], OrientationError> {
-        
         let r35 = r03.transpose() * r_target;
         let m = r35.matrix();
 
-        
         let r35_02 = m[(0, 2)].abs();
         if r35_02 > self.tolerance {
             return Err(OrientationError::UnreachableOrientation {
@@ -306,7 +266,7 @@ impl OrientationSolver {
                 tolerance: self.tolerance,
             });
         }
-        
+
         let c4 = -m[(1, 2)];
         let s4 = -m[(2, 2)];
         let c5 = m[(0, 0)];
@@ -314,7 +274,7 @@ impl OrientationSolver {
 
         let q4 = s4.atan2(c4);
         let q5 = s5.atan2(c5);
-        
+
         let j4_lo = robot.segments[3].joint.value_min;
         let j4_hi = robot.segments[3].joint.value_max;
         let j5_lo = robot.segments[4].joint.value_min;
@@ -337,7 +297,6 @@ impl OrientationSolver {
     }
 }
 
-
 #[allow(clippy::too_many_arguments)]
 pub fn solve_full_ik(
     pos_solver: &IkSolver,
@@ -349,11 +308,8 @@ pub fn solve_full_ik(
     base: &Iso3,
     tool: &Iso3,
 ) -> Result<Vec<f64>, IkError> {
-    
-    
     let q_pos = pos_solver.solve_position(target_pos, q_init, robot, base, tool)?;
 
-    
     let q1 = q_pos[0];
     let q2 = q_pos[1];
     let q3 = q_pos[2];
@@ -362,7 +318,6 @@ pub fn solve_full_ik(
     let (frames, _) = forward_kinematics(*base, &robot_partial);
     let r03 = frames[2].rotation.to_rotation_matrix();
 
-    
     let [q4, q5] = orient_solver
         .solve(&r03, target_rot, robot)
         .map_err(|err| match err {
@@ -371,10 +326,8 @@ pub fn solve_full_ik(
             }
         })?;
 
-    
     Ok(vec![q1, q2, q3, q4, q5])
 }
-
 
 pub fn solve_drawing_ik(
     pos_solver: &IkSolver,
@@ -387,22 +340,18 @@ pub fn solve_drawing_ik(
 ) -> Result<Vec<f64>, IkError> {
     use crate::kinematics::pose_generator::PoseGenerator;
 
-    
     let q_pos = pos_solver.solve_position(target_pos, q_init, robot, base, tool)?;
     let q1 = q_pos[0];
     let q2 = q_pos[1];
     let q3 = q_pos[2];
 
-    
     let target = PoseGenerator::drawing_pose_adaptive(*target_pos, q1);
 
-    
     let q_partial = [q1, q2, q3, 0.0, 0.0];
     let robot_partial = build_robot(robot, &q_partial);
     let (frames, _) = forward_kinematics(*base, &robot_partial);
     let r03 = frames[2].rotation.to_rotation_matrix();
 
-    
     let [q4, q5] = orient_solver
         .solve(&r03, &target.rotation, robot)
         .map_err(|err| match err {
@@ -411,10 +360,8 @@ pub fn solve_drawing_ik(
             }
         })?;
 
-    
     Ok(vec![q1, q2, q3, q4, q5])
 }
-
 
 pub fn solve_drawing_ik_v2(
     pos_solver: &IkSolver,
@@ -427,22 +374,18 @@ pub fn solve_drawing_ik_v2(
 ) -> Result<Vec<f64>, IkError> {
     use crate::kinematics::pose_generator::PoseGenerator;
 
-    
     let q_pos = pos_solver.solve_position(target_pos, q_init, robot, base, tool)?;
     let q1 = q_pos[0];
     let q2 = q_pos[1];
     let q3 = q_pos[2];
 
-    
     let target = PoseGenerator::drawing_pose_v2(*target_pos, q1);
 
-    
     let q_partial = [q1, q2, q3, 0.0, 0.0];
     let robot_partial = build_robot(robot, &q_partial);
     let (frames, _) = forward_kinematics(*base, &robot_partial);
     let r03 = frames[2].rotation.to_rotation_matrix();
 
-    
     let [q4, q5] = orient_solver
         .solve(&r03, &target.rotation, robot)
         .map_err(|err| match err {
@@ -451,10 +394,8 @@ pub fn solve_drawing_ik_v2(
             }
         })?;
 
-    
     Ok(vec![q1, q2, q3, q4, q5])
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawingConfiguration {
@@ -468,7 +409,6 @@ impl DrawingConfiguration {
         Self { q1, q2, q3 }
     }
 
-    
     pub fn from_q(q: &[f64]) -> Self {
         Self {
             q1: q[0],
@@ -477,17 +417,14 @@ impl DrawingConfiguration {
         }
     }
 
-    
     pub fn full_configuration(&self) -> [f64; 5] {
         [self.q1, self.q2, self.q3, 0.0, -(self.q2 + self.q3)]
     }
 
-    
     pub fn q23(&self) -> f64 {
         self.q2 + self.q3
     }
 }
-
 
 pub fn solve_drawing_plane_ik(
     solver: &IkSolver,
@@ -526,7 +463,6 @@ pub fn solve_drawing_plane_ik(
             return Ok(q_full);
         }
 
-        
         let j_full = position_jacobian(&robot_q, &frames, &p_ee, base, robot.dof().min(5));
         let mut jr = SMatrix::<f64, 3, 3>::zeros();
         for r in 0..3 {
@@ -535,7 +471,6 @@ pub fn solve_drawing_plane_ik(
             jr[(r, 2)] = j_full[(r, 2)] - j_full[(r, 4)];
         }
 
-        
         let jjt = jr * jr.transpose();
         let reg = jjt + SMatrix::<f64, 3, 3>::identity() * damping_sq;
         if let Some(inv) = reg.try_inverse() {
@@ -564,12 +499,9 @@ pub fn solve_drawing_plane_ik(
             cfg.q2 = vals[1];
             cfg.q3 = vals[2];
         } else {
-            
             return Ok(q_full);
         }
 
-        
-        
         let q23 = cfg.q23();
         let q5 = -q23;
         if q5 < j5_lo || q5 > j5_hi {
@@ -577,7 +509,6 @@ pub fn solve_drawing_plane_ik(
         }
     }
 
-    
     let robot_q = build_robot(robot, &cfg.full_configuration());
     let (frames, _) = forward_kinematics(*base, &robot_q);
     let p_ee = (frames.last().unwrap() * tool).translation.vector;
@@ -602,7 +533,6 @@ mod tests {
     fn solve_home_pose() {
         let (solver, robot, base, tool) = make_test();
 
-        
         use crate::kinematics::forward::forward_kinematics;
         let home_q = [0.0_f64; 5];
         let robot_home = build_robot(&robot, &home_q);
@@ -618,7 +548,6 @@ mod tests {
         let result = solver.solve_position(&target, &q_init, &robot, &base, &tool);
         assert!(result.is_ok(), "IK should converge at home position");
 
-        
         let q = result.unwrap();
         let robot_q = build_robot(&robot, &q);
         let (frames_q, _) = forward_kinematics(base, &robot_q);
@@ -636,7 +565,6 @@ mod tests {
         let (solver, robot, base, tool) = make_test();
         let target = [200.0, 0.0, 280.0];
 
-        
         let empty: Vec<f64> = vec![];
         let result = solver.solve_position(&target, &empty, &robot, &base, &tool);
         assert!(matches!(
@@ -647,7 +575,6 @@ mod tests {
             })
         ));
 
-        
         let short = vec![0.0; 3];
         let result = solver.solve_position(&target, &short, &robot, &base, &tool);
         assert!(matches!(
@@ -658,7 +585,6 @@ mod tests {
             })
         ));
 
-        
         let long = vec![0.0; 7];
         let result = solver.solve_position(&target, &long, &robot, &base, &tool);
         assert!(matches!(
@@ -670,17 +596,14 @@ mod tests {
         ));
     }
 
-    
-
     #[test]
     fn position_jacobian_finite_differences_fabri() {
         let (_, robot, base, tool) = make_test();
         use crate::kinematics::forward::forward_kinematics;
 
         let eps = 1e-8;
-        let tol = 1e-4; 
+        let tol = 1e-4;
 
-        
         let configs: [[f64; 5]; 4] = [
             [0.0, 0.0, 0.0, 0.0, 0.0],
             [0.3, -0.5, 0.7, 0.4, -0.4],
@@ -723,9 +646,6 @@ mod tests {
                 }
             }
 
-            
-            
-            
             if *q == [0.0; 5] {
                 let twist_col = j_ana.fixed_view::<3, 1>(0, 3).into_owned();
                 assert!(
@@ -740,7 +660,6 @@ mod tests {
     fn solve_reachable_pose() {
         let (solver, robot, base, tool) = make_test();
 
-        
         let target = [200.0, 0.0, 280.0];
         let q_init = vec![0.0; 5];
 
@@ -757,7 +676,6 @@ mod tests {
     fn solve_upward() {
         let (solver, robot, base, tool) = make_test();
 
-        
         let target = [150.0, 0.0, 400.0];
         let q_init = vec![0.0; 5];
 
@@ -793,7 +711,6 @@ mod tests {
     fn solve_unreachable_returns_max_iterations() {
         let (solver, robot, base, tool) = make_test();
 
-        
         let target = [5000.0, 5000.0, 5000.0];
         let q_init = vec![0.0; 5];
 
@@ -802,15 +719,12 @@ mod tests {
     }
 }
 
-
-
 #[cfg(test)]
 mod orientation_tests {
     use super::*;
     use crate::math::Rot3;
     use crate::robot::fabri_creator;
 
-    
     fn get_rot3(iso: &Iso3) -> Rot3 {
         iso.rotation.to_rotation_matrix()
     }
@@ -863,11 +777,10 @@ mod orientation_tests {
         let mut max_reconstruction_err: f64 = 0.0;
 
         for _ in 0..n_samples {
-            
             let q: [f64; 5] = std::array::from_fn(|i| {
                 let lo = robot.segments[i].joint.value_min.max(-2.0);
                 let hi = robot.segments[i].joint.value_max.min(2.0);
-                
+
                 seed = seed
                     .wrapping_mul(6364136223846793005)
                     .wrapping_add(1442695040888963407);
@@ -893,7 +806,6 @@ mod orientation_tests {
 
             let [q4, q5] = result.unwrap();
 
-            
             let q4_err = (q4 - q[3]).abs() % (2.0 * std::f64::consts::PI);
             let q4_err = q4_err.min(2.0 * std::f64::consts::PI - q4_err);
             let q5_err = (q5 - q[4]).abs() % (2.0 * std::f64::consts::PI);
@@ -917,7 +829,6 @@ mod orientation_tests {
                 q5
             );
 
-            
             let (s4, c4) = q4.sin_cos();
             let (s5, c5) = q5.sin_cos();
             let r35_reconstructed = Rot3::from_matrix_unchecked(nalgebra::Matrix3::new(
@@ -949,14 +860,13 @@ mod orientation_tests {
     fn test_unreachable_orientation_detected() {
         let robot = make_robot();
         let base = make_base();
-        
+
         let solver = OrientationSolver::new(1e-10);
 
         let mut seed: u64 = 1234;
         let n_samples = 50;
 
         for _ in 0..n_samples {
-            
             let mut q: [f64; 5] = [0.0; 5];
             for i in 0..3 {
                 let lo = robot.segments[i].joint.value_min.max(-2.0);
@@ -972,11 +882,8 @@ mod orientation_tests {
             let (frames, _effector) = forward_kinematics(base, &robot_q);
             let r03 = get_rot3(&frames[2]);
 
-            
-            
-            
             let r_y = Rot3::from_axis_angle(&nalgebra::Unit::new_normalize(Vec3::y()), 0.2);
-            
+
             let r_target_perturbed = r03 * r_y;
 
             let result = solver.solve(&r03, &r_target_perturbed, &robot);
@@ -1005,12 +912,11 @@ mod orientation_tests {
         let solver = OrientationSolver::new(1e-6);
 
         let mut seed: u64 = 77;
-        
+
         let q5_vals = [-0.8, 0.0, 0.8];
         let q4_vals = [-1.2, -0.7, -0.2, 0.0, 0.3, 0.8, 1.2];
 
         for _ in 0..20 {
-            
             let mut q_base: [f64; 5] = [0.0; 5];
             for i in 0..3 {
                 let lo = robot.segments[i].joint.value_min.max(-2.0);
@@ -1049,8 +955,6 @@ mod orientation_tests {
     }
 }
 
-
-
 #[cfg(test)]
 mod full_ik_tests {
     use super::*;
@@ -1072,7 +976,6 @@ mod full_ik_tests {
         iso.rotation.to_rotation_matrix()
     }
 
-    
     fn position_error_for_q(
         robot: &Robot,
         q: &[f64],
@@ -1088,7 +991,6 @@ mod full_ik_tests {
         (target_v - p_ee).norm()
     }
 
-    
     fn orientation_error_for_q(robot: &Robot, q: &[f64], target_rot: &Rot3, base: &Iso3) -> f64 {
         let robot_q = build_robot(robot, q);
         let (_frames, effector) = forward_kinematics(*base, &robot_q);
@@ -1115,7 +1017,6 @@ mod full_ik_tests {
         let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
         let orient_solver = OrientationSolver::new(1e-2);
 
-        
         let q_home = [0.0; 5];
         let robot_home = build_robot(&robot, &q_home);
         let (_frames, effector) = forward_kinematics(base, &robot_home);
@@ -1141,11 +1042,9 @@ mod full_ik_tests {
 
         let q = result.unwrap();
 
-        
         let pos_err = position_error_for_q(&robot, &q, &target_pos, &base, &tool);
         assert!(pos_err < 5.0, "error posición home: {:.3}mm", pos_err);
 
-        
         let orient_err = orientation_error_for_q(&robot, &q, &target_rot, &base);
         assert!(
             orient_err < 1e-1,
@@ -1168,7 +1067,6 @@ mod full_ik_tests {
         let mut max_orient_err: f64 = 0.0;
 
         for _ in 0..n_samples {
-            
             let mut q: [f64; 5] = [0.0; 5];
             for i in 0..5 {
                 let lo = robot.segments[i].joint.value_min.max(-1.3);
@@ -1176,7 +1074,6 @@ mod full_ik_tests {
                 q[i] = rand_range(&mut seed, lo, hi);
             }
 
-            
             let robot_q = build_robot(&robot, &q);
             let (_frames, effector) = forward_kinematics(base, &robot_q);
             let tool_pose = effector * tool;
@@ -1187,9 +1084,6 @@ mod full_ik_tests {
             ];
             let target_rot = get_rot3(&effector);
 
-            
-            
-            
             let q_init = q.to_vec();
             let result = solve_full_ik(
                 &pos_solver,
@@ -1209,7 +1103,6 @@ mod full_ik_tests {
 
             let q_solved = result.unwrap();
 
-            
             let pos_err = position_error_for_q(&robot, &q_solved, &target_pos, &base, &tool);
             max_pos_err = max_pos_err.max(pos_err);
             assert!(
@@ -1219,7 +1112,6 @@ mod full_ik_tests {
                 q
             );
 
-            
             let orient_err = orientation_error_for_q(&robot, &q_solved, &target_rot, &base);
             max_orient_err = max_orient_err.max(orient_err);
             assert!(
@@ -1242,19 +1134,15 @@ mod full_ik_tests {
         let base = make_base();
         let tool = make_tool();
         let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
-        let orient_solver = OrientationSolver::new(1e-10); 
+        let orient_solver = OrientationSolver::new(1e-10);
 
-        
-        
         let target_pos = [236.0, 0.0, 314.0];
 
-        
         let q_home = [0.0; 5];
         let robot_home = build_robot(&robot, &q_home);
         let (_frames, effector) = forward_kinematics(base, &robot_home);
         let r05_home = get_rot3(&effector);
 
-        
         let r_y = Rot3::from_axis_angle(&nalgebra::Unit::new_normalize(Vec3::y()), 0.3);
         let target_rot = r05_home * r_y;
 
@@ -1279,10 +1167,7 @@ mod full_ik_tests {
                     r35_02,
                     tolerance
                 );
-                eprintln!(
-                    " Orientación inalcanzable detectada: r35_02={:.2e}",
-                    r35_02
-                );
+                eprintln!(" Orientación inalcanzable detectada: r35_02={:.2e}", r35_02);
             }
             Err(other) => panic!("error inesperado: {other}"),
             Ok(_) => unreachable!(),
@@ -1291,14 +1176,11 @@ mod full_ik_tests {
 
     #[test]
     fn test_position_solver_unchanged() {
-        
-        
         let robot = make_robot();
         let base = make_base();
         let tool = make_tool();
         let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
 
-        
         let target = [236.0, 0.0, 314.0];
         let result = pos_solver.solve_position(&target, &[0.0; 5], &robot, &base, &tool);
         assert!(result.is_ok());
@@ -1306,7 +1188,6 @@ mod full_ik_tests {
         let err = position_error_for_q(&robot, &q, &target, &base, &tool);
         assert!(err < 2.0, "home position error: {:.3}", err);
 
-        
         let target = [200.0, 0.0, 280.0];
         let result = pos_solver.solve_position(&target, &[0.0; 5], &robot, &base, &tool);
         assert!(result.is_ok());
@@ -1314,7 +1195,6 @@ mod full_ik_tests {
         let err = position_error_for_q(&robot, &q, &target, &base, &tool);
         assert!(err < 10.0, "reachable position error: {:.3}", err);
 
-        
         let target_a = [200.0, 20.0, 280.0];
         let q_a = pos_solver
             .solve_position(&target_a, &[0.0; 5], &robot, &base, &tool)
@@ -1326,13 +1206,10 @@ mod full_ik_tests {
         let err = position_error_for_q(&robot, &q_b, &target_b, &base, &tool);
         assert!(err < 10.0, "tracking error: {:.3}", err);
 
-        
         let target = [5000.0, 5000.0, 5000.0];
         let result = pos_solver.solve_position(&target, &[0.0; 5], &robot, &base, &tool);
         assert!(matches!(result, Err(IkError::MaxIterationsReached { .. })));
     }
-
-    
 
     #[test]
     fn diagnostic_drawing_pose_roundtrip() {
@@ -1344,13 +1221,12 @@ mod full_ik_tests {
         let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
         let orient_solver = OrientationSolver::new(1e-6);
 
-        
         let test_positions: [[f64; 3]; 5] = [
-            [200.0, 0.0, 80.0],   
-            [150.0, 50.0, 80.0],  
-            [150.0, -50.0, 80.0], 
-            [250.0, 0.0, 100.0],  
-            [180.0, 30.0, 70.0],  
+            [200.0, 0.0, 80.0],
+            [150.0, 50.0, 80.0],
+            [150.0, -50.0, 80.0],
+            [250.0, 0.0, 100.0],
+            [180.0, 30.0, 70.0],
         ];
 
         for &pos in &test_positions {
@@ -1386,7 +1262,6 @@ mod full_ik_tests {
                         q[0], q[1], q[2], q[3], q[4]
                     );
 
-                    
                     let r_target = target.rotation;
                     eprintln!();
                     eprintln!("R_target (PoseGenerator):");
@@ -1406,7 +1281,6 @@ mod full_ik_tests {
                         rt[(2, 0)]
                     );
 
-                    
                     let robot_q = build_robot(&robot, &q);
                     let (_frames, effector) = forward_kinematics(base, &robot_q);
                     let r05 = get_rot3(&effector);
@@ -1428,7 +1302,6 @@ mod full_ik_tests {
                         r05_m[(2, 0)]
                     );
 
-                    
                     let tool_pose = effector * tool;
                     let tcp = tool_pose.translation.vector;
                     eprintln!();
@@ -1443,7 +1316,6 @@ mod full_ik_tests {
                     let pos_err = (Vec3::new(pos[0], pos[1], pos[2]) - tcp).norm();
                     eprintln!("Error posición: {:.4} mm", pos_err);
 
-                    
                     let r_error = r05.transpose() * r_target;
                     let re = r_error.matrix();
                     eprintln!();
@@ -1479,8 +1351,6 @@ mod full_ik_tests {
         eprintln!("Diagnóstico completado.");
     }
 
-    
-
     #[test]
     fn test_solve_drawing_ik_centered() {
         let robot = make_robot();
@@ -1489,7 +1359,6 @@ mod full_ik_tests {
         let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
         let orient_solver = OrientationSolver::new(1e-6);
 
-        
         let pos = [200.0, 0.0, 80.0];
         let result = solve_drawing_ik(
             &pos_solver,
@@ -1503,11 +1372,10 @@ mod full_ik_tests {
         assert!(result.is_ok(), "centrada debe funcionar: {result:?}");
         let q = result.unwrap();
 
-        
         let robot_q = build_robot(&robot, &q);
         let (_frames, effector) = forward_kinematics(base, &robot_q);
         let r05 = get_rot3(&effector);
-        
+
         let x5 = r05.matrix().column(0);
         assert!((x5.x).abs() < 1e-6, "X5_x ≈ 0, got {}", x5.x);
         assert!((x5.y).abs() < 1e-6, "X5_y ≈ 0, got {}", x5.y);
@@ -1527,8 +1395,6 @@ mod full_ik_tests {
         let pos_solver = IkSolver::new(200, 1.0, 0.1, 0.5);
         let orient_solver = OrientationSolver::new(1e-6);
 
-        
-        
         let test_positions: [[f64; 3]; 6] = [
             [200.0, 50.0, 80.0],
             [200.0, 100.0, 80.0],
@@ -1552,10 +1418,7 @@ mod full_ik_tests {
 
             match result {
                 Err(e) => {
-                    eprintln!(
-                        "({:.0},{:.0},{:.0}) rechazada: {e}",
-                        pos[0], pos[1], pos[2]
-                    );
+                    eprintln!("({:.0},{:.0},{:.0}) rechazada: {e}", pos[0], pos[1], pos[2]);
                 }
                 Ok(q) => {
                     let robot_q = build_robot(&robot, &q);
@@ -1599,10 +1462,8 @@ mod full_ik_tests {
         let pos_solver = IkSolver::new(200, 1.0, 0.1, 0.5);
         let orient_solver = OrientationSolver::new(1e-6);
 
-        
         let pos = [200.0, 80.0, 80.0];
 
-        
         let const_pose = PoseGenerator::drawing_pose(pos);
         let const_result = solve_full_ik(
             &pos_solver,
@@ -1619,7 +1480,6 @@ mod full_ik_tests {
             "constante debería fallar para posición lateral"
         );
 
-        
         let adapt_result = solve_drawing_ik(
             &pos_solver,
             &orient_solver,
@@ -1637,8 +1497,6 @@ mod full_ik_tests {
         eprintln!("Constante, Adaptativa para (200, 80, 80)");
     }
 
-    
-    
     fn constrained_tcp(robot: &Robot, base: Iso3, q13: &[f64; 3]) -> Vec3 {
         let q = [q13[0], q13[1], q13[2], 0.0, -(q13[1] + q13[2])];
         let robot_q = build_robot(robot, &q);
@@ -1649,10 +1507,6 @@ mod full_ik_tests {
 
     #[test]
     fn test_reduced_jacobian_matches_fd() {
-        
-        
-        
-        
         let robot = make_robot();
         let base = make_base();
         let tool = make_tool();
@@ -1682,8 +1536,10 @@ mod full_ik_tests {
             qp[i] += d;
             let mut qm = q13;
             qm[i] -= d;
-            let fd = (constrained_tcp(&robot, base, &qp) - constrained_tcp(&robot, base, &qm)) / (2.0 * d);
-            let diff = (Vec3::new(jr_analytic[i][0], jr_analytic[i][1], jr_analytic[i][2]) - fd).norm();
+            let fd = (constrained_tcp(&robot, base, &qp) - constrained_tcp(&robot, base, &qm))
+                / (2.0 * d);
+            let diff =
+                (Vec3::new(jr_analytic[i][0], jr_analytic[i][1], jr_analytic[i][2]) - fd).norm();
             assert!(
                 diff < 1e-5,
                 "reduced jacobian col {i} mismatch vs FD: |diff| = {diff:.2e}"
@@ -1693,9 +1549,6 @@ mod full_ik_tests {
 
     #[test]
     fn test_drawing_plane_demo_corner() {
-        
-        
-        
         let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
         let robot = make_robot();
         let base = make_base();
@@ -1705,7 +1558,6 @@ mod full_ik_tests {
         let q = solve_drawing_plane_ik(&solver, &target, &[0.0; 5], &robot, &base, &tool)
             .expect("demo corner must be solvable in the drawing manifold");
 
-        
         assert!((q[3]).abs() < 1e-12, "q4 must be 0, got {}", q[3]);
         assert!(
             (q[4] + (q[1] + q[2])).abs() < 1e-12,
@@ -1714,14 +1566,12 @@ mod full_ik_tests {
             q[1] + q[2]
         );
 
-        
         let robot_q = build_robot(&robot, &q);
         let (frames, _) = forward_kinematics(base, &robot_q);
         let p = (frames.last().unwrap() * tool).translation.vector;
         let err = (Vec3::new(target[0], target[1], target[2]) - p).norm();
         assert!(err < 2.0, "TCP error must be < 2mm, got {err:.3}mm");
 
-        
         let y5 = frames[4].rotation * Vec3::y();
         assert!(
             (y5 - Vec3::new(0.0, 0.0, -1.0)).norm() < 1e-9,
@@ -1731,15 +1581,11 @@ mod full_ik_tests {
 
     #[test]
     fn test_drawing_plane_outside_workspace() {
-        
-        
         let solver = IkSolver::new(200, 1.0, 0.05, 0.5);
         let robot = make_robot();
         let base = make_base();
         let tool = make_tool();
 
-        
-        
         let folded = [
             0.0_f64,
             60.0_f64.to_radians(),

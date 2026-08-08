@@ -55,7 +55,6 @@ mod tests {
         let seg = make_segment(JointType::Revolute, 0.0, dh);
         let m = matrix_from_segment(&seg);
 
-        
         let t = m.translation.vector;
         assert!((t.x - 0.0).abs() < 1e-10);
         assert!((t.y - 0.0).abs() < 1e-10);
@@ -64,8 +63,6 @@ mod tests {
 
     #[test]
     fn test_matrix_from_segment_translation() {
-        
-        
         let dh = DHParams::new(0.0, 5.0, 3.0, 0.0);
         let seg = make_segment(JointType::Revolute, 0.0, dh);
         let m = matrix_from_segment(&seg);
@@ -78,8 +75,6 @@ mod tests {
 
     #[test]
     fn test_matrix_from_segment_rotation() {
-        
-        
         let dh = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let seg = make_segment(JointType::Revolute, std::f64::consts::FRAC_PI_2, dh);
         let m = matrix_from_segment(&seg);
@@ -109,9 +104,6 @@ mod tests {
 
     #[test]
     fn test_forward_kinematics_two_segments() {
-        
-        
-        
         let dh1 = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let dh2 = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let segments = vec![
@@ -125,7 +117,6 @@ mod tests {
 
         assert_eq!(frames.len(), 2);
 
-        
         let t = effector.translation.vector;
         assert!((t.x - 2.0).abs() < 1e-10);
         assert!((t.y - 0.0).abs() < 1e-10);
@@ -134,7 +125,6 @@ mod tests {
 
     #[test]
     fn test_forward_kinematics_with_joint_angle() {
-        
         let dh = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let segments = vec![make_segment(
             JointType::Revolute,
@@ -146,11 +136,9 @@ mod tests {
         let base = Iso3::identity();
         let (_frames, effector) = forward_kinematics(base, &robot);
 
-        
         let t = effector.translation.vector;
         assert!((t.x - 0.0).abs() < 1e-10);
         assert!((t.y - 1.0).abs() < 1e-10);
         assert!((t.z - 0.0).abs() < 1e-10);
-        
     }
 }

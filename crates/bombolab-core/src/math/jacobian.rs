@@ -6,8 +6,7 @@ use crate::math::{Mat4, MatDyn, Vec3};
 pub enum JointKind {
     Revolute,
     Prismatic,
-    
-    
+
     Twist,
 }
 
@@ -36,7 +35,6 @@ impl fmt::Display for JacobianError {
 
 impl std::error::Error for JacobianError {}
 
-
 pub fn geometric_jacobian(
     intermediates: &[Mat4],
     joint_kinds: &[JointKind],
@@ -57,10 +55,6 @@ pub fn geometric_jacobian(
     let mut jacobian = MatDyn::zeros(6, n);
 
     for (i, kind) in joint_kinds.iter().enumerate() {
-        
-        
-        
-        
         let (axis, p_i) = if i == 0 {
             let ax = match kind {
                 JointKind::Twist => Vec3::x(),
@@ -81,12 +75,6 @@ pub fn geometric_jacobian(
             JointKind::Revolute => axis.cross(&(p_ee - p_i)),
             JointKind::Prismatic => axis,
             JointKind::Twist => {
-                
-                
-                
-                
-                
-                
                 let p_twist = intermediates[i].fixed_view::<3, 1>(0, 3).into_owned();
                 axis.cross(&(p_ee - p_twist))
             }
@@ -213,8 +201,6 @@ mod tests {
 
     #[test]
     fn fabri_creator_home_pose() {
-        
-        
         use crate::kinematics::forward::forward_kinematics;
         use crate::robot::fabri_creator::fabri_creator;
 
@@ -237,8 +223,6 @@ mod tests {
         assert_eq!(j.ncols(), 5);
         assert!(j.iter().all(|v| v.is_finite()));
 
-        
-        
         let p_ee = ee_mat.fixed_view::<3, 1>(0, 3);
         assert!(
             (p_ee[(0, 0)] - 140.0).abs() < 1e-10,
@@ -256,22 +240,17 @@ mod tests {
             p_ee[(2, 0)]
         );
 
-        
-        
         approx_eq(j[(0, 0)], 15.0);
         approx_eq(j[(1, 0)], 140.0);
         approx_eq(j[(2, 0)], 0.0);
         approx_eq(j[(5, 0)], 1.0);
-        
+
         approx_eq(j[(0, 3)], 0.0);
         approx_eq(j[(1, 3)], 0.0);
         approx_eq(j[(2, 3)], 0.0);
         approx_eq(j[(3, 3)], 1.0);
     }
 
-    
-    
-    
     #[test]
     fn fabri_creator_jacobian_finite_differences() {
         use crate::kinematics::forward::forward_kinematics;
@@ -320,7 +299,6 @@ mod tests {
                 let ee_pert_mat = ee_pert.to_matrix();
                 let p_pert = ee_pert_mat.fixed_view::<3, 1>(0, 3).into_owned();
 
-                
                 let dp = (p_pert - p_ee) / eps;
                 for row in 0..3 {
                     let num = dp[row];
@@ -333,7 +311,6 @@ mod tests {
                     );
                 }
 
-                
                 let r_pert = ee_pert_mat.fixed_view::<3, 3>(0, 0).into_owned();
                 let r_rel = r_pert * r_ee.transpose();
                 let wx = (r_rel[(2, 1)] - r_rel[(1, 2)]) / (2.0 * eps);
@@ -354,20 +331,11 @@ mod tests {
         }
     }
 
-    
-    
-    
-    
-    
     #[test]
     fn twist_with_non_axial_offset_finite_differences() {
         use crate::kinematics::forward::forward_kinematics;
         use crate::robot::{DHParams, Joint, JointType, Robot, Segment};
 
-        
-        
-        
-        
         let make_robot = |q1: f64, q2: f64| {
             Robot::new(vec![
                 Segment::new(
@@ -390,14 +358,12 @@ mod tests {
 
         let j_ana = geometric_jacobian(&mats, &kinds, &ee_mat).unwrap();
 
-        
         let twist_lin = j_ana.fixed_view::<3, 1>(0, 0).into_owned();
         assert!(
             twist_lin.norm() > 1.0,
             "twist linear column must be non-zero for off-axis TCP, got {twist_lin:?}"
         );
 
-        
         let eps = 1e-8;
         let tol = 1e-5;
         let p_ee = ee_mat.fixed_view::<3, 1>(0, 3).into_owned();
@@ -420,7 +386,6 @@ mod tests {
             let r_minus = ee_m_mat.fixed_view::<3, 3>(0, 0).into_owned();
             q[col] += eps;
 
-            
             let dp = (p_plus - p_minus) / (2.0 * eps);
             for row in 0..3 {
                 let num = dp[row];
@@ -432,7 +397,6 @@ mod tests {
                 );
             }
 
-            
             let r_rel_p = r_plus * r_ee.transpose();
             let wx_p = (r_rel_p[(2, 1)] - r_rel_p[(1, 2)]) / 2.0;
             let wy_p = (r_rel_p[(0, 2)] - r_rel_p[(2, 0)]) / 2.0;

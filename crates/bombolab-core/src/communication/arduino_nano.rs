@@ -6,8 +6,6 @@ use serialport::SerialPort;
 use super::command::ServoCommand;
 use super::{BAUD_RATE, ConnectionError, READ_TIMEOUT_MS};
 
-
-
 pub struct ArduinoNano {
     reader: BufReader<Box<dyn SerialPort>>,
     port_name: String,
@@ -22,7 +20,6 @@ impl ArduinoNano {
         Ok(ports.into_iter().map(|p| p.port_name).collect())
     }
 
-    
     pub fn connect(port_name: &str) -> Result<Self, ConnectionError> {
         let port = serialport::new(port_name, BAUD_RATE)
             .timeout(Duration::from_millis(READ_TIMEOUT_MS))
@@ -38,7 +35,6 @@ impl ArduinoNano {
         })
     }
 
-    
     pub fn send(&mut self, cmd: &ServoCommand) -> Result<(), ConnectionError> {
         let msg = cmd.to_wire();
         let port = self.reader.get_mut();
@@ -54,7 +50,6 @@ impl ArduinoNano {
         Ok(())
     }
 
-    
     pub fn read_response(&mut self) -> Result<String, ConnectionError> {
         let mut line = String::new();
         self.reader
@@ -66,7 +61,6 @@ impl ArduinoNano {
         Ok(line.trim().to_string())
     }
 
-    
     pub fn send_and_verify(&mut self, cmd: &ServoCommand) -> Result<(), ConnectionError> {
         self.send(cmd)?;
         let response = self.read_response()?;
@@ -83,7 +77,6 @@ impl ArduinoNano {
         }
     }
 
-    
     pub fn disconnect(&mut self) -> Result<(), ConnectionError> {
         self.reader
             .get_mut()

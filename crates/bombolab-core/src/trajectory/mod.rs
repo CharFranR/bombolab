@@ -1,40 +1,30 @@
 pub const MAX_DT: f64 = 0.1;
 
-
 const EPS: f64 = 1e-6;
-
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MotionCommand {
-    
-    MoveLinear {
-        target: [f64; 3],
-        speed: f64,
-    },
-    
+    MoveLinear { target: [f64; 3], speed: f64 },
+
     PenUp,
-    
+
     PenDown,
-    
+
     Wait { duration: f64 },
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerState {
-    
     Idle,
-    
+
     Running,
-    
+
     Paused,
-    
+
     Completed,
-    
-    
+
     Stopped,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct MotionPlayer {
@@ -46,7 +36,6 @@ pub struct MotionPlayer {
 }
 
 impl MotionPlayer {
-    
     pub fn new(commands: Vec<MotionCommand>, start: [f64; 3]) -> Self {
         Self {
             state: PlayerState::Idle,
@@ -61,12 +50,10 @@ impl MotionPlayer {
         self.state
     }
 
-    
     pub fn current_target(&self) -> [f64; 3] {
         self.current
     }
 
-    
     pub fn progress(&self) -> f64 {
         if self.commands.is_empty() {
             return 1.0;
@@ -74,37 +61,28 @@ impl MotionPlayer {
         (self.index as f64 / self.commands.len() as f64).min(1.0)
     }
 
-    
     pub fn play(&mut self) {
         self.index = 0;
         self.hold_remaining = 0.0;
         self.state = PlayerState::Running;
     }
 
-    
     pub fn pause(&mut self) {
         if self.state == PlayerState::Running {
             self.state = PlayerState::Paused;
         }
     }
 
-    
     pub fn resume(&mut self) {
         if self.state == PlayerState::Paused {
             self.state = PlayerState::Running;
         }
     }
 
-    
-    
     pub fn stop(&mut self) {
         self.state = PlayerState::Stopped;
     }
 
-    
-    
-    
-    
     pub fn update(&mut self, dt: f64) {
         if self.state != PlayerState::Running || dt <= 0.0 {
             return;
@@ -124,7 +102,6 @@ impl MotionPlayer {
                     let dz = target[2] - self.current[2];
                     let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-                    
                     if dist <= EPS || *speed <= 0.0 {
                         self.current = *target;
                         self.index += 1;
@@ -133,7 +110,6 @@ impl MotionPlayer {
 
                     let step = speed * remaining;
                     if step >= dist {
-                        
                         self.current = *target;
                         self.index += 1;
                         remaining = (remaining - dist / speed).max(0.0);
@@ -147,8 +123,7 @@ impl MotionPlayer {
                         remaining = 0.0;
                     }
                 }
-                
-                
+
                 MotionCommand::PenUp | MotionCommand::PenDown => {
                     self.index += 1;
                 }
@@ -174,7 +149,6 @@ impl MotionPlayer {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TrajectoryPlanner;
 
@@ -183,7 +157,6 @@ impl TrajectoryPlanner {
         Self
     }
 
-    
     pub fn plan(&self, commands: Vec<MotionCommand>) -> Vec<MotionCommand> {
         commands
     }
@@ -197,10 +170,22 @@ mod tests {
 
     fn square(speed: f64) -> Vec<MotionCommand> {
         vec![
-            MotionCommand::MoveLinear { target: [175.0, -25.0, Z], speed },
-            MotionCommand::MoveLinear { target: [225.0, -25.0, Z], speed },
-            MotionCommand::MoveLinear { target: [225.0, 25.0, Z], speed },
-            MotionCommand::MoveLinear { target: [175.0, 25.0, Z], speed },
+            MotionCommand::MoveLinear {
+                target: [175.0, -25.0, Z],
+                speed,
+            },
+            MotionCommand::MoveLinear {
+                target: [225.0, -25.0, Z],
+                speed,
+            },
+            MotionCommand::MoveLinear {
+                target: [225.0, 25.0, Z],
+                speed,
+            },
+            MotionCommand::MoveLinear {
+                target: [175.0, 25.0, Z],
+                speed,
+            },
         ]
     }
 
@@ -208,13 +193,17 @@ mod tests {
     fn moves_along_the_first_segment_at_speed() {
         let mut p = MotionPlayer::new(square(100.0), [175.0, -25.0, Z]);
         p.play();
-        
+
         for _ in 0..5 {
             p.update(0.05);
         }
         let t = p.current_target();
         assert!((t[0] - 200.0).abs() < 1e-6, "x should be 200, got {}", t[0]);
-        assert!((t[1] + 25.0).abs() < 1e-6, "y should stay -25, got {}", t[1]);
+        assert!(
+            (t[1] + 25.0).abs() < 1e-6,
+            "y should stay -25, got {}",
+            t[1]
+        );
         assert_eq!(p.state(), PlayerState::Running);
     }
 
@@ -222,7 +211,7 @@ mod tests {
     fn completes_after_all_segments() {
         let mut p = MotionPlayer::new(square(50.0), [175.0, -25.0, Z]);
         p.play();
-        
+
         for _ in 0..80 {
             p.update(0.05);
         }
@@ -237,7 +226,7 @@ mod tests {
     fn single_update_can_consume_short_segments() {
         let mut p = MotionPlayer::new(square(1000.0), [175.0, -25.0, Z]);
         p.play();
-        
+
         p.update(0.1);
         assert_eq!(p.state(), PlayerState::Running);
         let t = p.current_target();
@@ -273,7 +262,7 @@ mod tests {
         p.update(1.0);
         assert_eq!(p.state(), PlayerState::Stopped);
         p.resume();
-        assert_eq!(p.state(), PlayerState::Stopped); 
+        assert_eq!(p.state(), PlayerState::Stopped);
         p.play();
         assert_eq!(p.state(), PlayerState::Running);
     }
@@ -282,25 +271,35 @@ mod tests {
     fn wait_holds_position_then_advances() {
         let mut p = MotionPlayer::new(
             vec![
-                MotionCommand::MoveLinear { target: [200.0, 0.0, Z], speed: 100.0 },
+                MotionCommand::MoveLinear {
+                    target: [200.0, 0.0, Z],
+                    speed: 100.0,
+                },
                 MotionCommand::Wait { duration: 1.0 },
-                MotionCommand::MoveLinear { target: [220.0, 0.0, Z], speed: 100.0 },
+                MotionCommand::MoveLinear {
+                    target: [220.0, 0.0, Z],
+                    speed: 100.0,
+                },
             ],
             [150.0, 0.0, Z],
         );
         p.play();
-        
+
         for _ in 0..10 {
             p.update(0.05);
         }
         let at_wait = p.current_target();
-        assert!((at_wait[0] - 200.0).abs() < 1e-6, "x should be 200, got {}", at_wait[0]);
-        
+        assert!(
+            (at_wait[0] - 200.0).abs() < 1e-6,
+            "x should be 200, got {}",
+            at_wait[0]
+        );
+
         for _ in 0..8 {
-            p.update(0.05); 
+            p.update(0.05);
         }
         assert_eq!(p.current_target(), at_wait);
-        
+
         for _ in 0..16 {
             p.update(0.05);
         }
@@ -314,19 +313,22 @@ mod tests {
         let mut p = MotionPlayer::new(
             vec![
                 MotionCommand::PenDown,
-                MotionCommand::MoveLinear { target: [200.0, 0.0, Z], speed: 50.0 },
+                MotionCommand::MoveLinear {
+                    target: [200.0, 0.0, Z],
+                    speed: 50.0,
+                },
                 MotionCommand::PenUp,
             ],
             [150.0, 0.0, Z],
         );
         p.play();
-        
+
         for _ in 0..20 {
             p.update(0.05);
         }
         let t = p.current_target();
         assert!((t[0] - 200.0).abs() < 1e-6, "x should be 200, got {}", t[0]);
-        
+
         p.update(0.05);
         assert_eq!(p.state(), PlayerState::Completed);
     }
@@ -335,9 +337,13 @@ mod tests {
     fn large_dt_is_clamped() {
         let mut p = MotionPlayer::new(square(100.0), [175.0, -25.0, Z]);
         p.play();
-        p.update(5.0); 
+        p.update(5.0);
         let t = p.current_target();
-        assert!((t[0] - 185.0).abs() < 1e-6, "x should be 185 (clamped), got {}", t[0]);
+        assert!(
+            (t[0] - 185.0).abs() < 1e-6,
+            "x should be 185 (clamped), got {}",
+            t[0]
+        );
     }
 
     #[test]

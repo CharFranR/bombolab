@@ -3,14 +3,10 @@ use nalgebra::DMatrix;
 use crate::math::{Mat3, Mat4, Vec3};
 use crate::robot::{JointType, Robot};
 
-
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkParams {
-    
     pub mass: f64,
-    
+
     pub inertia: Mat3,
 }
 
@@ -55,7 +51,6 @@ fn jacobian_com(frames: &[Mat4], types: &[JointType], axes: &[Vec3], i: usize) -
     }
     jc
 }
-
 
 fn jacobian_angular(axes: &[Vec3], i: usize) -> DMatrix<f64> {
     let n = axes.len();
@@ -109,8 +104,6 @@ mod tests {
     use crate::math::PI;
     use crate::robot::fabri_creator::fabri_creator;
 
-    
-    
     fn test_links() -> Vec<LinkParams> {
         let cyl = |mass: f64, len: f64| -> Mat3 {
             let r = 20.0;
@@ -255,23 +248,16 @@ mod tests {
         }
     }
 
-    
-    
     #[test]
     fn dynamics_matches_independent_finite_differences() {
         let links = test_links();
         let g = 9.81;
 
-        
         let q = [PI / 6.0, PI / 4.0, -PI / 4.0, PI / 3.0, PI / 6.0];
         let n = 5;
 
-        
         let frames_of = |qq: &[f64; 5]| eval(qq);
 
-        
-        
-        
         let kinetic_energy = |qd: &[f64; 5]| -> f64 {
             let delta = 1e-7;
             let q_plus: [f64; 5] = std::array::from_fn(|i| q[i] + delta * qd[i]);
@@ -289,7 +275,7 @@ mod tests {
                 let r_p = f_plus[j].fixed_view::<3, 3>(0, 0).into_owned();
                 let r_m = f_minus[j].fixed_view::<3, 3>(0, 0).into_owned();
                 let r_rel = r_p * r_m.transpose();
-                
+
                 let wx = (r_rel[(2, 1)] - r_rel[(1, 2)]) / (4.0 * delta);
                 let wy = (r_rel[(0, 2)] - r_rel[(2, 0)]) / (4.0 * delta);
                 let wz = (r_rel[(1, 0)] - r_rel[(0, 1)]) / (4.0 * delta);
@@ -301,19 +287,12 @@ mod tests {
             t
         };
 
-        
-        
-        
-        
-        
-        
         let robot = fabri_creator();
         let frames = frames_of(&q);
         let m_code = inertia_matrix(&robot, &frames, &links);
         let h = 1e-3;
         let t0 = kinetic_energy(&[0.0; 5]);
 
-        
         let mut t_axis = [0.0; 5];
         for i in 0..n {
             let mut e_i = [0.0; 5];
@@ -333,9 +312,7 @@ mod tests {
                     let t_ij = kinetic_energy(&std::array::from_fn(|k| h * (e_i[k] + e_j[k])));
                     (t_ij - t_axis[i] - t_axis[jj] + t0) / (h * h)
                 };
-                
-                
-                
+
                 let tol = 0.05 * (m_num.abs().max(m_code[(i, jj)].abs()).max(1.0));
                 assert!(
                     (m_num - m_code[(i, jj)]).abs() < tol,
@@ -350,9 +327,6 @@ mod tests {
             }
         }
 
-        
-        
-        
         let potential = |qq: &[f64; 5]| -> f64 {
             let ff = frames_of(qq);
             let mut v = 0.0;
@@ -360,7 +334,7 @@ mod tests {
                 let z = ff[j].fixed_view::<3, 1>(0, 3)[(2, 0)];
                 v += links[j].mass * g * z;
             }
-            v * 1e-3 
+            v * 1e-3
         };
         let g_code = gravity_vector(&robot, &frames, &links, g);
         let eps = 1e-7;
@@ -381,11 +355,6 @@ mod tests {
         }
     }
 
-    
-    
-    
-    
-    
     #[test]
     fn twist_com_column_is_zero_by_construction() {
         let q = [PI / 6.0, PI / 4.0, -PI / 4.0, PI / 3.0, PI / 6.0];
@@ -394,8 +363,6 @@ mod tests {
         let types: Vec<JointType> = robot.segments.iter().map(|s| s.joint.joint_type).collect();
         let axes = joint_axes(&frames, &types);
 
-        
-        
         let delta = 1e-7;
         let mut qp = q;
         let mut qm = q;
@@ -414,8 +381,7 @@ mod tests {
                 "COM del eslabón {i} se mueve bajo q̇₄: ‖v‖ = {speed:.3e} — \
                  el continue del Twist en jacobian_com sería incorrecto"
             );
-            
-            
+
             let jc = jacobian_com(&frames, &types, &axes, i);
             assert!(
                 jc[(0, 3)].abs() < 1e-12 && jc[(1, 3)].abs() < 1e-12 && jc[(2, 3)].abs() < 1e-12,

@@ -1,37 +1,29 @@
 use super::{ANGLE_MAX, ANGLE_MIN};
 
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ServoCommand {
-    
     pub joints: [f64; 5],
-    
+
     pub gripper: u8,
 }
 
 impl ServoCommand {
-    
-    
     pub fn new(joints: [f64; 5], gripper: u8) -> Result<Self, &'static str> {
         let min = ANGLE_MIN as f64;
         let max = ANGLE_MAX as f64;
 
         for &j in &joints {
-            
-            
             if !j.is_finite() || j < min || j > max {
                 return Err("joint angle out of range (non-finite)");
             }
         }
 
-        
         if gripper < ANGLE_MIN as u8 || gripper > ANGLE_MAX as u8 {
             return Err("gripper angle out of range");
         }
 
         Ok(Self { joints, gripper })
     }
-
 
     pub fn to_wire(&self) -> String {
         format!(
@@ -45,9 +37,6 @@ impl ServoCommand {
         )
     }
 
-    
-    
-    
     pub fn to_raw_array(&self) -> [i32; 6] {
         [
             self.joints[0].round() as i32,
@@ -58,8 +47,7 @@ impl ServoCommand {
             self.gripper as i32,
         ]
     }
-    
-    
+
     pub fn from_raw_array(arr: &[i32; 6]) -> Self {
         Self {
             joints: [
@@ -77,8 +65,6 @@ impl ServoCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    
 
     #[test]
     fn test_valid_construction_mid_range() {
@@ -99,8 +85,6 @@ mod tests {
         assert_eq!(cmd.gripper, 5);
     }
 
-    
-
     #[test]
     fn test_joint_below_min_rejected() {
         let result = ServoCommand::new([4.9, 115.0, 110.0, 170.0, 90.0], 90);
@@ -112,8 +96,6 @@ mod tests {
         let result = ServoCommand::new([90.0, 115.0, 110.0, 175.1, 90.0], 90);
         assert!(result.is_err());
     }
-
-    
 
     #[test]
     fn test_joint_nan_rejected() {
@@ -133,8 +115,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    
-
     #[test]
     fn test_gripper_at_max_accepted() {
         let cmd = ServoCommand::new([90.0; 5], 175).unwrap();
@@ -153,8 +133,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    
-
     #[test]
     fn test_to_wire_matches_protocol() {
         let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90).unwrap();
@@ -166,8 +144,6 @@ mod tests {
         let cmd = ServoCommand::new([90.4, 115.6, 110.0, 170.0, 89.5], 45).unwrap();
         assert_eq!(cmd.to_wire(), "90,116,110,170,90,45\n");
     }
-
-    
 
     #[test]
     fn test_to_raw_array_format() {
@@ -196,8 +172,6 @@ mod tests {
         assert_eq!(cmd, back);
     }
 
-    
-
     #[test]
     fn test_gripper_min_accepted() {
         let cmd = ServoCommand::new([90.0; 5], 10).unwrap();
@@ -206,7 +180,6 @@ mod tests {
 
     #[test]
     fn test_gripper_255_rejected() {
-        
         let result = ServoCommand::new([90.0; 5], 255);
         assert!(result.is_err());
     }

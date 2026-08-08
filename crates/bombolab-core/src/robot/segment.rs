@@ -9,12 +9,11 @@ pub struct Segment {
 
 pub struct Robot {
     pub segments: Vec<Segment>,
-    
+
     pub home_pose: Vec<f64>,
-    
+
     pub servo_offsets: Vec<f64>,
-    
-    
+
     pub servo_directions: Vec<f64>,
 }
 
@@ -32,16 +31,13 @@ impl Segment {
                 self.dh.alpha,
             ),
             JointType::Prismatic => (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha),
-            
+
             JointType::Twist => (0.0, self.dh.d, self.dh.a, self.joint.value + self.dh.alpha),
         }
     }
 }
 
 impl Robot {
-    
-    
-    
     pub fn new(segments: Vec<Segment>) -> Self {
         let n = segments.len();
         Self {
@@ -52,7 +48,6 @@ impl Robot {
         }
     }
 
-    
     pub fn with_offsets(
         segments: Vec<Segment>,
         home_pose: Vec<f64>,
@@ -67,7 +62,6 @@ impl Robot {
         }
     }
 
-    
     pub fn with_directions(
         segments: Vec<Segment>,
         home_pose: Vec<f64>,
@@ -82,7 +76,6 @@ impl Robot {
         }
     }
 
-    
     pub fn q_to_servo(&self, q: &[f64]) -> Vec<f64> {
         q.iter()
             .zip(&self.servo_offsets)
@@ -90,7 +83,7 @@ impl Robot {
             .map(|((qi, off), dir)| dir * qi + off)
             .collect()
     }
-    
+
     pub fn servo_to_q(&self, servo: &[f64]) -> Vec<f64> {
         servo
             .iter()
@@ -100,7 +93,6 @@ impl Robot {
             .collect()
     }
 
-    
     pub fn kinematic_home(&self) -> Vec<f64> {
         self.servo_to_q(&self.home_pose)
     }
