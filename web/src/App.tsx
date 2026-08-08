@@ -1268,12 +1268,7 @@ export default function App() {
             onClick={() => {
               if (!ikMode) {
                 const fk = forwardKinematics(robot.segments, robot.baseTransform);
-                const toolM = [
-                  1, 0, 0, robot.toolTransform[0],
-                  0, 1, 0, robot.toolTransform[1],
-                  0, 0, 1, robot.toolTransform[2],
-                  0, 0, 0, 1,
-                ];
+                const toolM = robot.toolTransform;
                 const ee = fk.frames[fk.frames.length - 1];
                 const toolPose = (() => {
                   const m = (r: number, c: number) =>

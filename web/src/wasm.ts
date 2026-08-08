@@ -1,5 +1,6 @@
 import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk, motion_player_new as wasmMotionPlayerNew, motion_player_play as wasmMotionPlayerPlay, motion_player_pause as wasmMotionPlayerPause, motion_player_resume as wasmMotionPlayerResume, motion_player_stop as wasmMotionPlayerStop, motion_player_update as wasmMotionPlayerUpdate, motion_player_state as wasmMotionPlayerState, motion_player_target as wasmMotionPlayerTarget, motion_player_progress as wasmMotionPlayerProgress, motion_player_drop as wasmMotionPlayerDrop } from './pkg/bombolab_wasm';
 import type { RobotDef, Segment, Mat4 } from './kinematics/types';
+import { DEFAULT_TOOL_TRANSFORM } from './kinematics/types';
 import type { MotionCommandJS } from './motion/commands';
 
 let initialized = false;
@@ -23,7 +24,7 @@ interface WasmSegment {
   joint_type: string;
 }
 
-interface WasmRobotDef {
+export interface WasmRobotDef {
   segments: WasmSegment[];
   base_transform: number[];
   tool_transform: number[];
@@ -40,7 +41,7 @@ interface WasmIkResult {
   error: number;
 }
 
-function toRobotDef(wasm: WasmRobotDef): RobotDef {
+export function toRobotDef(wasm: WasmRobotDef): RobotDef {
   return {
     name: 'FABRI Creator',
     segments: wasm.segments.map((s) => ({
@@ -54,11 +55,16 @@ function toRobotDef(wasm: WasmRobotDef): RobotDef {
       joint_type: s.joint_type,
     })),
     baseTransform: [wasm.base_transform[3], wasm.base_transform[7], wasm.base_transform[11]],
-    toolTransform: [wasm.tool_transform[3], wasm.tool_transform[7], wasm.tool_transform[11]],
+    toolTransform: [
+      wasm.tool_transform[0], wasm.tool_transform[1], wasm.tool_transform[2], wasm.tool_transform[3],
+      wasm.tool_transform[4], wasm.tool_transform[5], wasm.tool_transform[6], wasm.tool_transform[7],
+      wasm.tool_transform[8], wasm.tool_transform[9], wasm.tool_transform[10], wasm.tool_transform[11],
+      0, 0, 0, 1,
+    ],
   };
 }
 
-function robotToWasm(robot: RobotDef): WasmRobotDef {
+export function robotToWasm(robot: RobotDef): WasmRobotDef {
   return {
     segments: robot.segments.map((s) => ({
       q: s.q,
@@ -75,11 +81,7 @@ function robotToWasm(robot: RobotDef): WasmRobotDef {
       0, 1, 0, robot.baseTransform[1],
       0, 0, 1, robot.baseTransform[2],
     ],
-    tool_transform: [
-      1, 0, 0, robot.toolTransform[0],
-      0, 1, 0, robot.toolTransform[1],
-      0, 0, 1, robot.toolTransform[2],
-    ],
+    tool_transform: robot.toolTransform.slice(0, 12),
   };
 }
 
@@ -88,12 +90,12 @@ export function fabriCreator(): RobotDef {
   return toRobotDef(wasm);
 }
 
-export function forwardKinematics(segments: Segment[], base: [number, number, number]): { frames: Mat4[]; ee: Mat4 } {
+export function forwardKinematics(segments: Segment[], base: [number, number, number], tool: Mat4 = DEFAULT_TOOL_TRANSFORM): { frames: Mat4[]; ee: Mat4 } {
   const robot: RobotDef = {
     name: 'FABRI Creator',
     segments,
     baseTransform: base,
-    toolTransform: [75, 0, 0],
+    toolTransform: tool,
   };
   const wasmRobot = robotToWasm(robot);
   const result = wasmFk(wasmRobot) as unknown as WasmFkResult;
