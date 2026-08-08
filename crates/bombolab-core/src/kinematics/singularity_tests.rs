@@ -312,3 +312,39 @@ fn test_gate_deterministic() {
         assert_eq!(wa.level, wb.level);
     }
 }
+
+fn metrics(sigma_min: f64, kappa: f64) -> WaypointMetrics {
+    WaypointMetrics {
+        sigma_min,
+        kappa,
+        yoshikawa: 0.0,
+        sv: [0.0; 3],
+    }
+}
+
+#[test]
+fn test_classify_banding() {
+    let t = SingularityThresholds::default();
+    assert_eq!(classify(&metrics(30.0, 1.0), &t), SingularityLevel::Ok);
+    assert_eq!(classify(&metrics(10.0, 1.0), &t), SingularityLevel::Warn);
+    assert_eq!(classify(&metrics(2.0, 1.0), &t), SingularityLevel::Block);
+}
+
+#[test]
+fn test_classify_kappa_and_exact_singularity() {
+    let t = SingularityThresholds::default();
+    assert_eq!(classify(&metrics(30.0, 50.0), &t), SingularityLevel::Warn);
+    assert_eq!(classify(&metrics(30.0, 200.0), &t), SingularityLevel::Block);
+    assert_eq!(
+        classify(&metrics(0.0, f64::INFINITY), &t),
+        SingularityLevel::Block
+    );
+}
+
+#[test]
+fn test_classify_boundaries() {
+    let t = SingularityThresholds::default();
+    assert_eq!(classify(&metrics(25.0, 1.0), &t), SingularityLevel::Ok);
+    assert_eq!(classify(&metrics(5.0, 1.0), &t), SingularityLevel::Warn);
+    assert_eq!(classify(&metrics(4.999, 1.0), &t), SingularityLevel::Block);
+}

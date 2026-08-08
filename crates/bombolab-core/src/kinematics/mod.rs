@@ -4,6 +4,7 @@ pub mod ik;
 pub mod init;
 pub mod pose_generator;
 pub mod singularity;
+pub mod workspace;
 
 pub use dh::{DHParameter, DHSolution, compute_a_matrix, solve};
 pub use forward::{forward_kinematics, matrix_from_segment};
@@ -14,5 +15,6 @@ pub use ik::{
 pub use pose_generator::{PoseGenerator, TargetPose};
 pub use singularity::{
     GateReason, GateReport, GateWaypoint, SingularityLevel, SingularityThresholds, WaypointMetrics,
-    analyze_path, reduced_jacobian, waypoint_metrics,
+    analyze_path, classify, reduced_jacobian, waypoint_metrics,
 };
+pub use workspace::{WorkspaceMode, WorkspaceSampler, WorkspaceStats};
