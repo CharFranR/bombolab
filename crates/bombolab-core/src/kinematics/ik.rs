@@ -48,7 +48,7 @@ impl fmt::Display for IkError {
 
 impl std::error::Error for IkError {}
 
-fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
+pub(crate) fn build_robot(robot: &Robot, q: &[f64]) -> Robot {
     let segments: Vec<Segment> = robot
         .segments
         .iter()
@@ -169,7 +169,7 @@ impl IkSolver {
     }
 }
 
-fn position_jacobian(
+pub(crate) fn position_jacobian(
     robot_q: &Robot,
     frames: &[Iso3],
     p_ee: &Vec3,
@@ -464,13 +464,7 @@ pub fn solve_drawing_plane_ik(
             return Ok(q_full);
         }
 
-        let j_full = position_jacobian(&robot_q, &frames, &p_ee, base, robot.dof().min(5));
-        let mut jr = SMatrix::<f64, 3, 3>::zeros();
-        for r in 0..3 {
-            jr[(r, 0)] = j_full[(r, 0)];
-            jr[(r, 1)] = j_full[(r, 1)] - j_full[(r, 4)];
-            jr[(r, 2)] = j_full[(r, 2)] - j_full[(r, 4)];
-        }
+        let jr = super::singularity::reduced_jacobian(robot, &q_full, base, tool);
 
         let jjt = jr * jr.transpose();
         let reg = jjt + SMatrix::<f64, 3, 3>::identity() * damping_sq;
