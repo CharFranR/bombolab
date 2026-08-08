@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Mat4 } from '../kinematics/types';
+import type { WorkspacePoints } from '../workspace/colors';
 
 // ─── Fidelity mode ──────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export interface CalibrationConfig {
 export interface RobotRendererProps {
   frames: FramePose[];
   gripper: number;
-  workspacePoints?: [number, number, number][];
+  workspacePoints?: WorkspacePoints;
   /** Preview of the commanded drawing path (shape the selected demo draws). */
   tracePath?: [number, number, number][];
   /**

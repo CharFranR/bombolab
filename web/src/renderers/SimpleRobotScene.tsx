@@ -144,7 +144,7 @@ function Axes() {
 export default function SimpleRobotScene({
   frames: poses,
   gripper = 0,
-  workspacePoints = [],
+  workspacePoints,
   tracePath,
   traceProgressRef,
   ikTarget,
@@ -159,7 +159,15 @@ export default function SimpleRobotScene({
   // P3 (Stage 3C): Float32Array del workspace memoizado — se reconstruye
   // solo cuando cambian los puntos, no en cada render de React.
   const workspaceArray = useMemo(
-    () => (workspacePoints.length > 0 ? new Float32Array(workspacePoints.flat()) : undefined),
+    () => (workspacePoints && workspacePoints.positions.length > 0
+      ? workspacePoints.positions
+      : undefined),
+    [workspacePoints],
+  );
+  const workspaceColors = useMemo(
+    () => (workspacePoints && workspacePoints.colors.length > 0
+      ? workspacePoints.colors
+      : undefined),
     [workspacePoints],
   );
 
@@ -265,17 +273,23 @@ export default function SimpleRobotScene({
       )}
 
       {/* Workspace point cloud — Float32Array memoizado (P3, Stage 3C) */}
-      {workspacePoints.length > 0 && (
+      {workspacePoints && workspacePoints.positions.length > 0 && (
         <points>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              count={workspacePoints.length}
+              count={workspacePoints.positions.length / 3}
               array={workspaceArray}
               itemSize={3}
             />
+            <bufferAttribute
+              attach="attributes-color"
+              count={workspacePoints.colors.length / 3}
+              array={workspaceColors}
+              itemSize={3}
+            />
           </bufferGeometry>
-          <pointsMaterial size={5} color="#66aaff" transparent opacity={0.35} depthWrite={false} />
+          <pointsMaterial size={5} vertexColors transparent opacity={0.5} depthWrite={false} />
         </points>
       )}
 

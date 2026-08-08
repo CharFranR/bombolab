@@ -1,4 +1,4 @@
-import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk, analyze_path_singularity as wasmAnalyzePathSingularity, motion_player_new as wasmMotionPlayerNew, motion_player_play as wasmMotionPlayerPlay, motion_player_pause as wasmMotionPlayerPause, motion_player_resume as wasmMotionPlayerResume, motion_player_stop as wasmMotionPlayerStop, motion_player_update as wasmMotionPlayerUpdate, motion_player_state as wasmMotionPlayerState, motion_player_target as wasmMotionPlayerTarget, motion_player_progress as wasmMotionPlayerProgress, motion_player_drop as wasmMotionPlayerDrop } from './pkg/bombolab_wasm';
+import init, { fabri_creator as wasmFabriCreator, forward_kinematics as wasmFk, solve_ik as wasmSolveIk, solve_drawing_ik as wasmSolveDrawingIk, solve_drawing_ik_v2 as wasmSolveDrawingIkV2, solve_drawing_plane_ik as wasmSolveDrawingPlaneIk, analyze_path_singularity as wasmAnalyzePathSingularity, motion_player_new as wasmMotionPlayerNew, motion_player_play as wasmMotionPlayerPlay, motion_player_pause as wasmMotionPlayerPause, motion_player_resume as wasmMotionPlayerResume, motion_player_stop as wasmMotionPlayerStop, motion_player_update as wasmMotionPlayerUpdate, motion_player_state as wasmMotionPlayerState, motion_player_target as wasmMotionPlayerTarget, motion_player_progress as wasmMotionPlayerProgress, motion_player_drop as wasmMotionPlayerDrop, sampler_new as wasmSamplerNew, sample_batch as wasmSampleBatch, sampler_stats as wasmSamplerStats, sampler_drop as wasmSamplerDrop } from './pkg/bombolab_wasm';
 import type { RobotDef, Segment, Mat4 } from './kinematics/types';
 import { DEFAULT_TOOL_TRANSFORM } from './kinematics/types';
 import type { MotionCommandJS } from './motion/commands';
@@ -262,4 +262,33 @@ export function motionPlayerProgress(id: number): number {
 
 export function motionPlayerDrop(id: number): void {
   wasmMotionPlayerDrop(id);
+}
+
+export type WorkspaceMode = 'drawing-plane' | 'full-5dof';
+
+export interface WorkspaceStats {
+  bounds_min: [number, number, number] | null;
+  bounds_max: [number, number, number] | null;
+  centroid: [number, number, number] | null;
+  reach: number | null;
+  n_valid: number;
+  n_rejected: number;
+}
+
+export type WorkspaceBatch = Float64Array;
+
+export function samplerNew(seed: number, mode: WorkspaceMode): number {
+  return wasmSamplerNew(BigInt(Math.trunc(seed)), mode) as number;
+}
+
+export function sampleBatch(id: number, k: number): WorkspaceBatch {
+  return wasmSampleBatch(id, k) as WorkspaceBatch;
+}
+
+export function samplerStats(id: number): WorkspaceStats {
+  return wasmSamplerStats(id) as unknown as WorkspaceStats;
+}
+
+export function samplerDrop(id: number): void {
+  wasmSamplerDrop(id);
 }
