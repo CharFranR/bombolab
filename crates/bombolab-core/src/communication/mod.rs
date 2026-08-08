@@ -1,31 +1,3 @@
-//! Serial communication with Arduino Nano firmware.
-//!
-//! The protocol sends 6 comma-separated integer angles (degrees) over serial
-//! at 115200 baud, terminated by `\n`. The Arduino responds with `OK` or `ERR`.
-//!
-//! # Serial Protocol
-//!
-//! ```text
-//! TX: "90,115,110,170,90,90\n"   (5 joints + gripper)
-//! RX: "OK\n"                      or "ERR\n"
-//! ```
-//!
-//! # Joint mapping
-//!
-//! | Index | Servo | Joint | Notes |
-//! |-------|-------|-------|-------|
-//! | 0     | S1    | J1    | Base yaw |
-//! | 1     | S2    | J2    | Shoulder pitch |
-//! | 2     | S3    | J3    | Elbow pitch |
-//! | 3     | S4    | J4    | Wrist roll |
-//! | 4     | S5    | J5    | Wrist pitch |
-//! | 5     | S6    | —     | Gripper |
-//!
-//! # Pin mapping (Arduino Nano → Servo)
-//!
-//! The Arduino Nano uses analog pins as digital outputs for servo control.
-//! The mapping between physical pins and kinematic joints is:
-//!
 //! | Pin | Servo | Joint   | Notes        |
 //! |-----|-------|---------|--------------|
 //! | A1  | S1    | J1      | Base yaw     |
@@ -34,9 +6,7 @@
 //! | A4  | S4    | J4      | Wrist roll   |
 //! | 13  | S5    | J5      | Wrist pitch  |
 //! | A5  | S6    | Gripper | —            |
-//!
-//! Tabla unificada con el firmware (`arduino/Arduino Nano/src/main.cpp`).
-//! VERIFICAR contra el cableado físico real.
+
 
 #[cfg(feature = "serial")]
 pub mod arduino_nano;
@@ -54,25 +24,18 @@ pub use interpolation::{
 };
 pub use mapper::ServoMapper;
 
-/// Serial baud rate for Arduino Nano communication.
+
 pub const BAUD_RATE: u32 = 115_200;
 
-/// Number of serial values expected by the Arduino firmware.
-/// The FABRI Creator has 5 kinematic joints (DOF) but the serial protocol
-/// sends 6 values: 5 joint angles + 1 gripper angle.
 pub const JOINT_COUNT: usize = 6;
 
-/// Minimum servo angle in degrees (mechanical safety limit).
-///
-/// Was [10, 170] since commit dc0bcc6 (Jul 2026); expanded to [5, 175] to
-/// restore the full SG90 travel. Verify mechanically that 5° and 175° do
-/// not hit the physical end stops before relying on the extremes.
+
 pub const ANGLE_MIN: i32 = 5;
 
-/// Maximum servo angle in degrees (mechanical safety limit).
+
 pub const ANGLE_MAX: i32 = 175;
 
-/// Read timeout in milliseconds for serial responses.
+
 pub const READ_TIMEOUT_MS: u64 = 1000;
 
 #[derive(Debug, Clone, PartialEq)]

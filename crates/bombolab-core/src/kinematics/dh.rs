@@ -2,9 +2,9 @@ use std::fmt;
 
 use crate::math::{Mat3, Mat4, Vec3};
 
-/// Parámetros DH para un eslabón (convención estándar).
-///
-/// A_i = Rot_z(theta) · Trans_z(d) · Trans_x(a) · Rot_x(alpha)
+
+
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DHParameter {
     pub alpha: f64,
@@ -19,7 +19,7 @@ impl DHParameter {
     }
 }
 
-/// Valor que puede ser numérico o simbólico.
+
 #[derive(Debug, Clone)]
 pub enum DHValue {
     Num(f64),
@@ -55,7 +55,7 @@ impl fmt::Display for DHValue {
     }
 }
 
-/// Parámetro DH simbólico (puede contener variables).
+
 #[derive(Debug, Clone)]
 pub struct DHParameterSymbolic {
     pub alpha: DHValue,
@@ -69,7 +69,7 @@ impl DHParameterSymbolic {
         Self { alpha, a, d, theta }
     }
 
-    /// Verifica si todos los valores son numéricos.
+    
     pub fn is_numeric(&self) -> bool {
         self.alpha.is_numeric()
             && self.a.is_numeric()
@@ -77,7 +77,7 @@ impl DHParameterSymbolic {
             && self.theta.is_numeric()
     }
 
-    /// Convierte a DHParameter numérico (si todos los valores son numéricos).
+    
     pub fn to_numeric(&self) -> Option<DHParameter> {
         Some(DHParameter::new(
             self.alpha.as_num()?,
@@ -88,7 +88,7 @@ impl DHParameterSymbolic {
     }
 }
 
-/// Calcula la matriz A_i 4×4 a partir de parámetros DH.
+
 pub fn compute_a_matrix(p: DHParameter) -> Mat4 {
     let (st, ct) = p.theta.sin_cos();
     let (sa, ca) = p.alpha.sin_cos();
@@ -113,7 +113,7 @@ pub fn compute_a_matrix(p: DHParameter) -> Mat4 {
     )
 }
 
-/// Resultado de resolver una tabla DH.
+
 pub struct DHSolution {
     pub table: Vec<DHParameter>,
     pub a_matrices: Vec<Mat4>,
@@ -131,7 +131,7 @@ impl DHSolution {
     }
 }
 
-/// Resuelve una tabla DH y devuelve todos los pasos intermedios.
+
 pub fn solve(table: &[DHParameter]) -> DHSolution {
     let a_matrices: Vec<_> = table.iter().map(|p| compute_a_matrix(*p)).collect();
 
@@ -233,14 +233,14 @@ fn write_matrix(f: &mut fmt::Formatter<'_>, m: &Mat4) -> fmt::Result {
     Ok(())
 }
 
-/// Formatea una matriz DH simbólica.
+
 pub fn format_symbolic_matrix(p: &DHParameterSymbolic, angle_unit: &str) -> String {
     let theta = &p.theta;
     let alpha = &p.alpha;
     let a = &p.a;
     let d = &p.d;
 
-    // Precompute trig values for alpha if it's numeric
+    
     let (alpha_is_zero, alpha_is_90, alpha_is_neg90) = match alpha {
         DHValue::Num(v) => {
             let deg = if angle_unit == "grados" {
@@ -279,7 +279,7 @@ pub fn format_symbolic_matrix(p: &DHParameterSymbolic, angle_unit: &str) -> Stri
     let a_str = fmt_val(a, angle_unit);
     let d_str = fmt_val(d, angle_unit);
 
-    // Build each cell with simplification
+    
     let r00 = c.clone();
     let r01 = match cos_alpha.as_str() {
         "0" => "0".to_string(),

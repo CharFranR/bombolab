@@ -940,7 +940,7 @@ export default function App() {
             }}
           >
             <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
-              📥 Trabajo nuevo desde CIPRA
+               Trabajo nuevo desde CIPRA
             </div>
             <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
               {cipraJobs.lastNotice.whileDrawing
@@ -1201,13 +1201,13 @@ export default function App() {
                     onClick={() => calibRecord(true)}
                     style={{ ...stepBtn, background: '#464', flex: 1, padding: 8 }}
                   >
-                    ✓ Se movió
+                     Se movió
                   </button>
                   <button
                     onClick={() => calibRecord(false)}
                     style={{ ...stepBtn, background: '#633', flex: 1, padding: 8 }}
                   >
-                    ✗ No se movió
+                     No se movió
                   </button>
                 </div>
               )}
@@ -1254,15 +1254,7 @@ export default function App() {
                   {mode === 0 ? 'Off' : `Modo ${mode}`}
                 </button>
               ))}
-              {drawingMode > 0 && (
-                <span style={{
-                  fontSize: 10,
-                  color: drawingActive ? '#4c4' : '#a84',
-                  marginLeft: 6,
-                }}>
-                  {drawingActive ? '✓' : '⏎'}
-                </span>
-              )}
+
             </div>
             <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
               Rueda mouse: sube/baja Z
@@ -1470,7 +1462,7 @@ export default function App() {
               </div>
               {gcodeError && (
                 <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>
-                  ⚠ {gcodeError}
+                  {gcodeError}
                 </div>
               )}
               {gcodeWarnings.length > 0 && (
@@ -1501,7 +1493,7 @@ export default function App() {
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                    ⛔ {drawingBlock.reason}
+                    {drawingBlock.reason}
                   </div>
                   {drawingBlock.points.length > 0 && (
                     <div style={{ color: '#c99', marginBottom: 4 }}>

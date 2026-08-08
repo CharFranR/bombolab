@@ -82,7 +82,7 @@ export interface VisualLink {
 export function framePose(f: Mat4): FramePose {
   // DH → Three.js: X→X, Z→Y(up), Y→Z
   //
-  // ⚠️ KNOWN TECHNICAL DEBT (C-3): this mapping (x,y,z)_DH → (x,z,y)_three
+  // KNOWN TECHNICAL DEBT (C-3): this mapping (x,y,z)_DH → (x,z,y)_three
   // is a REFLECTION (det = −1), not a rotation. The correct Z-up→Y-up
   // rotation is (x,−z,y) (det = +1), which differs by one sign flip:
   //   te[6] = -f[6]  (or equivalently te[14] = -f[7])

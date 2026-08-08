@@ -55,7 +55,7 @@ mod tests {
         let seg = make_segment(JointType::Revolute, 0.0, dh);
         let m = matrix_from_segment(&seg);
 
-        // Should be identity transformation
+        
         let t = m.translation.vector;
         assert!((t.x - 0.0).abs() < 1e-10);
         assert!((t.y - 0.0).abs() < 1e-10);
@@ -64,8 +64,8 @@ mod tests {
 
     #[test]
     fn test_matrix_from_segment_translation() {
-        // theta=0, d=5, a=3, alpha=0
-        // Translation should be (a*cos(0), a*sin(0), d) = (3, 0, 5)
+        
+        
         let dh = DHParams::new(0.0, 5.0, 3.0, 0.0);
         let seg = make_segment(JointType::Revolute, 0.0, dh);
         let m = matrix_from_segment(&seg);
@@ -78,8 +78,8 @@ mod tests {
 
     #[test]
     fn test_matrix_from_segment_rotation() {
-        // theta=PI/2, d=0, a=1, alpha=0
-        // Translation should be (a*cos(PI/2), a*sin(PI/2), 0) = (0, 1, 0)
+        
+        
         let dh = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let seg = make_segment(JointType::Revolute, std::f64::consts::FRAC_PI_2, dh);
         let m = matrix_from_segment(&seg);
@@ -109,9 +109,9 @@ mod tests {
 
     #[test]
     fn test_forward_kinematics_two_segments() {
-        // Two segments: both with a=1, theta=0
-        // First segment moves to (1, 0, 0)
-        // Second segment moves another (1, 0, 0) relative to first
+        
+        
+        
         let dh1 = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let dh2 = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let segments = vec![
@@ -125,7 +125,7 @@ mod tests {
 
         assert_eq!(frames.len(), 2);
 
-        // Final effector should be at (2, 0, 0)
+        
         let t = effector.translation.vector;
         assert!((t.x - 2.0).abs() < 1e-10);
         assert!((t.y - 0.0).abs() < 1e-10);
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_forward_kinematics_with_joint_angle() {
-        // Single segment with theta=90 degrees (PI/2)
+        
         let dh = DHParams::new(0.0, 0.0, 1.0, 0.0);
         let segments = vec![make_segment(
             JointType::Revolute,
@@ -146,10 +146,11 @@ mod tests {
         let base = Iso3::identity();
         let (_frames, effector) = forward_kinematics(base, &robot);
 
-        // Should be at (0, 1, 0)
+        
         let t = effector.translation.vector;
         assert!((t.x - 0.0).abs() < 1e-10);
         assert!((t.y - 1.0).abs() < 1e-10);
         assert!((t.z - 0.0).abs() < 1e-10);
+        
     }
 }

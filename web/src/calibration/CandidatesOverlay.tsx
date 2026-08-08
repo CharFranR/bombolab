@@ -213,7 +213,7 @@ export default function CandidatesOverlay({ frames, gripper, calibrationConfigRe
                 onClick={downloadAnchor}
                 style={{ pointerEvents: 'auto', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}
               >
-                ⬇ Download anchor.json
+                 Download anchor.json
               </button>
             </>
           )}

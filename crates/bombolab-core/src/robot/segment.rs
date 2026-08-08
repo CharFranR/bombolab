@@ -9,12 +9,12 @@ pub struct Segment {
 
 pub struct Robot {
     pub segments: Vec<Segment>,
-    /// Kinematic home pose in radians — the "zero" for all FK/IK/Jacobians.
+    
     pub home_pose: Vec<f64>,
-    /// Servo offsets: servo_angle = q + offset (radians).
+    
     pub servo_offsets: Vec<f64>,
-    /// Servo direction per joint: +1.0 = horario (servo = q + offset),
-    /// -1.0 = anti horario (servo = offset - q).
+    
+    
     pub servo_directions: Vec<f64>,
 }
 
@@ -32,16 +32,16 @@ impl Segment {
                 self.dh.alpha,
             ),
             JointType::Prismatic => (self.dh.theta, self.joint.value, self.dh.a, self.dh.alpha),
-            // Twist joints implement Trans(a, d, 0) · Rot_x(alpha + q).
+            
             JointType::Twist => (0.0, self.dh.d, self.dh.a, self.joint.value + self.dh.alpha),
         }
     }
 }
 
 impl Robot {
-    /// Create a robot with default (zero) home pose and servo offsets.
-    /// All directions default to horario (+1.0).
-    /// All joint values in segments are treated as kinematic coordinates (q).
+    
+    
+    
     pub fn new(segments: Vec<Segment>) -> Self {
         let n = segments.len();
         Self {
@@ -52,11 +52,7 @@ impl Robot {
         }
     }
 
-    /// Create a robot with explicit home pose and servo offsets.
-    /// All directions default to horario (+1.0: servo = q + offset).
-    ///
-    /// - `home_pose`: the servo angles (radians) at kinematic zero (q=[0,0,...,0]).
-    /// - `servo_offsets`: servo_angle = q + offset (radians).
+    
     pub fn with_offsets(
         segments: Vec<Segment>,
         home_pose: Vec<f64>,
@@ -71,12 +67,7 @@ impl Robot {
         }
     }
 
-    /// Create a robot with explicit home pose, servo offsets, and directions.
-    ///
-    /// - `home_pose`: the servo angles (radians) at kinematic zero.
-    /// - `servo_offsets`: servo_angle = direction * q + offset (radians).
-    /// - `servo_directions`: +1.0 = horario (servo = q + offset),
-    ///   -1.0 = anti horario (servo = offset - q).
+    
     pub fn with_directions(
         segments: Vec<Segment>,
         home_pose: Vec<f64>,
@@ -91,10 +82,7 @@ impl Robot {
         }
     }
 
-    /// Convert kinematic coordinates (q) to servo angles.
-    ///
-    /// Horario (dir = +1): `servo = q + offset`
-    /// Anti horario (dir = -1): `servo = offset - q`
+    
     pub fn q_to_servo(&self, q: &[f64]) -> Vec<f64> {
         q.iter()
             .zip(&self.servo_offsets)
@@ -102,11 +90,7 @@ impl Robot {
             .map(|((qi, off), dir)| dir * qi + off)
             .collect()
     }
-
-    /// Convert servo angles to kinematic coordinates (q).
-    ///
-    /// Horario (dir = +1): `q = servo - offset`
-    /// Anti horario (dir = -1): `q = offset - servo`
+    
     pub fn servo_to_q(&self, servo: &[f64]) -> Vec<f64> {
         servo
             .iter()
@@ -116,7 +100,7 @@ impl Robot {
             .collect()
     }
 
-    /// Get the home pose expressed in kinematic coordinates (should be all zeros).
+    
     pub fn kinematic_home(&self) -> Vec<f64> {
         self.servo_to_q(&self.home_pose)
     }

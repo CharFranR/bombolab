@@ -288,17 +288,17 @@ export default function CalibrationPanel({
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
         <button onClick={onSave}
           style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#364', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
-          💾 Save
+           Save
         </button>
         <button onClick={onUpload}
           style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#346', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
-          📂 Upload
+           Upload
         </button>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={onReload}
           style={{ flex: 1, padding: '4px 0', fontSize: 10, background: '#633', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
-          🔄 Reload defaults
+           Reload defaults
         </button>
       </div>
     </div>
