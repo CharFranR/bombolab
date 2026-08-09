@@ -243,12 +243,7 @@ void loop() {
     if (v2_state(&g_v2) == V2_STATE_IDLE && Serial.available()) {
         if (Serial.peek() == '\n' || Serial.peek() == '\r') {
             Serial.read();
-        } else if (Serial.peek() == 'H') {
-            char line[64];
-            if (read_v2_line(line, sizeof(line))) {
-                activity = v2_process_line(&g_v2, line);
-            }
-        } else {
+        } else if (Serial.peek() >= '0' && Serial.peek() <= '9') {
             int new_positions[NUM_SERVOS];
 
             if (read_positions_serial(new_positions)) {
@@ -257,6 +252,11 @@ void loop() {
                 Serial.println(F("OK"));
             } else {
                 Serial.println(F("ERR"));
+            }
+        } else {
+            char line[64];
+            if (read_v2_line(line, sizeof(line))) {
+                activity = v2_process_line(&g_v2, line);
             }
         }
     } else if (v2_state(&g_v2) != V2_STATE_IDLE && Serial.available()) {
