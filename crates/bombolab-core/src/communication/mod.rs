@@ -11,6 +11,7 @@
 pub mod arduino_nano;
 pub mod command;
 pub mod interpolation;
+pub mod manifest;
 pub mod mapper;
 
 use std::fmt;
@@ -72,3 +73,7 @@ impl std::error::Error for ConnectionError {}
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "manifest_tests.rs"]
+mod manifest_tests;

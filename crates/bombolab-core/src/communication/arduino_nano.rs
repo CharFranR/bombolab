@@ -50,6 +50,25 @@ impl ArduinoNano {
         Ok(())
     }
 
+    pub fn send_raw(&mut self, line: &str) -> Result<(), ConnectionError> {
+        let port = self.reader.get_mut();
+        port.write_all(line.as_bytes())
+            .map_err(|e| ConnectionError::WriteFailed {
+                port: self.port_name.clone(),
+                source: e.to_string(),
+            })?;
+        port.write_all(b"\n")
+            .map_err(|e| ConnectionError::WriteFailed {
+                port: self.port_name.clone(),
+                source: e.to_string(),
+            })?;
+        port.flush().map_err(|e| ConnectionError::WriteFailed {
+            port: self.port_name.clone(),
+            source: e.to_string(),
+        })?;
+        Ok(())
+    }
+
     pub fn read_response(&mut self) -> Result<String, ConnectionError> {
         let mut line = String::new();
         self.reader

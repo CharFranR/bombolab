@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use bombolab_core::communication::{
     ANGLE_MAX, ANGLE_MIN, ArduinoNano, InterpolationConfig, JOINT_COUNT, ServoCommand,
-    interpolate_all,
+    interpolate_all, manifest::parse_manifest_file,
 };
 
 fn read_input(prompt: &str) -> String {
@@ -15,15 +15,187 @@ fn read_input(prompt: &str) -> String {
     input.trim().to_string()
 }
 
+fn select_port() -> Option<String> {
+    let ports = match ArduinoNano::list_ports() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error listing ports: {}", e);
+            return None;
+        }
+    };
+
+    if ports.is_empty() {
+        println!("No serial ports found. Connect Arduino and try again.");
+        return None;
+    }
+
+    let usb_ports: Vec<String> = ports
+        .iter()
+        .filter(|p| p.starts_with("/dev/ttyUSB") || p.starts_with("/dev/ttyACM"))
+        .cloned()
+        .collect();
+
+    if usb_ports.len() == 1 {
+        println!("Found USB device: {}", usb_ports[0]);
+        return Some(usb_ports[0].clone());
+    }
+    if usb_ports.is_empty() {
+        eprintln!("No USB serial devices found. Connect Arduino and try again.");
+        return None;
+    }
+    println!("USB devices:");
+    for (i, port) in usb_ports.iter().enumerate() {
+        println!("  [{}] {}", i + 1, port);
+    }
+    loop {
+        let input = read_input("\nPort #: ");
+        match input.parse::<usize>() {
+            Ok(n) if n >= 1 && n <= usb_ports.len() => return Some(usb_ports[n - 1].clone()),
+            _ => println!(
+                "Invalid selection. Enter a number between 1 and {}.",
+                usb_ports.len()
+            ),
+        }
+    }
+}
+
+fn run_manifest(args: &[String]) {
+    if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
+        eprintln!("Usage: cargo run --bin serial-test manifest <file>");
+        eprintln!();
+        eprintln!("Uploads a wire-format manifest (ADR-0008 protocol v2) to the");
+        eprintln!("Arduino with ACK-paced chunking. The firmware executes the");
+        eprintln!("trajectory on its own micros() clock.");
+        std::process::exit(1);
+    }
+    let path = &args[0];
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error leyendo {path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let lines = match parse_manifest_file(&content) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Manifest inválido: {e}");
+            std::process::exit(1);
+        }
+    };
+    let port_name = match select_port() {
+        Some(p) => p,
+        None => std::process::exit(1),
+    };
+    let mut nano = match ArduinoNano::connect(&port_name) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("Connection failed: {}", e);
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = nano.send_raw("HELLO 2") {
+        eprintln!("HELLO 2 falló: {e}");
+        std::process::exit(1);
+    }
+    let mut handshake = false;
+    for _ in 0..5 {
+        match nano.read_response() {
+            Ok(r) if r.starts_with("HELLO 2 OK CHUNK_MAX") => {
+                println!("{r}");
+                handshake = true;
+                break;
+            }
+            Ok(r) => println!("{r}"),
+            Err(_) => break,
+        }
+    }
+    if !handshake {
+        eprintln!("El firmware no respondió HELLO 2 (¿firmware v2 flasheado?)");
+        std::process::exit(1);
+    }
+    let sample_lines: Vec<&str> = lines
+        .iter()
+        .filter(|l| l.starts_with("SAMPLE "))
+        .map(|s| s.as_str())
+        .collect();
+    let chunk_max: usize = 24;
+    let mut sent = 0usize;
+    for line in &lines {
+        if let Err(e) = nano.send_raw(line) {
+            eprintln!("Envío falló: {e}");
+            std::process::exit(1);
+        }
+        if line.starts_with("SAMPLE ") {
+            sent += 1;
+            if sent.is_multiple_of(chunk_max) && sent < sample_lines.len() {
+                match nano.read_response() {
+                    Ok(r) if r.starts_with("ERR ") => {
+                        eprintln!("El firmware rechazó el manifest: {r}");
+                        std::process::exit(1);
+                    }
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
+            }
+        }
+    }
+    if let Err(e) = nano.send_raw("END_UPLOAD") {
+        eprintln!("END_UPLOAD falló: {e}");
+        std::process::exit(1);
+    }
+    match nano.read_response() {
+        Ok(r) if r.starts_with("ACK ") => println!("{r}"),
+        Ok(r) if r.starts_with("ERR ") => {
+            eprintln!("El firmware rechazó el manifest: {r}");
+            std::process::exit(1);
+        }
+        Ok(r) => {
+            eprintln!("Respuesta inesperada: {r}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Sin respuesta a END_UPLOAD: {e}");
+            std::process::exit(1);
+        }
+    }
+    if let Err(e) = nano.send_raw("EXECUTE") {
+        eprintln!("EXECUTE falló: {e}");
+        std::process::exit(1);
+    }
+    let mut done = false;
+    for _ in 0..20000 {
+        match nano.read_response() {
+            Ok(r) if r == "DONE" => {
+                println!("DONE");
+                done = true;
+                break;
+            }
+            Ok(r) if r.starts_with("ERR ") => {
+                eprintln!("El firmware abortó: {r}");
+                std::process::exit(1);
+            }
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+    if !done {
+        eprintln!("Timeout esperando DONE");
+        std::process::exit(1);
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && (args[1] == "--help" || args[1] == "-h") {
         eprintln!("Serial test utility for Arduino Nano servo control.");
         eprintln!();
         eprintln!("Usage: cargo run --bin serial-test");
+        eprintln!("       cargo run --bin serial-test manifest <file>");
         eprintln!();
         eprintln!("Connects to an Arduino Nano over USB serial and provides");
-        eprintln!("an interactive REPL for sending servo angles.");
+        eprintln!("an interactive REPL for sending servo angles, or uploads");
+        eprintln!("a v2 manifest (ADR-0008) for MCU-paced execution.");
         eprintln!();
         eprintln!("Commands:");
         eprintln!("  <servo> <angle>       Move single servo (1-6, angle 5-175)");
@@ -32,50 +204,16 @@ fn main() {
         std::process::exit(1);
     }
 
-    println!("=== Serial Test — Arduino Nano ===\n");
-
-    // List available ports
-    let ports = match ArduinoNano::list_ports() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Error listing ports: {}", e);
-            return;
-        }
-    };
-
-    if ports.is_empty() {
-        println!("No serial ports found. Connect Arduino and try again.");
+    if args.len() > 1 && args[1] == "manifest" {
+        run_manifest(&args[2..]);
         return;
     }
 
-    // Filter USB/ACM ports (ttyUSB for FTDI, ttyACM for native USB like Arduino Nano)
-    let usb_ports: Vec<String> = ports
-        .iter()
-        .filter(|p| p.starts_with("/dev/ttyUSB") || p.starts_with("/dev/ttyACM"))
-        .cloned()
-        .collect();
+    println!("=== Serial Test — Arduino Nano ===\n");
 
-    let port_name = if usb_ports.len() == 1 {
-        println!("Found USB device: {}", usb_ports[0]);
-        usb_ports[0].clone()
-    } else if usb_ports.is_empty() {
-        eprintln!("No USB serial devices found. Connect Arduino and try again.");
-        return;
-    } else {
-        println!("USB devices:");
-        for (i, port) in usb_ports.iter().enumerate() {
-            println!("  [{}] {}", i + 1, port);
-        }
-        loop {
-            let input = read_input("\nPort #: ");
-            match input.parse::<usize>() {
-                Ok(n) if n >= 1 && n <= usb_ports.len() => break usb_ports[n - 1].clone(),
-                _ => println!(
-                    "Invalid selection. Enter a number between 1 and {}.",
-                    usb_ports.len()
-                ),
-            }
-        }
+    let port_name = match select_port() {
+        Some(p) => p,
+        None => return,
     };
 
     // Connect
