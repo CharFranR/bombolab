@@ -6,6 +6,8 @@ static uint16_t g_applied[V2_JOINT_COUNT];
 static int g_apply_count = 0;
 static int g_ack_count = 0;
 static uint8_t g_last_ack = 0;
+static int g_trace_count = 0;
+static uint32_t g_last_trace_t = 0;
 
 static uint32_t fake_now(void) { return g_now; }
 
@@ -19,11 +21,19 @@ static void fake_ack(uint8_t free_slots) {
     g_last_ack = free_slots;
 }
 
+static void fake_trace(uint32_t t_us, const uint16_t* joints) {
+    g_trace_count++;
+    g_last_trace_t = t_us;
+    for (int i = 0; i < V2_JOINT_COUNT; i++) g_applied[i] = joints[i];
+}
+
 void setUp() {
     g_now = 0;
     g_apply_count = 0;
     g_ack_count = 0;
     g_last_ack = 0;
+    g_trace_count = 0;
+    g_last_trace_t = 0;
 }
 
 void tearDown() {}
@@ -148,6 +158,24 @@ static void test_wrap_safe_delta() {
     TEST_ASSERT_EQUAL(1, g_apply_count);
 }
 
+static void test_trace_hook_fires_with_elapsed_time() {
+    V2Executor e;
+    uint16_t j[V2_JOINT_COUNT];
+    v2_executor_init(&e, fake_now, fake_apply, fake_ack);
+    v2_executor_set_trace(&e, fake_trace);
+    fill(j, 1500);
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_store(&e, j, 0));
+    j[0] = 1600;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_store(&e, j, 50000));
+    e.declared_total = 2;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_start(&e));
+    g_now = 51000;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_tick(&e));
+    TEST_ASSERT_EQUAL(2, g_trace_count);
+    TEST_ASSERT_EQUAL(51000u, g_last_trace_t);
+    TEST_ASSERT_EQUAL(1600, g_applied[0]);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_pacing_follows_dt_of_next_sample);
@@ -157,5 +185,6 @@ int main() {
     RUN_TEST(test_not_finished_while_samples_pending);
     RUN_TEST(test_stop_holds_and_discard_resets);
     RUN_TEST(test_wrap_safe_delta);
+    RUN_TEST(test_trace_hook_fires_with_elapsed_time);
     return UNITY_END();
 }

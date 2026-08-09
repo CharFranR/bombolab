@@ -20,12 +20,14 @@ typedef struct {
     uint32_t (*now)(void);
     void (*apply)(const uint16_t* joints);
     void (*ack)(uint8_t free_slots);
+    void (*trace)(uint32_t t_us, const uint16_t* joints);
 } V2Executor;
 
 void v2_executor_init(V2Executor* e,
                       uint32_t (*now)(void),
                       void (*apply)(const uint16_t* joints),
                       void (*ack)(uint8_t free_slots));
+void v2_executor_set_trace(V2Executor* e, void (*trace)(uint32_t t_us, const uint16_t* joints));
 V2Result v2_executor_store(V2Executor* e, const uint16_t* joints, uint32_t dt_us);
 V2Result v2_executor_start(V2Executor* e);
 V2Result v2_executor_tick(V2Executor* e);
