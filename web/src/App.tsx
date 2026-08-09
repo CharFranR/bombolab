@@ -28,7 +28,7 @@ import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, t
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: 'var(--c-gray)', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
       {error ? (
         <p style={{ fontSize: 14, color: '#e55' }}>Error: {error}</p>
       ) : (
@@ -1113,7 +1113,7 @@ export default function App() {
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc' }}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
       {/* Sidebar */}
       <div style={{
         width: 280,
@@ -2020,7 +2020,7 @@ export default function App() {
       </div>
 
       {/* 3D Viewport */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div className="app-viewport" style={{ flex: 1, position: 'relative' }}>
         <RobotViewer
           robot={robot}
           rawFrames={rawFrames}

@@ -1,0 +1,253 @@
+/* ============================================================
+   bombolab — premium UI theme (ui-premium-theme / FS-1)
+   Token CSS: palette, glass surfaces, typography, spacing, radii,
+   glows + shared presentation classes. Presentation-only: no logic
+   lives here; every rule maps to the design token contract.
+   ============================================================ */
+
+/* ---- Design tokens (24) ---- */
+:root {
+  /* Palette */
+  --bg0: #0D1117;
+  --bg1: #121820;
+  --c-cyan: #00F2FE;
+  --c-cobalt: #0066FF;
+  --c-gray: #8B949E;
+  --border: #FFFFFF15;
+
+  /* Glass surfaces */
+  --glass-bg: rgba(18, 24, 32, 0.55);
+  --glass-blur: 18px;
+  --glass-border: 1px solid #FFFFFF15;
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.45);
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-card: 12px;
+  --r-pill: 999px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  /* Glow */
+  --glow-cyan: 0 0 8px 2px rgba(0, 242, 254, 0.45);
+  --glow-cobalt: 0 0 8px 2px rgba(0, 102, 255, 0.45);
+  --glow-soft: 0 0 12px rgba(0, 242, 254, 0.35);
+}
+
+/* ---- Shared presentation classes (13) ---- */
+
+/* Glass card recipe: frosted panel floating over the viewport */
+.glass-card {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: var(--glass-border);
+  border-radius: var(--r-card);
+  box-shadow: var(--glass-shadow);
+  color: #e6edf3;
+  font-family: var(--font-sans);
+}
+
+/* Uppercase panel title inside glass cards */
+.panel-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--c-gray);
+  font-family: var(--font-sans);
+}
+
+/* Ultra-thin floating top bar */
+.top-bar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 var(--space-4);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+}
+
+/* Status badge base: dot + label */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-gray);
+  font-family: var(--font-sans);
+}
+.badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Online state: bright glowing indicator (cyan) */
+.badge--online {
+  color: var(--c-cyan);
+  box-shadow: 0 0 8px 2px currentColor;
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+/* Offline state: dim static indicator */
+.badge--offline {
+  color: var(--c-gray);
+  opacity: 0.65;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Generic glow helper for badge dots / icons */
+.badge-glow {
+  box-shadow: 0 0 8px 2px currentColor;
+}
+
+/* Bottom pill action button */
+.pill-btn {
+  padding: 8px 18px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  color: #e6edf3;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.1s ease;
+}
+.pill-btn:hover {
+  border-color: rgba(0, 242, 254, 0.45);
+  box-shadow: 0 0 12px rgba(0, 242, 254, 0.35);
+}
+.pill-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Segmented control container + active option */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  font-family: var(--font-sans);
+}
+.segmented__opt--active {
+  background: rgba(0, 242, 254, 0.16);
+  border-color: rgba(0, 242, 254, 0.45);
+  color: var(--c-cyan);
+}
+
+/* Joint slider: 2px rail + bright thumb (webkit + moz) */
+.jnt-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #2a3038;
+  outline: none;
+}
+.jnt-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+}
+.jnt-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--c-cyan);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.5);
+  cursor: pointer;
+}
+.jnt-slider::-moz-range-track {
+  height: 2px;
+  border-radius: 999px;
+  background: #2a3038;
+}
+.jnt-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--c-cyan);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.5);
+  cursor: pointer;
+}
+.jnt-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 3D viewport shell: hosts the transparent canvas; centered radial
+   vignette darkens the edges for the cinematic depth cue. */
+.app-viewport {
+  position: relative;
+  overflow: hidden;
+}
+.app-viewport::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 0%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+/* DEBUG accordion header */
+.debug-acc {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ---- Keyframes ---- */
+@keyframes badgePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
