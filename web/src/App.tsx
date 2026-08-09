@@ -7,7 +7,7 @@ import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
 import { runSingularityGate } from './motion/singularityGate';
-import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
+import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, releaseSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
 import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
 import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './motion/traceFirmware';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
@@ -261,6 +261,7 @@ export default function App() {
 
   const handleDisconnect = useCallback(async () => {
     try {
+      if (portRef.current) releaseSerial(portRef.current);
       await portRef.current?.close();
     } catch {}
     servoInterpolatorRef.current?.stop();

@@ -68,11 +68,37 @@ export async function openPort(port: SerialPort): Promise<void> {
   await port.open({ baudRate: 115200 });
 }
 
+const serialWriters = new Map<SerialPort, WritableStreamDefaultWriter<Uint8Array>>();
+
 export function sendSerial(port: SerialPort, data: Uint8Array): void {
-  const writer = port.writable?.getWriter();
-  if (!writer) return;
-  writer.write(data);
-  writer.releaseLock();
+  let writer = serialWriters.get(port);
+  if (!writer) {
+    writer = port.writable?.getWriter();
+    if (!writer) return;
+    serialWriters.set(port, writer);
+  }
+  void writer.ready
+    .then(() => writer!.write(data))
+    .catch(() => {
+      try {
+        writer!.releaseLock();
+      } catch {
+        /* already released */
+      }
+      serialWriters.delete(port);
+    });
+}
+
+export function releaseSerial(port: SerialPort): void {
+  const writer = serialWriters.get(port);
+  if (writer) {
+    try {
+      writer.releaseLock();
+    } catch {
+      /* already released */
+    }
+    serialWriters.delete(port);
+  }
 }
 
 
