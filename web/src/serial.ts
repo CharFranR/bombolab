@@ -75,7 +75,6 @@ export function sendSerial(port: SerialPort, data: Uint8Array): void {
   writer.releaseLock();
 }
 
-// ─── Manifest protocol v2 (ADR-0008) ──────────────────────────────────────
 
 export async function readSerialLines(port: SerialPort, timeoutMs = 1500): Promise<string[]> {
   if (!port.readable) return [];
