@@ -125,6 +125,7 @@ export async function continueManifestUpload(
   port: SerialPort,
   remainingLines: string[],
   onProgress?: (sent: number, total: number) => void,
+  onTelemetry?: (tUs: number, joints: number[]) => void,
 ): Promise<UploadResult> {
   const enc = new TextEncoder();
   const total = remainingLines.length;
@@ -134,6 +135,13 @@ export async function continueManifestUpload(
     const lines = await readSerialLines(port, 3000);
     let free = 0;
     for (const line of lines) {
+      if (line.startsWith('T ')) {
+        const tm = /^T (\d+) ((\d+ ){5}\d+)$/.exec(line);
+        if (tm && onTelemetry) {
+          onTelemetry(Number(tm[1]), tm[2].split(' ').map(Number));
+        }
+        continue;
+      }
       if (line.startsWith('ERR ')) {
         return { sent, total, error: line };
       }

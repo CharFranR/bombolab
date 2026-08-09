@@ -15,6 +15,11 @@ void v2_executor_init(V2Executor* e,
     e->now = now;
     e->apply = apply;
     e->ack = ack;
+    e->trace = 0;
+}
+
+void v2_executor_set_trace(V2Executor* e, void (*trace)(uint32_t t_us, const uint16_t* joints)) {
+    e->trace = trace;
 }
 
 uint8_t v2_executor_free_slots(const V2Executor* e) {
@@ -58,6 +63,9 @@ V2Result v2_executor_tick(V2Executor* e) {
         e->in_use--;
         e->consumed_total++;
         e->apply(e->joints[idx]);
+        if (e->trace) {
+            e->trace((uint32_t)(e->now() - e->exec_start), e->joints[idx]);
+        }
         if (e->ack) {
             e->ack(v2_executor_free_slots(e));
         }

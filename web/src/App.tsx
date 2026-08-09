@@ -9,6 +9,7 @@ import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_
 import { runSingularityGate } from './motion/singularityGate';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
 import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
+import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './motion/traceFirmware';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
 import { planTimeline, type PlanSample } from './motion/planTimeline';
@@ -66,6 +67,7 @@ export default function App() {
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
+  const [firmwareTrace, setFirmwareTrace] = useState<FirmwareSample[]>([]);
   const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
@@ -103,6 +105,7 @@ export default function App() {
   const portRef = useRef<SerialPort | null>(null);
   const manifestModeRef = useRef(false);
   const manifestAbortRef = useRef(false);
+  const firmwareTraceRef = useRef<FirmwareSample[]>([]);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
   const traceRecorderRef = useRef<TraceRecorder | null>(null);
 
@@ -405,6 +408,7 @@ export default function App() {
         traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
         if (st === 'completed' && manifestModeRef.current) {
           manifestModeRef.current = false;
+          setFirmwareTrace([...firmwareTraceRef.current]);
         }
         if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
           const target = motionPlayerTarget(playerId);
@@ -563,9 +567,20 @@ export default function App() {
             }
             sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
             manifestModeRef.current = true;
+            firmwareTraceRef.current = [];
             const remaining = built.lines.slice(upload.sent);
             void (async () => {
-              const res = await continueManifestUpload(port, remaining);
+              const res = await continueManifestUpload(
+                port,
+                remaining,
+                undefined,
+                (tUs, joints) => {
+                  firmwareTraceRef.current.push({ tUs, joints });
+                  if (firmwareTraceRef.current.length > 100000) {
+                    firmwareTraceRef.current.shift();
+                  }
+                },
+              );
               if (res.error && !manifestAbortRef.current) {
                 setDrawingBlock({
                   reason: 'El firmware abortó el manifest: ' + res.error,
@@ -736,6 +751,7 @@ export default function App() {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      setFirmwareTrace([...firmwareTraceRef.current]);
     }
     setDrawingBlock(null);
     setTracePath([]);
@@ -856,6 +872,7 @@ export default function App() {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
+        setFirmwareTrace([...firmwareTraceRef.current]);
       }
       motionPlayerStop(playerId);
       setPlayerState('stopped');
@@ -869,6 +886,18 @@ export default function App() {
     if (traceResult === null || traceResult.samples.length === 0) return;
     downloadTraceCsv(traceResult);
   }, [traceResult]);
+
+  const handleExportFirmwareTrace = useCallback(() => {
+    if (firmwareTrace.length === 0) return;
+    const csv = firmwareTraceCsv(firmwareTrace);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'firmware-trace.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [firmwareTrace]);
 
   // ─── Servo calibration (deadband / backlash) — manual mode ─────────────
   // User-paced: each button press sends ONE raw 1° step (bypassing the
@@ -1920,6 +1949,27 @@ export default function App() {
                   <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
                     {traceResult.samples.length} muestras
                     {traceResult.truncated ? ' · traza truncada' : ''}
+                  </div>
+                )}
+                <button
+                  onClick={handleExportFirmwareTrace}
+                  disabled={firmwareTrace.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#3a3a3a',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#ccc',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Exportar traza firmware CSV
+                </button>
+                {firmwareTrace.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
+                    firmware: {firmwareTraceStats(firmwareTrace).count} muestras ·{' '}
+                    {(firmwareTraceStats(firmwareTrace).durationUs / 1e6).toFixed(2)} s
                   </div>
                 )}
               </div>

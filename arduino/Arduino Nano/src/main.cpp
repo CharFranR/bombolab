@@ -157,6 +157,33 @@ static void reply_v2(const char* line) {
     Serial.println(line);
 }
 
+static void trace_v2(uint32_t t_us, const uint16_t* joints) {
+    char buf[64];
+    char tmp[11];
+    int n = 0;
+    unsigned long v = t_us;
+    int i = 0;
+    do {
+        tmp[i++] = (char)('0' + (v % 10u));
+        v /= 10u;
+    } while (v > 0);
+    buf[n++] = 'T';
+    buf[n++] = ' ';
+    while (i > 0) buf[n++] = tmp[--i];
+    for (int j = 0; j < NUM_SERVOS; j++) {
+        buf[n++] = ' ';
+        unsigned w = joints[j];
+        int k = 0;
+        do {
+            tmp[k++] = (char)('0' + (w % 10u));
+            w /= 10u;
+        } while (w > 0);
+        while (k > 0) buf[n++] = tmp[--k];
+    }
+    buf[n] = '\0';
+    Serial.println(buf);
+}
+
 static bool read_v2_line(char* buf, int cap) {
     int idx = 0;
     unsigned long start = millis();
@@ -197,6 +224,7 @@ void setup() {
 
     apply_movement(actual_positions);
     v2_init(&g_v2, micros, apply_v2_servos, reply_v2);
+    v2_executor_set_trace(&g_v2.executor, trace_v2);
 }
 
 
