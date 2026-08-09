@@ -225,7 +225,7 @@ export default function PlanExecPanel({
   };
 
   return (
-    <div style={{ borderTop: '1px solid #333', padding: '8px 16px' }}>
+    <div className="glass-card" style={{ padding: '8px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, color: '#888' }}>Comandado vs planificado</span>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>

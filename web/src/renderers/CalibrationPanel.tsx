@@ -125,20 +125,20 @@ export default function CalibrationPanel({
   }, [onTargetChange]);
 
   if (!target) return (
-    <div style={{
-      position: 'absolute',
-      top: 16,
-      right: 16,
-      zIndex: 10,
-      background: 'rgba(30, 30, 35, 0.92)',
-      padding: 16,
-      borderRadius: 8,
-      border: '1px solid #444',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-      minWidth: 200,
-    }}>
+    <div
+      className="glass-card"
+      style={{
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 10,
+        padding: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        minWidth: 200,
+      }}
+    >
       <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
         Calibration
       </div>
@@ -168,20 +168,20 @@ export default function CalibrationPanel({
   );
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 16,
-      right: 16,
-      zIndex: 10,
-      background: 'rgba(30, 30, 35, 0.92)',
-      padding: 16,
-      borderRadius: 8,
-      border: '1px solid #444',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-      minWidth: 200,
-    }}>
+    <div
+      className="glass-card"
+      style={{
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 10,
+        padding: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        minWidth: 200,
+      }}
+    >
       <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
         Calibration
       </div>

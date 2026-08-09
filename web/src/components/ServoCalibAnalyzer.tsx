@@ -241,7 +241,7 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
   };
 
   return (
-    <div style={{ borderTop: '1px solid #333', padding: '8px 16px' }}>
+    <div className="glass-card" style={{ padding: '8px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 11, color: '#888' }}>Analizador de backlash</span>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>
@@ -270,7 +270,7 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
       </div>
 
       {stats.map((s) => (
-        <div key={s.joint} style={{ marginBottom: 10, border: '1px solid #2c2c32', borderRadius: 6, padding: 8 }}>
+        <div key={s.joint} style={{ marginBottom: 10, border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span style={{ fontSize: 12, color: '#ccc', fontWeight: 600 }}>J{s.joint}</span>
             <span style={{ fontSize: 10, color: '#888', fontFamily: 'monospace' }}>

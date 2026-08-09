@@ -62,8 +62,8 @@ export default function IkTarget({
       <sphereGeometry args={[20, 24, 24]} />
       <meshStandardMaterial
         color="#ff6644"
-        emissive="#ff4422"
-        emissiveIntensity={0.3}
+        emissive="#00F2FE"
+        emissiveIntensity={0.25}
         roughness={0.3}
         metalness={0.1}
       />
