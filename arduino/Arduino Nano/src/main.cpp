@@ -184,31 +184,37 @@ static void trace_v2(uint32_t t_us, const uint16_t* joints) {
     Serial.println(buf);
 }
 
-static bool read_v2_line(char* buf, int cap) {
-    int idx = 0;
-    unsigned long start = millis();
-    while (true) {
-        if (millis() - start > 100) {
-            drain_rx_until_newline();
-            return false;
-        }
-        if (!Serial.available()) {
-            continue;
-        }
+static char g_v2_line[64];
+static int g_v2_line_len = 0;
+static unsigned long g_v2_line_start = 0;
+
+static bool v2_pump_line(char* out, int cap) {
+    while (Serial.available()) {
         char c = Serial.read();
         if (c == '\n') {
-            buf[idx] = '\0';
-            return idx > 0;
+            out[g_v2_line_len] = '\0';
+            bool ok = g_v2_line_len > 0;
+            g_v2_line_len = 0;
+            return ok;
         }
         if (c == '\r') {
             continue;
         }
-        if (idx >= cap - 1) {
+        if (g_v2_line_len == 0) {
+            g_v2_line_start = millis();
+        }
+        if (g_v2_line_len >= cap - 1) {
+            g_v2_line_len = 0;
             drain_rx_until_newline();
             return false;
         }
-        buf[idx++] = c;
+        g_v2_line[g_v2_line_len++] = c;
     }
+    if (g_v2_line_len > 0 && millis() - g_v2_line_start > 100) {
+        g_v2_line_len = 0;
+        drain_rx_until_newline();
+    }
+    return false;
 }
 
 
@@ -239,6 +245,7 @@ void loop() {
     }
 
     bool activity = false;
+    char line[64];
 
     if (v2_state(&g_v2) == V2_STATE_IDLE && Serial.available()) {
         if (Serial.peek() == '\n' || Serial.peek() == '\r') {
@@ -254,15 +261,13 @@ void loop() {
                 Serial.println(F("ERR"));
             }
         } else {
-            char line[64];
-            if (read_v2_line(line, sizeof(line))) {
-                activity = v2_process_line(&g_v2, line);
+            while (v2_pump_line(line, sizeof(line))) {
+                activity = v2_process_line(&g_v2, line) || activity;
             }
         }
-    } else if (v2_state(&g_v2) != V2_STATE_IDLE && Serial.available()) {
-        char line[64];
-        if (read_v2_line(line, sizeof(line))) {
-            activity = v2_process_line(&g_v2, line);
+    } else if (v2_state(&g_v2) != V2_STATE_IDLE) {
+        while (v2_pump_line(line, sizeof(line))) {
+            activity = v2_process_line(&g_v2, line) || activity;
         }
     }
 
