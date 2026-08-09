@@ -145,15 +145,18 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
       <Canvas
         shadows
         camera={{ position: [500, 400, 500], fov: 35, near: 1, far: 2000 }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
-          gl.setClearColor(new THREE.Color('#1c1c20'));
+          // Alpha 0: CSS gradient + vignette (slice 1) show through the canvas
+          gl.setClearColor(0x000000, 0);
         }}
       >
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[200, 400, 300]} intensity={1.2} castShadow />
-        <directionalLight position={[-200, 100, -200]} intensity={0.3} />
-        <hemisphereLight args={['#8888ff', '#444422', 0.3]} />
+        {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back) */}
+        <ambientLight intensity={0.15} />
+        <directionalLight position={[400, 600, 300]} intensity={2.2} castShadow />
+        <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
+        <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
+        <hemisphereLight args={['#8888ff', '#444422', 0.15]} />
 
         <RobotSceneDispatcher
           robot={robot}
