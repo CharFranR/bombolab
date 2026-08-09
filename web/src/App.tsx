@@ -7,7 +7,7 @@ import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
 import { runSingularityGate } from './motion/singularityGate';
-import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, releaseSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
+import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
 import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
 import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './motion/traceFirmware';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
@@ -68,14 +68,6 @@ export default function App() {
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [firmwareTrace, setFirmwareTrace] = useState<FirmwareSample[]>([]);
-
-  const safePlayerProgress = (id: number): number => {
-    try {
-      return Math.round(motionPlayerProgress(id) * 100);
-    } catch {
-      return 0;
-    }
-  };
   const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
@@ -261,7 +253,6 @@ export default function App() {
 
   const handleDisconnect = useCallback(async () => {
     try {
-      if (portRef.current) releaseSerial(portRef.current);
       await portRef.current?.close();
     } catch {}
     servoInterpolatorRef.current?.stop();
@@ -319,7 +310,6 @@ export default function App() {
 
   useEffect(() => {
     if (!robot) return;
-    if (manifestModeRef.current) return;
     sendQ(robot.segments, gripper);
   }, [robot, gripper, sendQ]);
 
@@ -373,8 +363,6 @@ export default function App() {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
-      const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
-      if (last) servoInterpolatorRef.current?.sync(last.joints);
     }
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
@@ -421,8 +409,6 @@ export default function App() {
         if (st === 'completed' && manifestModeRef.current) {
           manifestModeRef.current = false;
           setFirmwareTrace([...firmwareTraceRef.current]);
-          const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
-          if (last) servoInterpolatorRef.current?.sync(last.joints);
         }
         if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
           const target = motionPlayerTarget(playerId);
@@ -481,7 +467,6 @@ export default function App() {
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
-      setPlayerId(null);
     }
     setDrawingBlock(null);
     setValidating(true);
@@ -562,18 +547,14 @@ export default function App() {
       if (built instanceof Error) {
         console.warn('[manifest] build fallback legacy:', built.message);
       } else {
-        manifestModeRef.current = true;
-        servoInterpolatorRef.current?.stop();
         try {
           const chunkMax = await handshakeV2(port);
           if (chunkMax instanceof Error) {
             console.warn('[manifest] handshake fallback legacy:', chunkMax.message);
-            manifestModeRef.current = false;
           } else {
             const chunks = sliceLines(built.lines, chunkMax);
             const upload = await uploadManifest(port, chunks, chunkMax);
             if (upload.error) {
-              manifestModeRef.current = false;
               setDrawingBlock({
                 reason: 'El firmware rechazó el manifest: ' + upload.error,
                 points: [],
@@ -585,6 +566,7 @@ export default function App() {
               return false;
             }
             sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
+            manifestModeRef.current = true;
             firmwareTraceRef.current = [];
             const remaining = built.lines.slice(upload.sent);
             void (async () => {
@@ -613,7 +595,6 @@ export default function App() {
           }
         } catch (e) {
           console.warn('[manifest] fallback legacy:', e);
-          manifestModeRef.current = false;
         }
       }
     }
@@ -770,8 +751,6 @@ export default function App() {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
-      const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
-      if (last) servoInterpolatorRef.current?.sync(last.joints);
       setFirmwareTrace([...firmwareTraceRef.current]);
     }
     setDrawingBlock(null);
@@ -893,8 +872,6 @@ export default function App() {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
-        const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
-        if (last) servoInterpolatorRef.current?.sync(last.joints);
         setFirmwareTrace([...firmwareTraceRef.current]);
       }
       motionPlayerStop(playerId);
@@ -2000,7 +1977,7 @@ export default function App() {
               <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
                 Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
                 {playerId !== null && playerState !== 'idle' && (
-                  <> · {safePlayerProgress(playerId)}%</>
+                  <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
               </div>
               <button

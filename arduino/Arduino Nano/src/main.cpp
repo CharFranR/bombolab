@@ -184,40 +184,31 @@ static void trace_v2(uint32_t t_us, const uint16_t* joints) {
     Serial.println(buf);
 }
 
-static char g_v2_line[64];
-static int g_v2_line_len = 0;
-static unsigned long g_v2_line_start = 0;
-
-static bool v2_pump_line(char* out, int cap) {
-    while (Serial.available()) {
+static bool read_v2_line(char* buf, int cap) {
+    int idx = 0;
+    unsigned long start = millis();
+    while (true) {
+        if (millis() - start > 100) {
+            drain_rx_until_newline();
+            return false;
+        }
+        if (!Serial.available()) {
+            continue;
+        }
         char c = Serial.read();
         if (c == '\n') {
-            for (int i = 0; i < g_v2_line_len; i++) {
-                out[i] = g_v2_line[i];
-            }
-            out[g_v2_line_len] = '\0';
-            bool ok = g_v2_line_len > 0;
-            g_v2_line_len = 0;
-            return ok;
+            buf[idx] = '\0';
+            return idx > 0;
         }
         if (c == '\r') {
             continue;
         }
-        if (g_v2_line_len == 0) {
-            g_v2_line_start = millis();
-        }
-        if (g_v2_line_len >= cap - 1) {
-            g_v2_line_len = 0;
+        if (idx >= cap - 1) {
             drain_rx_until_newline();
             return false;
         }
-        g_v2_line[g_v2_line_len++] = c;
+        buf[idx++] = c;
     }
-    if (g_v2_line_len > 0 && millis() - g_v2_line_start > 100) {
-        g_v2_line_len = 0;
-        drain_rx_until_newline();
-    }
-    return false;
 }
 
 
@@ -234,7 +225,6 @@ void setup() {
     apply_movement(actual_positions);
     v2_init(&g_v2, micros, apply_v2_servos, reply_v2);
     v2_executor_set_trace(&g_v2.executor, trace_v2);
-    Serial.println("FW V2.1");
 }
 
 
@@ -249,14 +239,8 @@ void loop() {
     }
 
     bool activity = false;
-    char line[64];
 
-    if (v2_state(&g_v2) == V2_STATE_IDLE) {
-        if (g_v2_line_len > 0) {
-            while (v2_pump_line(line, sizeof(line))) {
-                activity = v2_process_line(&g_v2, line) || activity;
-            }
-        } else if (Serial.available()) {
+    if (v2_state(&g_v2) == V2_STATE_IDLE && Serial.available()) {
         if (Serial.peek() == '\n' || Serial.peek() == '\r') {
             Serial.read();
         } else if (Serial.peek() >= '0' && Serial.peek() <= '9') {
@@ -270,14 +254,15 @@ void loop() {
                 Serial.println(F("ERR"));
             }
         } else {
-            while (v2_pump_line(line, sizeof(line))) {
-                activity = v2_process_line(&g_v2, line) || activity;
+            char line[64];
+            if (read_v2_line(line, sizeof(line))) {
+                activity = v2_process_line(&g_v2, line);
             }
         }
-        }
-    } else if (v2_state(&g_v2) != V2_STATE_IDLE) {
-        while (v2_pump_line(line, sizeof(line))) {
-            activity = v2_process_line(&g_v2, line) || activity;
+    } else if (v2_state(&g_v2) != V2_STATE_IDLE && Serial.available()) {
+        char line[64];
+        if (read_v2_line(line, sizeof(line))) {
+            activity = v2_process_line(&g_v2, line);
         }
     }
 

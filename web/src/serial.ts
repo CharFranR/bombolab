@@ -68,37 +68,11 @@ export async function openPort(port: SerialPort): Promise<void> {
   await port.open({ baudRate: 115200 });
 }
 
-const serialWriters = new Map<SerialPort, WritableStreamDefaultWriter<Uint8Array>>();
-
 export function sendSerial(port: SerialPort, data: Uint8Array): void {
-  let writer = serialWriters.get(port);
-  if (!writer) {
-    writer = port.writable?.getWriter();
-    if (!writer) return;
-    serialWriters.set(port, writer);
-  }
-  void writer.ready
-    .then(() => writer!.write(data))
-    .catch(() => {
-      try {
-        writer!.releaseLock();
-      } catch {
-        /* already released */
-      }
-      serialWriters.delete(port);
-    });
-}
-
-export function releaseSerial(port: SerialPort): void {
-  const writer = serialWriters.get(port);
-  if (writer) {
-    try {
-      writer.releaseLock();
-    } catch {
-      /* already released */
-    }
-    serialWriters.delete(port);
-  }
+  const writer = port.writable?.getWriter();
+  if (!writer) return;
+  writer.write(data);
+  writer.releaseLock();
 }
 
 
@@ -129,22 +103,16 @@ export async function readSerialLines(port: SerialPort, timeoutMs = 1500): Promi
 
 export async function handshakeV2(port: SerialPort): Promise<number | Error> {
   sendSerial(port, new TextEncoder().encode('HELLO 2\n'));
-  const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
-    const lines = await readSerialLines(port, 1500);
-    for (const line of lines) {
-      if (line.startsWith('HELLO 2 OK CHUNK_MAX')) {
-        const m = /CHUNK_MAX (\d+)/.exec(line);
-        if (m) {
-          return Number(m[1]);
-        }
-      }
-      if (line.startsWith('ERR ')) {
-        return new Error('el firmware rechazó HELLO 2: ' + line);
-      }
-    }
+  const lines = await readSerialLines(port, 2000);
+  const hello = lines.find((l) => l.startsWith('HELLO 2 OK CHUNK_MAX'));
+  if (!hello) {
+    return new Error('sin respuesta HELLO 2: ' + (lines.join(' | ') || 'vacío'));
   }
-  return new Error('sin respuesta HELLO 2');
+  const m = /CHUNK_MAX (\d+)/.exec(hello);
+  if (!m) {
+    return new Error('respuesta HELLO malformada: ' + hello);
+  }
+  return Number(m[1]);
 }
 
 export interface UploadResult {
