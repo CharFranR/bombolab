@@ -7,13 +7,13 @@ import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
 import { runSingularityGate } from './motion/singularityGate';
-import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
+import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, awaitSendSerial, releaseSerial, drainSerial, handshakeV2, uploadManifest, continueManifestUpload, sendManifestHeader } from './serial';
 import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
 import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './motion/traceFirmware';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
 import { planTimeline, type PlanSample } from './motion/planTimeline';
-import { downloadTraceCsv } from './motion/csv';
+import { downloadTraceCsv, downloadBlob, copyText, exportTraceCsv } from './motion/csv';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
@@ -68,6 +68,14 @@ export default function App() {
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [firmwareTrace, setFirmwareTrace] = useState<FirmwareSample[]>([]);
+  const [manifestStatus, setManifestStatus] = useState('');
+  const [exportMsg, setExportMsg] = useState('');
+  const diagRef = useRef<string[]>([]);
+  const pushDiag = useCallback((msg: string) => {
+    diagRef.current.push(`[${new Date().toISOString().slice(11, 23)}] ${msg}`);
+  }, []);
+  const [serialLost, setSerialLost] = useState(false);
+  const [csvModal, setCsvModal] = useState<{ title: string; content: string } | null>(null);
   const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
@@ -225,27 +233,66 @@ export default function App() {
   const sendQRef = useRef(sendQ);
   sendQRef.current = sendQ;
 
+  // Cablea un puerto ya abierto: listeners, interpolator, estado. Reutilizable
+  // por la conexión manual y por la reconexión automática tras pérdida USB.
+  const setupPort = useCallback((port: SerialPort) => {
+    if (!robot) return;
+    portRef.current = port;
+    port.addEventListener('disconnect', () => {
+      setSerialLost(true);
+      setConnected(false);
+      setManifestStatus('⚠ dispositivo USB perdido — reintentando reconexión…');
+      void (async () => {
+        // El Arduino se resetea y re-enumera: buscar el dispositivo (incluido el
+        // MISMO objeto de puerto, que Chrome puede reutilizar tras la re-enumeración)
+        // y reconectar automáticamente (getPorts no requiere gesto del usuario).
+        const info = port.getInfo();
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 500));
+          try {
+            const ports = await navigator.serial.getPorts();
+            const fresh = ports.find((p) => {
+              const pi = p.getInfo();
+              return pi.usbVendorId === info.usbVendorId && pi.usbProductId === info.usbProductId;
+            });
+            if (fresh) {
+              // si es el mismo objeto muerto, probar igual: puede haber revivido
+              await fresh.open({ baudRate: 115200 });
+              setupPort(fresh);
+              setSerialLost(false);
+              setManifestStatus('reconectado automáticamente tras la pérdida USB');
+              return;
+            }
+          } catch {
+            /* el dispositivo aún no volvió o el open falló: reintentar */
+          }
+        }
+        setManifestStatus('⚠ no se pudo reconectar solo: conectá el dispositivo de nuevo.');
+      })();
+    });
+    // Start the interpolation scheduler from the current pose and push
+    // one frame so the firmware leaves its boot/home state.
+    const initial = [...qToServoUs(robot.segments.map((s) => s.q)), gripperToServoUs(gripper)];
+    if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
+    servoInterpolatorRef.current = new ServoInterpolator(
+      (wire) => {
+        traceRecorderRef.current?.record(wire);
+        sendSerial(port, wire);
+      },
+      initial,
+      { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
+    );
+    servoInterpolatorRef.current.keepAlive();
+    setConnected(true);
+  }, [robot, gripper, backlashEnabled]);
+
   const handleConnect = useCallback(async () => {
     if (!robot) return;
     try {
       setSerialError(null);
       const port = await requestSerialPort();
       await openPort(port);
-      portRef.current = port;
-      // Start the interpolation scheduler from the current pose and push
-      // one frame so the firmware leaves its boot/home state.
-      const initial = [...qToServoUs(robot.segments.map(s => s.q)), gripperToServoUs(gripper)];
-      if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
-      servoInterpolatorRef.current = new ServoInterpolator(
-        (wire) => {
-          traceRecorderRef.current?.record(wire);
-          sendSerial(port, wire);
-        },
-        initial,
-        { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
-      );
-      servoInterpolatorRef.current.keepAlive();
-      setConnected(true);
+      setupPort(port);
     } catch (e: any) {
       setSerialError(e.message ?? 'Error al conectar');
     }
@@ -253,6 +300,7 @@ export default function App() {
 
   const handleDisconnect = useCallback(async () => {
     try {
+      releaseSerial(portRef.current!);
       await portRef.current?.close();
     } catch {}
     servoInterpolatorRef.current?.stop();
@@ -260,6 +308,10 @@ export default function App() {
     portRef.current = null;
     setConnected(false);
   }, []);
+
+  useEffect(() => {
+    if (connected) setSerialLost(false);
+  }, [connected]);
 
   const handleJointChange = useCallback((index: number, qRad: number) => {
     setRobot(prev => {
@@ -310,6 +362,9 @@ export default function App() {
 
   useEffect(() => {
     if (!robot) return;
+    // Durante un manifest el robot NO debe recibir frames legacy: contaminarían
+    // el handshake v2 y el flujo de ACKs (el heartbeat ya respeta este flag).
+    if (manifestModeRef.current) return;
     sendQ(robot.segments, gripper);
   }, [robot, gripper, sendQ]);
 
@@ -408,7 +463,21 @@ export default function App() {
         traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
         if (st === 'completed' && manifestModeRef.current) {
           manifestModeRef.current = false;
+          setManifestStatus(`completado — T-lines: ${firmwareTraceRef.current.length}`);
           setFirmwareTrace([...firmwareTraceRef.current]);
+          // El interpolator quedó frenado al iniciar el manifest: resincronizar
+          // con la última pose aplicada por el firmware para el próximo control manual.
+          const lastFw = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
+          if (lastFw) servoInterpolatorRef.current?.sync(lastFw.joints);
+          // Descarga automática: el dato queda accesible aunque el botón falle.
+          if (firmwareTraceRef.current.length > 0) {
+            try {
+              downloadBlob('firmware-trace.csv', new Blob([firmwareTraceCsv(firmwareTraceRef.current)], { type: 'text/csv' }));
+              setExportMsg(`firmware-trace.csv descargado automáticamente (${firmwareTraceRef.current.length} muestras). Si no lo ves, usá "Ver CSV".`);
+            } catch {
+              /* el modal "Ver CSV" queda como respaldo */
+            }
+          }
         }
         if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
           const target = motionPlayerTarget(playerId);
@@ -537,6 +606,9 @@ export default function App() {
     lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
+    // El recorder se crea perezosamente: antes solo existía tras conectar el puerto,
+    // así que sin hardware la traza web nunca se grababa y el export quedaba mudo.
+    if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
     traceRecorderRef.current?.start();
     setTraceResult(null);
     setPlayerState('running');
@@ -548,13 +620,53 @@ export default function App() {
         console.warn('[manifest] build fallback legacy:', built.message);
       } else {
         try {
+          // Detener heartbeat/sendQ legacy ANTES del handshake: el tráfico legacy
+          // contamina el puerto y el handshake v2 falla (residuos OK/ERR).
+          manifestModeRef.current = true;
+          setManifestStatus('iniciando: handshake v2…');
+          diagRef.current = [`[${new Date().toISOString().slice(11, 23)}] browser: ${navigator.userAgent}`];
+          pushDiag(`puerto: readable=${!!port.readable} writable=${!!port.writable}`);
+          // Frenar el interpolator legacy: si está en movimiento (p. ej. la pinza
+          // al entrar en modo dibujo), sus frames contaminan el handshake v2
+          // (el firmware responde OK a cada uno y el HELLO OK se pierde).
+          servoInterpolatorRef.current?.stop();
+          const hsT0 = Date.now();
           const chunkMax = await handshakeV2(port);
+          pushDiag(`handshake: ${Date.now() - hsT0}ms → ${chunkMax instanceof Error ? 'FALLÓ: ' + chunkMax.message : 'OK (chunkMax=' + chunkMax + ')'}`);
+          if (!(chunkMax instanceof Error)) {
+            // Drenar ERRs stale que hayan quedado en el TX del firmware por
+            // intentos previos fallidos (p. ej. el CLI o un draw abortado).
+            const stale = await drainSerial(port);
+            if (stale > 0) pushDiag(`drenado post-handshake: ${stale} líneas stale`);
+          }
           if (chunkMax instanceof Error) {
+            manifestModeRef.current = false;
+            setManifestStatus('handshake v2 FALLÓ: ' + chunkMax.message);
             console.warn('[manifest] handshake fallback legacy:', chunkMax.message);
           } else {
+            setManifestStatus('handshake v2 OK');
+            // Protocolo v2: el firmware exige MANIFEST (count/durationUs) antes del
+            // primer SAMPLE (gate manifest_ready). Se envía como línea individual;
+            // el firmware no responde a esta línea. No se envía END_UPLOAD todavía
+            // (su ACK contaminaría el batch de continueManifestUpload → RING_FULL).
+            await sendManifestHeader(port, built.count, built.durationUs);
+            pushDiag(`manifest enviado: ${built.count} samples, ${built.durationUs}us`);
+            pushDiag('línea MANIFEST: `MANIFEST ' + built.count + ' ' + built.durationUs + '`');
+            pushDiag('primer SAMPLE: `' + built.lines[0] + '`');
+            pushDiag('último SAMPLE: `' + built.lines[built.lines.length - 1] + '`');
+            setManifestStatus(`manifest enviado (${built.count} samples)`);
             const chunks = sliceLines(built.lines, chunkMax);
-            const upload = await uploadManifest(port, chunks, chunkMax);
+            // Registrar cada SAMPLE enviado en el trace (mismo formato wire que el
+            // interpolator) para que "Exportar traza CSV" capture el manifest.
+            const recordManifestSample = (q: number[]) => {
+              traceRecorderRef.current?.record(new TextEncoder().encode(q.join(',') + '\n'));
+            };
+            const upload = await uploadManifest(port, chunks, chunkMax, undefined, recordManifestSample);
+            pushDiag(`upload: sent=${upload.sent}/${upload.total}${upload.error ? ' error=' + upload.error : ''}`);
+            setManifestStatus(`upload ${upload.sent}/${upload.total}`);
             if (upload.error) {
+              manifestModeRef.current = false;
+              setManifestStatus('upload FALLÓ: ' + upload.error);
               setDrawingBlock({
                 reason: 'El firmware rechazó el manifest: ' + upload.error,
                 points: [],
@@ -565,22 +677,31 @@ export default function App() {
               setPlayerState('idle');
               return false;
             }
-            sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
-            manifestModeRef.current = true;
+            await awaitSendSerial(port, new TextEncoder().encode('EXECUTE\n'));
+            pushDiag(`EXECUTE enviado (ring: ${upload.sent})`);
+            setManifestStatus(`EXECUTE enviado (ring: ${upload.sent})`);
             firmwareTraceRef.current = [];
             const remaining = built.lines.slice(upload.sent);
             void (async () => {
+              let tCount = 0;
               const res = await continueManifestUpload(
                 port,
                 remaining,
                 undefined,
                 (tUs, joints) => {
+                  tCount += 1;
+                  if (tCount <= 3 || tCount % 100 === 0) {
+                    setManifestStatus(`T-lines: ${tCount} (ejecutando…)`);
+                  }
                   firmwareTraceRef.current.push({ tUs, joints });
                   if (firmwareTraceRef.current.length > 100000) {
                     firmwareTraceRef.current.shift();
                   }
                 },
+                recordManifestSample,
               );
+              pushDiag(`continueManifestUpload: ${JSON.stringify(res)} T-lines=${tCount}`);
+              setManifestStatus(`T-lines: ${tCount}${res.error ? ' · error: ' + res.error : ''}`);
               if (res.error && !manifestAbortRef.current) {
                 setDrawingBlock({
                   reason: 'El firmware abortó el manifest: ' + res.error,
@@ -594,6 +715,14 @@ export default function App() {
             })();
           }
         } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          pushDiag('error: ' + msg);
+          if (/lost|disconnect/i.test(msg)) {
+            setSerialLost(true);
+            setManifestStatus('⚠ dispositivo USB perdido durante el manifest: revisá la alimentación de los servos y el cable, y reconectá.');
+          } else {
+            setManifestStatus('error: ' + msg);
+          }
           console.warn('[manifest] fallback legacy:', e);
         }
       }
@@ -605,8 +734,7 @@ export default function App() {
   // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
   // picker and the CIPRA arrival "Dibujar" action both go through this so
   // reachability/robot-mode gating is never duplicated.
-  const runLoadGcodeText = useCallback(
-    (text: string, name: string) =>
+  const runLoadGcodeText = useCallback(    (text: string, name: string) =>
       loadGcodeText(text, name, {
         safeDrawingArea: () => safeDrawingArea(DRAW_PLANE_Z),
         parseGcode,
@@ -882,21 +1010,67 @@ export default function App() {
     }
   }, [playerId, finalizeTrace]);
 
+  // Exportar = mostrar el CSV en pantalla (modal): funciona en CUALQUIER navegador,
+  // sin depender del sistema de descargas (que algunos entornos bloquean en silencio).
   const handleExportTrace = useCallback(() => {
-    if (traceResult === null || traceResult.samples.length === 0) return;
-    downloadTraceCsv(traceResult);
+    if (traceResult === null || traceResult.samples.length === 0) {
+      setExportMsg('Sin datos: ejecutá un dibujo para generar la traza.');
+      return;
+    }
+    setCsvModal({ title: `traza web — ${traceResult.samples.length} muestras`, content: exportTraceCsv(traceResult) });
   }, [traceResult]);
 
   const handleExportFirmwareTrace = useCallback(() => {
+    if (firmwareTrace.length === 0) {
+      setExportMsg('Sin T-lines: el manifest debe ejecutarse en el robot. ' + (manifestStatus || ''));
+      return;
+    }
+    setCsvModal({ title: `traza firmware — ${firmwareTrace.length} muestras`, content: firmwareTraceCsv(firmwareTrace) });
+  }, [firmwareTrace, manifestStatus]);
+
+  const handleModalDownload = useCallback(() => {
+    if (csvModal === null) return;
+    try {
+      downloadBlob('trace.csv', new Blob([csvModal.content], { type: 'text/csv' }));
+      setExportMsg('Descargando trace.csv… (si no aparece, usá Copiar)');
+    } catch (e) {
+      setExportMsg('Error de descarga: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [csvModal]);
+
+  const handleModalCopy = useCallback(async () => {
+    if (csvModal === null) return;
+    const ok = await copyText(csvModal.content);
+    setExportMsg(ok ? 'Copiado al portapapeles' : 'No se pudo copiar');
+  }, [csvModal]);
+
+  const handleViewDiag = useCallback(() => {
+    setCsvModal({
+      title: 'diagnóstico del flujo manifest',
+      content: diagRef.current.length > 0 ? diagRef.current.join('\n') : '(sin datos todavía: ejecutá un dibujo y si falla, volvé a este botón)',
+    });
+  }, []);
+
+  const handleViewTrace = useCallback(() => {
+    if (traceResult === null || traceResult.samples.length === 0) return;
+    setCsvModal({ title: `traza web (${traceResult.samples.length} muestras)`, content: exportTraceCsv(traceResult) });
+  }, [traceResult]);
+
+  const handleViewFirmwareTrace = useCallback(() => {
     if (firmwareTrace.length === 0) return;
-    const csv = firmwareTraceCsv(firmwareTrace);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'firmware-trace.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    setCsvModal({ title: `traza firmware (${firmwareTrace.length} muestras)`, content: firmwareTraceCsv(firmwareTrace) });
+  }, [firmwareTrace]);
+
+  const handleCopyTrace = useCallback(async () => {
+    if (traceResult === null || traceResult.samples.length === 0) return;
+    const ok = await copyText(exportTraceCsv(traceResult));
+    setExportMsg(ok ? `Copiado al portapapeles (${traceResult.samples.length} muestras)` : 'No se pudo copiar');
+  }, [traceResult]);
+
+  const handleCopyFirmwareTrace = useCallback(async () => {
+    if (firmwareTrace.length === 0) return;
+    const ok = await copyText(firmwareTraceCsv(firmwareTrace));
+    setExportMsg(ok ? `Copiado al portapapeles (${firmwareTrace.length} muestras)` : 'No se pudo copiar');
   }, [firmwareTrace]);
 
   // ─── Servo calibration (deadband / backlash) — manual mode ─────────────
@@ -987,12 +1161,7 @@ export default function App() {
       lines.push(`${e.joint + 1},${e.from},${e.to},${e.moved ? 'si' : 'no'}`);
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'servo-calibration.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob('servo-calibration.csv', blob);
   }, [calibLog]);
 
   // ─── Calibration save handler ──────────────────────────────────────────
@@ -1016,12 +1185,7 @@ export default function App() {
       [JSON.stringify({ version: 1, stlScale: stlScaleRef.current, entries }, null, 2)],
       { type: 'application/json' },
     );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'calibration.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob('calibration.json', blob);
   }, []);
 
   // ─── Calibration reload handler ─────────────────────────────────────────
@@ -1134,6 +1298,16 @@ export default function App() {
           </p>
         </div>
 
+        {serialLost && (
+          <div style={{
+            padding: '10px 16px', background: '#4a2222', borderBottom: '1px solid #733',
+            fontSize: 12, color: '#f88',
+          }}>
+            ⚠ Conexión USB perdida: el Arduino se desconectó (posible brownout por la
+            alimentación de los servos o cable USB). Revisá la alimentación y reconectá.
+          </div>
+        )}
+
         {/* CIPRA arrival ALERT — top of the sidebar, ANY mode (R13).
             Informational only: it never decides, it only announces and offers
             "Ir al modo dibujo". The decision panel lives inside drawing mode. */}
@@ -1195,8 +1369,9 @@ export default function App() {
           </div>
         )}
 
-        {/* Joint sliders */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        {/* Contenido del sidebar en UN scroll container (joints, info, modo dibujo, exports).
+            minHeight:0 es obligatorio: sin él un flex item no encoge y overflow:auto no scrollea. */}
+        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           <JointControls
             segments={robot.segments}
             gripper={gripper}
@@ -1204,7 +1379,6 @@ export default function App() {
             onChange={handleJointChange}
             disabled={ikMode}
           />
-        </div>
 
         {/* Info panel */}
         <InfoPanel robot={robot} rawFrames={rawFrames} />
@@ -1933,6 +2107,11 @@ export default function App() {
                 <button
                   onClick={handleExportTrace}
                   disabled={traceResult === null || traceResult.samples.length === 0}
+                  title={
+                    traceResult === null || traceResult.samples.length === 0
+                      ? 'Sin datos: ejecutá un dibujo para generar la traza'
+                      : `Exportar ${traceResult.samples.length} muestras`
+                  }
                   style={{
                     padding: '8px 12px',
                     background: '#3a3a3a',
@@ -1940,20 +2119,30 @@ export default function App() {
                     borderRadius: 4,
                     color: '#ccc',
                     fontSize: 13,
-                    cursor: 'pointer',
+                    cursor: traceResult === null || traceResult.samples.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: traceResult === null || traceResult.samples.length === 0 ? 0.45 : 1,
                   }}
                 >
                   Exportar traza CSV
                 </button>
-                {traceResult !== null && traceResult.samples.length > 0 && (
+                {traceResult !== null && traceResult.samples.length > 0 ? (
                   <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
                     {traceResult.samples.length} muestras
                     {traceResult.truncated ? ' · traza truncada' : ''}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#665', alignSelf: 'center' }}>
+                    sin datos (ejecutá un dibujo)
                   </div>
                 )}
                 <button
                   onClick={handleExportFirmwareTrace}
                   disabled={firmwareTrace.length === 0}
+                  title={
+                    firmwareTrace.length === 0
+                      ? 'Sin datos: el manifest debe ejecutarse en el robot (T-lines)'
+                      : `Exportar ${firmwareTrace.length} muestras`
+                  }
                   style={{
                     padding: '8px 12px',
                     background: '#3a3a3a',
@@ -1961,18 +2150,102 @@ export default function App() {
                     borderRadius: 4,
                     color: '#ccc',
                     fontSize: 13,
-                    cursor: 'pointer',
+                    cursor: firmwareTrace.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: firmwareTrace.length === 0 ? 0.45 : 1,
                   }}
                 >
                   Exportar traza firmware CSV
                 </button>
-                {firmwareTrace.length > 0 && (
+                {firmwareTrace.length > 0 ? (
                   <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
                     firmware: {firmwareTraceStats(firmwareTrace).count} muestras ·{' '}
                     {(firmwareTraceStats(firmwareTrace).durationUs / 1e6).toFixed(2)} s
                   </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#665', alignSelf: 'center' }}>
+                    sin T-lines (¿robot conectado y dibujo ejecutado?)
+                  </div>
                 )}
+                <button
+                  onClick={handleViewTrace}
+                  disabled={traceResult === null || traceResult.samples.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#2c4a33',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#9d9',
+                    fontSize: 13,
+                    cursor: traceResult === null || traceResult.samples.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: traceResult === null || traceResult.samples.length === 0 ? 0.45 : 1,
+                  }}
+                >
+                  Ver CSV
+                </button>
+                <button
+                  onClick={handleCopyTrace}
+                  disabled={traceResult === null || traceResult.samples.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#333',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#aaa',
+                    fontSize: 13,
+                    cursor: traceResult === null || traceResult.samples.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: traceResult === null || traceResult.samples.length === 0 ? 0.45 : 1,
+                  }}
+                >
+                  Copiar traza
+                </button>
+                <button
+                  onClick={handleViewFirmwareTrace}
+                  disabled={firmwareTrace.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#2c4a33',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#9d9',
+                    fontSize: 13,
+                    cursor: firmwareTrace.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: firmwareTrace.length === 0 ? 0.45 : 1,
+                  }}
+                >
+                  Ver CSV
+                </button>
+                <button
+                  onClick={handleCopyFirmwareTrace}
+                  disabled={firmwareTrace.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#333',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#aaa',
+                    fontSize: 13,
+                    cursor: firmwareTrace.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: firmwareTrace.length === 0 ? 0.45 : 1,
+                  }}
+                >
+                  Copiar firmware
+                </button>
               </div>
+              {manifestStatus && (
+                <div style={{ fontSize: 11, color: '#8a8', marginBottom: 4 }}>manifest: {manifestStatus}</div>
+              )}
+              <button
+                onClick={handleViewDiag}
+                style={{
+                  padding: '6px 10px', background: '#333', border: 'none', borderRadius: 4,
+                  color: '#aac', fontSize: 12, cursor: 'pointer', width: '100%', marginBottom: 4,
+                }}
+              >
+                📋 Diagnóstico del último intento
+              </button>
+              {exportMsg && (
+                <div style={{ fontSize: 11, color: '#aa8', marginBottom: 4 }}>{exportMsg}</div>
+              )}
               <PlanExecPanel trace={traceResult} plan={tracePlan} />
               <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
                 Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
@@ -2017,7 +2290,46 @@ export default function App() {
             Reset Home
           </button>
         </div>
+        </div>
       </div>
+
+      {/* Modal CSV — acceso garantizado al dato, sin depender del sistema de descargas */}
+      {csvModal !== null && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: '80%', maxWidth: 900, maxHeight: '85%',
+            background: '#24242a', border: '1px solid #444', borderRadius: 8,
+            display: 'flex', flexDirection: 'column', padding: 12, gap: 8,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: '#ccc' }}>{csvModal.title}</span>
+              <button
+                onClick={() => setCsvModal(null)}
+                style={{ padding: '6px 12px', background: '#444', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer', fontSize: 12 }}
+              >
+                Cerrar
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={csvModal.content}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{
+                flex: 1, minHeight: 300, background: '#1c1c20', color: '#9c9',
+                border: '1px solid #333', borderRadius: 4, fontSize: 11,
+                fontFamily: 'monospace', padding: 8, whiteSpace: 'pre', overflow: 'auto',
+              }}
+            />
+            <div style={{ fontSize: 11, color: '#888' }}>
+              Seleccioná todo (Ctrl+A dentro del cuadro) y copiá (Ctrl+C) — o guardá con "Copiar" abajo si preferís.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3D Viewport */}
       <div style={{ flex: 1, position: 'relative' }}>

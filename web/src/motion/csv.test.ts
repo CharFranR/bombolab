@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { exportTraceCsv, parseTraceCsv, TRACE_CSV_HEADER } from './csv';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { copyText, downloadBlob, downloadTraceCsv, exportTraceCsv, parseTraceCsv, TRACE_CSV_HEADER } from './csv';
 import type { TraceResult } from './trace';
 
 function sampleTrace(): TraceResult {
@@ -92,5 +92,104 @@ describe('csv — CS-3 double export', () => {
     const original = exportTraceCsv(sampleTrace());
     const reexported = exportTraceCsv(parseTraceCsv(original));
     expect(reexported).toBe(original);
+  });
+});
+
+describe('csv — CS-4 downloadBlob (fix: export buttons no-op)', () => {
+  const originalDocument = globalThis.document;
+  const originalURL = globalThis.URL;
+
+  afterEach(() => {
+    globalThis.document = originalDocument;
+    globalThis.URL = originalURL;
+  });
+
+  it('attaches the anchor to the DOM, clicks it, removes it and defers the revoke', () => {
+    const clicked: string[] = [];
+    const appended: unknown[] = [];
+    const removed: unknown[] = [];
+    const revoked: string[] = [];
+    globalThis.document = {
+      createElement: () => ({
+        href: '',
+        download: '',
+        style: {},
+        click: () => clicked.push((globalThis.document as any)._lastHref),
+      }),
+      body: {
+        appendChild: (n: any) => {
+          appended.push(n);
+          (globalThis.document as any)._lastHref = n.href;
+        },
+        removeChild: (n: any) => removed.push(n),
+      },
+    } as any;
+    globalThis.URL = {
+      createObjectURL: () => 'blob:fake-1',
+      revokeObjectURL: (u: string) => revoked.push(u),
+    } as any;
+
+    const timers = vi.useFakeTimers();
+    try {
+      downloadBlob('trace-test.csv', new Blob(['a,b,c'], { type: 'text/csv' }));
+      const anchor = appended[0] as any;
+      expect(anchor.download).toBe('trace-test.csv');
+      expect(anchor.style.display).toBe('none');
+      expect(clicked).toEqual(['blob:fake-1']);
+      expect(removed).toHaveLength(1);
+      // la URL NO se revoca sincrónicamente (eso cancelaba la descarga)
+      expect(revoked).toEqual([]);
+      timers.advanceTimersByTime(1000);
+      expect(revoked).toEqual(['blob:fake-1']);
+    } finally {
+      timers.useRealTimers();
+    }
+  });
+
+  it('copyText usa navigator.clipboard cuando está disponible', async () => {
+    const originalClipboard = (navigator as any).clipboard;
+    (navigator as any).clipboard = { writeText: (t: string) => Promise.resolve(t) };
+    const ok = await copyText('a,b,c');
+    expect(ok).toBe(true);
+    (navigator as any).clipboard = originalClipboard;
+  });
+
+  it('copyText cae al fallback textarea+execCommand si clipboard no existe', async () => {
+    const originalClipboard = (navigator as any).clipboard;
+    (navigator as any).clipboard = undefined;
+    let execCalled = false;
+    globalThis.document = {
+      createElement: () => ({ value: '', style: {}, select: () => {}, }),
+      body: { appendChild: () => {}, removeChild: () => {} },
+    } as any;
+    globalThis.document.execCommand = () => { execCalled = true; return true; };
+    const ok = await copyText('a,b,c');
+    expect(ok).toBe(true);
+    expect(execCalled).toBe(true);
+    (navigator as any).clipboard = originalClipboard;
+  });
+
+  it('downloadTraceCsv routes through downloadBlob with the trace content', () => {
+    const appended: unknown[] = [];
+    globalThis.document = {
+      createElement: () => ({ href: '', download: '', style: {}, click: () => {} }),
+      body: {
+        appendChild: (n: any) => {
+          appended.push(n);
+          (globalThis.document as any)._lastHref = n.href;
+        },
+        removeChild: () => {},
+      },
+    } as any;
+    globalThis.URL = {
+      createObjectURL: (b: any) => {
+        (globalThis as any)._blobSize = b.size;
+        return 'blob:fake-2';
+      },
+      revokeObjectURL: () => {},
+    } as any;
+    downloadTraceCsv(sampleTrace(), 'mi-traza.csv');
+    expect((appended[0] as any).download).toBe('mi-traza.csv');
+    expect((globalThis as any)._blobSize).toBeGreaterThan(0);
   });
 });
