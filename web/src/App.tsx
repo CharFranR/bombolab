@@ -68,6 +68,14 @@ export default function App() {
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [firmwareTrace, setFirmwareTrace] = useState<FirmwareSample[]>([]);
+
+  const safePlayerProgress = (id: number): number => {
+    try {
+      return Math.round(motionPlayerProgress(id) * 100);
+    } catch {
+      return 0;
+    }
+  };
   const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
@@ -467,6 +475,7 @@ export default function App() {
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
+      setPlayerId(null);
     }
     setDrawingBlock(null);
     setValidating(true);
@@ -1977,7 +1986,7 @@ export default function App() {
               <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
                 Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
                 {playerId !== null && playerState !== 'idle' && (
-                  <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
+                  <> · {safePlayerProgress(playerId)}%</>
                 )}
               </div>
               <button

@@ -103,16 +103,22 @@ export async function readSerialLines(port: SerialPort, timeoutMs = 1500): Promi
 
 export async function handshakeV2(port: SerialPort): Promise<number | Error> {
   sendSerial(port, new TextEncoder().encode('HELLO 2\n'));
-  const lines = await readSerialLines(port, 2000);
-  const hello = lines.find((l) => l.startsWith('HELLO 2 OK CHUNK_MAX'));
-  if (!hello) {
-    return new Error('sin respuesta HELLO 2: ' + (lines.join(' | ') || 'vacío'));
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const lines = await readSerialLines(port, 1500);
+    for (const line of lines) {
+      if (line.startsWith('HELLO 2 OK CHUNK_MAX')) {
+        const m = /CHUNK_MAX (\d+)/.exec(line);
+        if (m) {
+          return Number(m[1]);
+        }
+      }
+      if (line.startsWith('ERR ')) {
+        return new Error('el firmware rechazó HELLO 2: ' + line);
+      }
+    }
   }
-  const m = /CHUNK_MAX (\d+)/.exec(hello);
-  if (!m) {
-    return new Error('respuesta HELLO malformada: ' + hello);
-  }
-  return Number(m[1]);
+  return new Error('sin respuesta HELLO 2');
 }
 
 export interface UploadResult {
