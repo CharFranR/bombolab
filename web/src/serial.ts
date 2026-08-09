@@ -74,3 +74,117 @@ export function sendSerial(port: SerialPort, data: Uint8Array): void {
   writer.write(data);
   writer.releaseLock();
 }
+
+
+export async function readSerialLines(port: SerialPort, timeoutMs = 1500): Promise<string[]> {
+  if (!port.readable) return [];
+  const reader = port.readable.getReader();
+  const decoder = new TextDecoder();
+  const lines: string[] = [];
+  let buf = '';
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (Date.now() < deadline && lines.length < 8) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).replace(/\r$/, '');
+        buf = buf.slice(idx + 1);
+        lines.push(line);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return lines;
+}
+
+export async function handshakeV2(port: SerialPort): Promise<number | Error> {
+  sendSerial(port, new TextEncoder().encode('HELLO 2\n'));
+  const lines = await readSerialLines(port, 2000);
+  const hello = lines.find((l) => l.startsWith('HELLO 2 OK CHUNK_MAX'));
+  if (!hello) {
+    return new Error('sin respuesta HELLO 2: ' + (lines.join(' | ') || 'vacío'));
+  }
+  const m = /CHUNK_MAX (\d+)/.exec(hello);
+  if (!m) {
+    return new Error('respuesta HELLO malformada: ' + hello);
+  }
+  return Number(m[1]);
+}
+
+export interface UploadResult {
+  sent: number;
+  total: number;
+  error?: string;
+}
+
+export async function continueManifestUpload(
+  port: SerialPort,
+  remainingLines: string[],
+  onProgress?: (sent: number, total: number) => void,
+): Promise<UploadResult> {
+  const enc = new TextEncoder();
+  const total = remainingLines.length;
+  let sent = 0;
+  let done = false;
+  while (sent < total && !done) {
+    const lines = await readSerialLines(port, 3000);
+    let free = 0;
+    for (const line of lines) {
+      if (line.startsWith('ERR ')) {
+        return { sent, total, error: line };
+      }
+      if (line.startsWith('ACK ')) {
+        const n = Number(line.slice(4));
+        if (Number.isFinite(n)) free = Math.max(free, n);
+      }
+      if (line === 'DONE') {
+        done = true;
+      }
+    }
+    if (free <= 0) {
+      continue;
+    }
+    const toSend = Math.min(free, total - sent);
+    for (let i = 0; i < toSend; i++) {
+      sendSerial(port, enc.encode(remainingLines[sent + i] + '\n'));
+    }
+    sent += toSend;
+    onProgress?.(sent, total);
+  }
+  return { sent, total };
+}
+
+export async function uploadManifest(
+  port: SerialPort,
+  chunks: string[][],
+  chunkMax: number,
+  onProgress?: (sent: number, total: number) => void,
+): Promise<UploadResult> {
+  const enc = new TextEncoder();
+  let sent = 0;
+  const total = chunks.reduce((acc, c) => acc + c.length, 0);
+  for (const chunk of chunks) {
+    for (const line of chunk) {
+      sendSerial(port, enc.encode(line + '\n'));
+      sent += 1;
+      onProgress?.(sent, total);
+    }
+    const windowUsed = sent % chunkMax;
+    if (windowUsed === 0 && sent < total) {
+      const lines = await readSerialLines(port, 1200);
+      const err = lines.find((l) => l.startsWith('ERR '));
+      if (err) {
+        return { sent, total, error: err };
+      }
+      const acked = lines.some((l) => l.startsWith('ACK '));
+      if (!acked) {
+        return { sent, total };
+      }
+    }
+  }
+  return { sent, total };
+}

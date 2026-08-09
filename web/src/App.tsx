@@ -7,7 +7,8 @@ import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
 import { runSingularityGate } from './motion/singularityGate';
-import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial } from './serial';
+import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
+import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
 import { ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
 import { planTimeline, type PlanSample } from './motion/planTimeline';
@@ -100,6 +101,8 @@ export default function App() {
   const [calibLastMove, setCalibLastMove] = useState<{ joint: number; from: number; to: number } | null>(null);
   const [calibLog, setCalibLog] = useState<{ joint: number; from: number; to: number; moved: boolean }[]>([]);
   const portRef = useRef<SerialPort | null>(null);
+  const manifestModeRef = useRef(false);
+  const manifestAbortRef = useRef(false);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
   const traceRecorderRef = useRef<TraceRecorder | null>(null);
 
@@ -316,6 +319,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const id = setInterval(() => {
+      if (manifestModeRef.current) return;
       if (calibRunningRef.current) {
         const port = portRef.current;
         const pose = calibPoseRef.current;
@@ -352,6 +356,11 @@ export default function App() {
   }, [robotMode, transitioning, gripper]);
 
   const exitDrawingMode = useCallback(() => {
+    if (manifestModeRef.current) {
+      sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+      manifestModeRef.current = false;
+      manifestAbortRef.current = true;
+    }
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
       setPlayerId(null);
@@ -394,7 +403,10 @@ export default function App() {
         // Ref, not state: the renderer reads it in useFrame, so the heavy R3F
         // scene is NOT re-rendered on every frame delta.
         traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
-        if (st === 'running' || st === 'paused') {
+        if (st === 'completed' && manifestModeRef.current) {
+          manifestModeRef.current = false;
+        }
+        if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
           const target = motionPlayerTarget(playerId);
           const last = lastTrajectoryTargetRef.current;
           if (!last || Math.hypot(target[0] - last[0], target[1] - last[1], target[2] - last[2]) > 0.5) {
@@ -506,6 +518,14 @@ export default function App() {
     setTracePath(drawingPath(cmds).map(robotToThree));
     traceProgressRef.current = 0;
     setActiveDemo(key);
+    const samples = planTimeline(cmds, {
+      ik: drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk,
+      robot,
+      startQ: robot.segments.map((s) => s.q),
+      gripperPct: gripper,
+      startTcp: start,
+    });
+    setTracePlan(samples);
     const id = motionPlayerNew(cmds, start);
     // Review fix #2: remember the playback id THIS trajectory created; the
     // CIPRA draw path copies it into cipraDrawPlayerIdRef after a successful
@@ -513,21 +533,59 @@ export default function App() {
     lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
-    setTracePlan(
-      planTimeline(cmds, {
-        ik: drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk,
-        robot,
-        startQ: robot.segments.map((s) => s.q),
-        gripperPct: gripper,
-        startTcp: start,
-      }),
-    );
     traceRecorderRef.current?.start();
     setTraceResult(null);
     setPlayerState('running');
+    const port = portRef.current;
+    if (port && connected) {
+      manifestAbortRef.current = false;
+      const built = buildManifest(samples);
+      if (built instanceof Error) {
+        console.warn('[manifest] build fallback legacy:', built.message);
+      } else {
+        try {
+          const chunkMax = await handshakeV2(port);
+          if (chunkMax instanceof Error) {
+            console.warn('[manifest] handshake fallback legacy:', chunkMax.message);
+          } else {
+            const chunks = sliceLines(built.lines, chunkMax);
+            const upload = await uploadManifest(port, chunks, chunkMax);
+            if (upload.error) {
+              setDrawingBlock({
+                reason: 'El firmware rechazó el manifest: ' + upload.error,
+                points: [],
+                canRefit: false,
+              });
+              try { motionPlayerDrop(id); } catch {}
+              setPlayerId(null);
+              setPlayerState('idle');
+              return false;
+            }
+            sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
+            manifestModeRef.current = true;
+            const remaining = built.lines.slice(upload.sent);
+            void (async () => {
+              const res = await continueManifestUpload(port, remaining);
+              if (res.error && !manifestAbortRef.current) {
+                setDrawingBlock({
+                  reason: 'El firmware abortó el manifest: ' + res.error,
+                  points: [],
+                  canRefit: false,
+                });
+                try { motionPlayerDrop(id); } catch {}
+                setPlayerId(null);
+                setPlayerState('idle');
+              }
+            })();
+          }
+        } catch (e) {
+          console.warn('[manifest] fallback legacy:', e);
+        }
+      }
+    }
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
     return true;
-  }, [playerId, transitioning, robot, robotMode, drawingMode, gripper, gcodeName]);
+  }, [playerId, transitioning, robot, robotMode, drawingMode, gripper, gcodeName, connected]);
 
   // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
   // picker and the CIPRA arrival "Dibujar" action both go through this so
@@ -674,6 +732,11 @@ export default function App() {
   }, [cipraJobs, playerState, playerId, finalizeTrace]);
 
   const handleClearDrawingBlock = useCallback(() => {
+    if (manifestModeRef.current) {
+      sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+      manifestModeRef.current = false;
+      manifestAbortRef.current = true;
+    }
     setDrawingBlock(null);
     setTracePath([]);
     traceRecorderRef.current?.discard();
@@ -763,6 +826,11 @@ export default function App() {
   const handlePlaybackControl = useCallback(() => {
     if (playerId === null) return;
     try {
+      if (manifestModeRef.current) {
+        sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+        manifestModeRef.current = false;
+        manifestAbortRef.current = true;
+      }
       if (playerState === 'running') {
         motionPlayerPause(playerId);
         setPlayerState('paused');
@@ -784,6 +852,11 @@ export default function App() {
   const handleStopDemo = useCallback(() => {
     if (playerId === null) return;
     try {
+      if (manifestModeRef.current) {
+        sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+        manifestModeRef.current = false;
+        manifestAbortRef.current = true;
+      }
       motionPlayerStop(playerId);
       setPlayerState('stopped');
       finalizeTrace();
@@ -815,6 +888,11 @@ export default function App() {
   const enterCalibration = useCallback(async () => {
     const port = portRef.current;
     if (!port || calibRunning) return;
+    if (manifestModeRef.current) {
+      sendSerial(port, new TextEncoder().encode('STOP\n'));
+      manifestModeRef.current = false;
+      manifestAbortRef.current = true;
+    }
     // Stop any running trajectory.
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
