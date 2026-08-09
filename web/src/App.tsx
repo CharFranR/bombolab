@@ -1134,67 +1134,6 @@ export default function App() {
           </p>
         </div>
 
-        {/* CIPRA arrival ALERT — top of the sidebar, ANY mode (R13).
-            Informational only: it never decides, it only announces and offers
-            "Ir al modo dibujo". The decision panel lives inside drawing mode. */}
-        {cipraJobs.lastNotice && !cipraNoticeDismissed && (
-          <div
-            role="alert"
-            style={{
-              padding: '8px 16px',
-              borderBottom: '1px solid #554',
-              background: '#2b2b1e',
-            }}
-          >
-            <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
-               Trabajo nuevo desde CIPRA
-            </div>
-            <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
-              {cipraJobs.lastNotice.whileDrawing
-                ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
-                : 'Se recibió un trabajo nuevo de CIPRA.'}
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              {robotMode !== 'drawing' && (
-                <button
-                  onClick={() => {
-                    void enterDrawingMode();
-                    setCipraNoticeDismissed(true);
-                  }}
-                  disabled={transitioning}
-                  style={{
-                    flex: 1,
-                    padding: '4px 6px',
-                    fontSize: 11,
-                    background: '#464',
-                    border: 'none',
-                    borderRadius: 3,
-                    color: '#ccc',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Ir al modo dibujo
-                </button>
-              )}
-              <button
-                onClick={() => setCipraNoticeDismissed(true)}
-                style={{
-                  flex: 1,
-                  padding: '4px 6px',
-                  fontSize: 11,
-                  background: '#333',
-                  border: '1px solid #444',
-                  borderRadius: 3,
-                  color: '#aaa',
-                  cursor: 'pointer',
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Joint sliders */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <JointControls
@@ -2056,6 +1995,127 @@ export default function App() {
             version={calibrationVersion}
           />
         )}
+
+        {/* CIPRA arrival ALERT — floating top-right overlay of the viewport,
+            ANY mode (R13). Informational only: it never decides, it only
+            announces and offers "Ir al modo dibujo". The decision panel lives
+            inside drawing mode. Container restyled as a glass card (CA-1);
+            role, wiring and strings byte-identical. */}
+        {cipraJobs.lastNotice && !cipraNoticeDismissed && (
+          <div
+            role="alert"
+            className="glass-card"
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              zIndex: 20,
+              width: 280,
+              padding: '8px 16px',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
+               Trabajo nuevo desde CIPRA
+            </div>
+            <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
+              {cipraJobs.lastNotice.whileDrawing
+                ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
+                : 'Se recibió un trabajo nuevo de CIPRA.'}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              {robotMode !== 'drawing' && (
+                <button
+                  onClick={() => {
+                    void enterDrawingMode();
+                    setCipraNoticeDismissed(true);
+                  }}
+                  disabled={transitioning}
+                  style={{
+                    flex: 1,
+                    padding: '4px 6px',
+                    fontSize: 11,
+                    background: '#464',
+                    border: 'none',
+                    borderRadius: 3,
+                    color: '#ccc',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Ir al modo dibujo
+                </button>
+              )}
+              <button
+                onClick={() => setCipraNoticeDismissed(true)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  fontSize: 11,
+                  background: '#333',
+                  border: '1px solid #444',
+                  borderRadius: 3,
+                  color: '#aaa',
+                  cursor: 'pointer',
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Top bar chrome (TB-1): full-width glass strip overlaying the viewport.
+          zIndex 5 stays above the canvas (z-auto) and vignette (z1), below
+          CalibrationPanel (z10) and the CIPRA alert overlay (z20). */}
+      <div
+        className="top-bar"
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 5 }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: '#e6edf3' }}>
+          BOMBOLAB — FABRI Creator
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={'badge ' + (connected ? 'badge--online' : 'badge--offline')}>
+            {connected ? 'Conectado' : 'Desconectado'}
+          </span>
+          <span className="badge badge--online">
+            {getConnectionStatusLabel(cipraConn)}
+          </span>
+          <button
+            onClick={() => setCipraNoticeDismissed(v => !v)}
+            aria-label="Notificaciones CIPRA"
+            title="Notificaciones CIPRA"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              padding: 0,
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              color: cipraJobs.lastNotice && !cipraNoticeDismissed
+                ? 'var(--c-cyan)'
+                : 'var(--c-gray)',
+            }}
+          >
+            <svg
+              width={24}
+              height={24}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
