@@ -171,14 +171,19 @@
   color: var(--c-cyan);
 }
 
-/* Joint slider: 2px rail + bright thumb (webkit + moz) */
+/* Joint slider: 2px rail + bright thumb (webkit + moz). The --fill custom
+   property (set inline per slider) drives the cyan illuminated portion. */
 .jnt-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 6px;
   border-radius: 999px;
-  background: #2a3038;
+  background: linear-gradient(
+    90deg,
+    var(--c-cyan) var(--fill, 0%),
+    #2a3038 var(--fill, 0%)
+  );
   outline: none;
 }
 .jnt-slider::-webkit-slider-runnable-track {
@@ -200,7 +205,11 @@
 .jnt-slider::-moz-range-track {
   height: 2px;
   border-radius: 999px;
-  background: #2a3038;
+  background: linear-gradient(
+    90deg,
+    var(--c-cyan) var(--fill, 0%),
+    #2a3038 var(--fill, 0%)
+  );
 }
 .jnt-slider::-moz-range-thumb {
   width: 16px;

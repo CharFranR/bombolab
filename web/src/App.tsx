@@ -121,6 +121,8 @@ export default function App() {
     showStlOrigins: false,
     showCalibrationAxes: false,
   });
+  // DEBUG accordion — presentation-only UI state (precedent: calibAnalyzerOpen).
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // ─── Calibration state ──────────────────────────────────────────────────
   const [calibrationMode, setCalibrationMode] = useState(false);
@@ -1204,39 +1206,61 @@ export default function App() {
         {/* Debug visualization toggles — visible only in high fidelity */}
         {fidelityMode === 'high' && (
           <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Debug:</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showJointFrames}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showJointFrames: e.target.checked }))}
-              />
-              Show Joint Frames
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showStlOrigins}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showStlOrigins: e.target.checked }))}
-              />
-              Show STL Origins
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showCalibrationAxes}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
-              />
-              Show Calibration Axes
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showCandidates ?? false}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showCandidates: e.target.checked }))}
-              />
-              Show Calibrator Candidates
-            </label>
+            <div
+              className="debug-acc"
+              onClick={() => setDebugOpen(!debugOpen)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                color: '#888',
+                marginBottom: debugOpen ? 6 : 0,
+              }}
+            >
+              <span style={{
+                display: 'inline-block',
+                transform: debugOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.15s ease',
+              }}>&gt;</span>
+              DEBUG
+            </div>
+            {debugOpen && (
+              <>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showJointFrames}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showJointFrames: e.target.checked }))}
+                  />
+                  Show Joint Frames
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showStlOrigins}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showStlOrigins: e.target.checked }))}
+                  />
+                  Show STL Origins
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showCalibrationAxes}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
+                  />
+                  Show Calibration Axes
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showCandidates ?? false}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showCandidates: e.target.checked }))}
+                  />
+                  Show Calibrator Candidates
+                </label>
+              </>
+            )}
           </div>
         )}
 
