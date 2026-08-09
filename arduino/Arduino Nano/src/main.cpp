@@ -192,6 +192,9 @@ static bool v2_pump_line(char* out, int cap) {
     while (Serial.available()) {
         char c = Serial.read();
         if (c == '\n') {
+            for (int i = 0; i < g_v2_line_len; i++) {
+                out[i] = g_v2_line[i];
+            }
             out[g_v2_line_len] = '\0';
             bool ok = g_v2_line_len > 0;
             g_v2_line_len = 0;
@@ -231,6 +234,7 @@ void setup() {
     apply_movement(actual_positions);
     v2_init(&g_v2, micros, apply_v2_servos, reply_v2);
     v2_executor_set_trace(&g_v2.executor, trace_v2);
+    Serial.println("FW V2.1");
 }
 
 
@@ -247,7 +251,12 @@ void loop() {
     bool activity = false;
     char line[64];
 
-    if (v2_state(&g_v2) == V2_STATE_IDLE && Serial.available()) {
+    if (v2_state(&g_v2) == V2_STATE_IDLE) {
+        if (g_v2_line_len > 0) {
+            while (v2_pump_line(line, sizeof(line))) {
+                activity = v2_process_line(&g_v2, line) || activity;
+            }
+        } else if (Serial.available()) {
         if (Serial.peek() == '\n' || Serial.peek() == '\r') {
             Serial.read();
         } else if (Serial.peek() >= '0' && Serial.peek() <= '9') {
@@ -264,6 +273,7 @@ void loop() {
             while (v2_pump_line(line, sizeof(line))) {
                 activity = v2_process_line(&g_v2, line) || activity;
             }
+        }
         }
     } else if (v2_state(&g_v2) != V2_STATE_IDLE) {
         while (v2_pump_line(line, sizeof(line))) {
