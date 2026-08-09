@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c3d80eca.js";
+            window.path_to_searchindex_js = "searchindex-6c020120.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-23254f79.js"></script>
+        <script src="toc-1cc40636.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -2009,10 +2009,11 @@ itself, the ADRs document the decisions.</p>
 <tr><td><a href="#adr-0001-constrained-drawing-ik-with-reduced-jacobian">0001</a></td><td>Constrained drawing IK with reduced Jacobian</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0002-serial-wire-protocol-in-microseconds">0002</a></td><td>Serial wire protocol in microseconds</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0003-tests-in-separate-files-code-is-documented-not-commented">0003</a></td><td>Tests in separate files; docs, not comments</td><td>Accepted</td></tr>
-<tr><td><a href="#adr-0004-tool-frame-roll-only-invariant">0004</a></td><td>Tool-frame roll-only invariant</td><td>Accepted</td></tr>
-<tr><td><a href="#adr-0005-svd-singularity-gate-per-waypoint">0005</a></td><td>SVD singularity gate per waypoint</td><td>Accepted</td></tr>
-<tr><td><a href="#adr-0006-deterministic-workspace-analysis-cloud">0006</a></td><td>Deterministic workspace analysis cloud</td><td>Accepted</td></tr>
-<tr><td><a href="#adr-0007-plan-vs-execution-trace">0007</a></td><td>Plan vs. execution trace and comparison</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0004-tool-frame-roll-only-invariant">0004</a></td><td>ToolFrame roll-only rotation invariant</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0005-svd-singularity-gate-per-waypoint">0005</a></td><td>SVD singularity gate (thresholds 25/20/5/100)</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0006-deterministic-workspace-analysis-cloud">0006</a></td><td>Deterministic workspace cloud (display bands 50/25)</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0007-plan-vs-execution-trace">0007</a></td><td>Commanded-vs-planned trace comparison</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0008-manifest-protocol-v2-delta-timing-streamed">0008</a></td><td>Manifest protocol v2 (delta timing, streamed)</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -2561,6 +2562,53 @@ any future “did the servo actually move” question requires different
 hardware, not more host-side statistics.</li>
 <li>Duration comparisons are lower bounds: the trace knows when frames left the
 host, not when the arm finished moving.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0008-manifest-protocol-v2-delta-timing-streamed"><a class="header" href="#adr-0008-manifest-protocol-v2-delta-timing-streamed">ADR-0008: Manifest Protocol v2 (delta timing, streamed)</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-08</li>
+</ul>
+<h2 id="context-7"><a class="header" href="#context-7">Context</a></h2>
+<p>The host-paced frame protocol (ADR-0002) suffers scheduling jitter: frames are
+paced by the host (rAF, <code>setInterval</code>, React effects), so command timing is at
+the mercy of the browser. The Thalos execution manifest (waypoints + delta
+timing, firmware executes autonomously) fixes this, but a full manifest cannot
+fit the Arduino Nano’s 2 KB RAM: real drawing trajectories need 1.6–9.6 KB
+(square ~100 samples, gcode 200–600 at 50 ms dt), while only ~1.7 KB are free.</p>
+<h2 id="decision-7"><a class="header" href="#decision-7">Decision</a></h2>
+<p>Add a v2 text protocol that keeps the delta-timing waypoint model but streams
+it through a ring-buffer executor with ACK-paced upload:</p>
+<ul>
+<li><code>HELLO 2</code> → <code>HELLO 2 OK CHUNK_MAX 24</code> (additive handshake; legacy hosts never
+send it and keep working unchanged in IDLE).</li>
+<li><code>MANIFEST &lt;count&gt; &lt;duration_us&gt;</code> / <code>SAMPLE &lt;a1..a6 us&gt; &lt;dt_us&gt;</code> /
+<code>END_UPLOAD</code> / <code>EXECUTE</code> / <code>STOP</code> / <code>STATUS</code>.</li>
+<li><code>ACK &lt;free&gt;</code> flow control: a slot is freed by consumption; the host never
+sends more samples than the last announced free count (window ≤ CHUNK_MAX).
+<code>EXECUTE</code> is legal before <code>END_UPLOAD</code> because large manifests cannot fit in
+RAM; <code>END_UPLOAD</code> validates count and Σdt (tolerance <code>max(1000 µs, 1%)</code>).</li>
+<li>Executor: ring buffer of 2×24 samples (768 B), paced by <code>micros()</code>
+(wrap-safe delta); dt of a sample is the delta to the NEXT distinct sample
+(the plan’s dedupe frames are absorbed into dt, so Σdt equals the plan
+duration). First sample <code>dt=0</code> applies at start.</li>
+<li>Watchdog: fed by execution progress (consumed samples, ACKs, STOP), not by
+incoming frames; park at 5 s also resets the v2 state to IDLE so a revived
+host recovers with legacy frames or a fresh HELLO.</li>
+<li>Web playback uploads chunks with ACK pacing and streams the rest during
+execution; calibration and interactive mode stay on legacy frames.</li>
+</ul>
+<h2 id="consequences-7"><a class="header" href="#consequences-7">Consequences</a></h2>
+<ul>
+<li>Command jitter moves to the MCU (<code>micros()</code>, 4 µs tick). Honest limitation:
+actuation stays quantized by the servo ~20 ms refresh — the manifest fixes
+command timing, not servo latency.</li>
+<li>RAM: 1316/2048 B (64.3%) with CHUNK_MAX=24 (732 B free); Flash 25.4%.</li>
+<li>Errors are explicit tokens (<code>BAD_LINE</code>, <code>OUT_OF_RANGE</code>, <code>BAD_DT</code>,
+<code>BAD_STATE</code>, <code>COUNT_MISMATCH</code>, <code>DURATION_MISMATCH</code>, <code>NOT_READY</code>).</li>
+<li>Host death mid-run: buffered samples drain (~1–2 s), then park at 5 s.</li>
+<li>Rollback: legacy frames are untouched; playback can flip back to the
+interpolator path.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>

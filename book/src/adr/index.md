@@ -11,10 +11,11 @@ itself, the ADRs document the decisions.
 | [0001](./0001-constrained-drawing-ik.md) | Constrained drawing IK with reduced Jacobian | Accepted |
 | [0002](./0002-serial-protocol-microseconds.md) | Serial wire protocol in microseconds | Accepted |
 | [0003](./0003-tests-separate-docs-not-comments.md) | Tests in separate files; docs, not comments | Accepted |
-| [0004](./0004-tool-frame-roll-only-invariant.md) | Tool-frame roll-only invariant | Accepted |
-| [0005](./0005-singularity-gate.md) | SVD singularity gate per waypoint | Accepted |
-| [0006](./0006-workspace-analysis.md) | Deterministic workspace analysis cloud | Accepted |
-| [0007](./0007-plan-vs-execution-trace.md) | Plan vs. execution trace and comparison | Accepted |
+| [0004](./0004-tool-frame-roll-only-invariant.md) | ToolFrame roll-only rotation invariant | Accepted |
+| [0005](./0005-singularity-gate.md) | SVD singularity gate (thresholds 25/20/5/100) | Accepted |
+| [0006](./0006-workspace-analysis.md) | Deterministic workspace cloud (display bands 50/25) | Accepted |
+| [0007](./0007-plan-vs-execution-trace.md) | Commanded-vs-planned trace comparison | Accepted |
+| [0008](./0008-manifest-protocol-v2.md) | Manifest protocol v2 (delta timing, streamed) | Accepted |
 
 ## How to add an ADR
 
