@@ -140,6 +140,31 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
   stlScaleRef?: React.MutableRefObject<number>;
 }) {
   const [ikDragging, setIkDragging] = useState(false);
+
+  // Character-spotlight floor pool: an unlit radial-gradient decal so the lit
+  // floor under the robot reads clearly from ANY camera angle (not only
+  // top-down). Scene units are millimeters; radius ~300mm matches the robot's
+  // footprint while staying inside the grid's 450mm fade. MeshBasicMaterial
+  // (unlit) + depthWrite:false → it never occludes the robot or receives
+  // shadows; renderOrder -1 keeps grid lines/trace crisp on top.
+  const poolTexture = useMemo(() => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0.0, 'rgba(240, 252, 255, 0.92)'); // bright white-cyan core
+    grad.addColorStop(0.35, 'rgba(0, 242, 254, 0.55)'); // design cyan #00F2FE
+    grad.addColorStop(0.7, 'rgba(0, 242, 254, 0.20)');
+    grad.addColorStop(1.0, 'rgba(0, 242, 254, 0.0)'); // soft transparent edge
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, []);
+
   return (
     <div style={{ flex: 1, height: '100%' }}>
       <Canvas
@@ -151,16 +176,37 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           gl.setClearColor(0x000000, 0);
         }}
       >
-        {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back).
-            Amendment: key retuned 2.2→1.8 for the lighter original robot colors, and a
-            frontal highlight reflector near the camera makes the robot pop in BOTH
-            fidelity views (shared Canvas level — ADD, does not replace the scheme). */}
+        {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back),
+            hemisphere — plus a CHARACTER SPOTLIGHT replacing the subtle near-camera
+            highlight (user preview feedback: it must be EVIDENT, like a spotlight on
+            the main character). Strong white spot from the camera diagonal, overhead,
+            aimed at the robot base (default spotlight target = world origin where both
+            fidelity robots stand); decay 0 + distance clamp give a legacy-style bright
+            cone wrapping the whole robot without washing the far grid. Key retuned
+            1.8→1.5 (values only) to compensate the added spot heat on the camera-side
+            faces. Shared Canvas level → benefits BOTH fidelity views. */}
         <ambientLight intensity={0.15} />
-        <directionalLight position={[400, 600, 300]} intensity={1.8} castShadow />
+        <directionalLight position={[400, 600, 300]} intensity={1.5} castShadow />
         <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
-        <directionalLight position={[420, 320, 420]} intensity={1.0} color="#ffffff" />
+        <spotLight
+          position={[280, 560, 280]}
+          angle={0.6}
+          penumbra={0.5}
+          intensity={3.0}
+          decay={0}
+          distance={800}
+          color="#ffffff"
+        />
         <hemisphereLight args={['#8888ff', '#444422', 0.15]} />
+
+        {/* Visible floor light pool under the robot (y just above the grid plane,
+            rotated flat, centered on the robot's origin). Unlit decal → always reads
+            as a lit patch of floor from any angle. */}
+        <mesh position={[0, -0.45, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
+          <circleGeometry args={[300, 64]} />
+          <meshBasicMaterial map={poolTexture} transparent depthWrite={false} />
+        </mesh>
 
         <RobotSceneDispatcher
           robot={robot}
