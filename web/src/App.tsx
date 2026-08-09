@@ -318,6 +318,7 @@ export default function App() {
 
   useEffect(() => {
     if (!robot) return;
+    if (manifestModeRef.current) return;
     sendQ(robot.segments, gripper);
   }, [robot, gripper, sendQ]);
 
@@ -371,6 +372,8 @@ export default function App() {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
+      if (last) servoInterpolatorRef.current?.sync(last.joints);
     }
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
@@ -417,6 +420,8 @@ export default function App() {
         if (st === 'completed' && manifestModeRef.current) {
           manifestModeRef.current = false;
           setFirmwareTrace([...firmwareTraceRef.current]);
+          const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
+          if (last) servoInterpolatorRef.current?.sync(last.joints);
         }
         if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
           const target = motionPlayerTarget(playerId);
@@ -556,14 +561,18 @@ export default function App() {
       if (built instanceof Error) {
         console.warn('[manifest] build fallback legacy:', built.message);
       } else {
+        manifestModeRef.current = true;
+        servoInterpolatorRef.current?.stop();
         try {
           const chunkMax = await handshakeV2(port);
           if (chunkMax instanceof Error) {
             console.warn('[manifest] handshake fallback legacy:', chunkMax.message);
+            manifestModeRef.current = false;
           } else {
             const chunks = sliceLines(built.lines, chunkMax);
             const upload = await uploadManifest(port, chunks, chunkMax);
             if (upload.error) {
+              manifestModeRef.current = false;
               setDrawingBlock({
                 reason: 'El firmware rechazó el manifest: ' + upload.error,
                 points: [],
@@ -575,7 +584,6 @@ export default function App() {
               return false;
             }
             sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
-            manifestModeRef.current = true;
             firmwareTraceRef.current = [];
             const remaining = built.lines.slice(upload.sent);
             void (async () => {
@@ -604,6 +612,7 @@ export default function App() {
           }
         } catch (e) {
           console.warn('[manifest] fallback legacy:', e);
+          manifestModeRef.current = false;
         }
       }
     }
@@ -760,6 +769,8 @@ export default function App() {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
+      if (last) servoInterpolatorRef.current?.sync(last.joints);
       setFirmwareTrace([...firmwareTraceRef.current]);
     }
     setDrawingBlock(null);
@@ -881,6 +892,8 @@ export default function App() {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
+        const last = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
+        if (last) servoInterpolatorRef.current?.sync(last.joints);
         setFirmwareTrace([...firmwareTraceRef.current]);
       }
       motionPlayerStop(playerId);
