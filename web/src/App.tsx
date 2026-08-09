@@ -1112,6 +1112,21 @@ export default function App() {
     [robot],
   );
 
+  // EE-1: base style for the Fidelity segmented options (`.segmented` container
+  // + `.segmented__opt--active` class in theme.css for the active option).
+  const segmentOptStyle: React.CSSProperties = {
+    padding: '4px 14px',
+    border: '1px solid transparent',
+    borderRadius: 999,
+    background: 'transparent',
+    color: 'var(--c-gray)',
+    fontSize: 12,
+    fontWeight: 600,
+    fontFamily: 'var(--font-sans)',
+    cursor: 'pointer',
+    transition: 'color 0.2s ease, background 0.2s ease, border-color 0.2s ease',
+  };
+
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
   return (
@@ -1145,48 +1160,6 @@ export default function App() {
             onChange={handleJointChange}
             disabled={ikMode}
           />
-        </div>
-
-        {/* Info panel */}
-        <InfoPanel robot={robot} rawFrames={rawFrames} />
-
-        {/* Fidelity toggle */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: '#888' }}>Fidelidad:</span>
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              onClick={() => setFidelityMode('low')}
-              style={{
-                flex: 1,
-                padding: '6px 0',
-                fontSize: 12,
-                background: fidelityMode === 'low' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (fidelityMode === 'low' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: fidelityMode === 'low' ? '#ddc' : '#888',
-                cursor: 'pointer',
-              }}
-            >
-              Low
-            </button>
-            <button
-              onClick={() => setFidelityMode('high')}
-              style={{
-                flex: 1,
-                padding: '6px 0',
-                fontSize: 12,
-                background: fidelityMode === 'high' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (fidelityMode === 'high' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: fidelityMode === 'high' ? '#ddc' : '#888',
-                cursor: 'pointer',
-              }}
-            >
-              High
-            </button>
-          </div>
         </div>
 
         {/* Calibration mode — visible only in high fidelity */}
@@ -1278,21 +1251,6 @@ export default function App() {
           {serialError && (
             <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
           )}
-          {connected ? (
-            <button onClick={handleDisconnect} style={{
-              width: '100%', padding: 8, background: '#633',
-              border: 'none', borderRadius: 4, color: '#ccc', fontSize: 13, cursor: 'pointer',
-            }}>
-              Desconectar
-            </button>
-          ) : (
-            <button onClick={handleConnect} style={{
-              width: '100%', padding: 8, background: '#364',
-              border: 'none', borderRadius: 4, color: '#ccc', fontSize: 13, cursor: 'pointer',
-            }}>
-              Conectar robot físico
-            </button>
-          )}
         </div>
 
         {/* Conexión CIPRA (subscriber) — status indicator, never a modal (R15) */}
@@ -1309,27 +1267,9 @@ export default function App() {
         </div>
 
         {/* Calibración de servos (deadband/backlash) — manual */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          {!calibRunning ? (
-            <button
-              onClick={() => { void enterCalibration(); }}
-              disabled={!connected}
-              style={{
-                width: '100%',
-                padding: 8,
-                background: '#444',
-                border: 'none',
-                borderRadius: 4,
-                color: '#ccc',
-                fontSize: 12,
-                cursor: 'pointer',
-              }}
-            >
-              Calibrar servos (manual)
-            </button>
-          ) : (
-            <>
-              <div style={{ fontSize: 11, color: '#aa8', marginBottom: 6 }}>{calibStatus}</div>
+        {calibRunning && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+            <div style={{ fontSize: 11, color: '#aa8', marginBottom: 6 }}>{calibStatus}</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
                 {SERVO_NAMES.map((n, i) => (
                   <button
@@ -1398,10 +1338,9 @@ export default function App() {
                 <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
                 <button onClick={exitCalibration} style={{ ...stepBtn, background: '#633' }}>Salir</button>
               </div>
-            </>
+              {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
+            </div>
           )}
-          {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
-        </div>
         {ikMode && (
           <>
             <div style={{ padding: '4px 16px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1432,51 +1371,22 @@ export default function App() {
           </>
         )}
 
-        {/* IK mode */}
-        <div style={{ padding: '8px 16px', borderTop: ikMode ? 'none' : '1px solid #333' }}>
-          <button
-            onClick={() => {
-              if (!ikMode) {
-                const fk = forwardKinematics(robot.segments, robot.baseTransform);
-                const toolM = robot.toolTransform;
-                const ee = fk.frames[fk.frames.length - 1];
-                const toolPose = (() => {
-                  const m = (r: number, c: number) =>
-                    ee[r*4+0]*toolM[0*4+c] + ee[r*4+1]*toolM[1*4+c] +
-                    ee[r*4+2]*toolM[2*4+c] + ee[r*4+3]*toolM[3*4+c];
-                  return [m(0,3), m(1,3), m(2,3)] as [number, number, number];
-                })();
-                setIkTarget(toolPose);
-                setIkMode(true);
-              } else {
-                setIkMode(false);
-                setIkTarget(null);
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: ikMode ? '#553' : '#444',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            {ikMode ? 'Desactivar IK' : 'IK Mode'}
-          </button>
-          {ikMode && ikTarget && (
-            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
-              {ikError !== null && (
-                <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
-                  err: {ikError.toFixed(1)}mm
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        {/* IK target readout — the IK Mode toggle itself now lives in the
+            bottom pill bar (same inline toggle logic, moved) */}
+        {ikMode && (
+          <div style={{ padding: '8px 16px' }}>
+            {ikTarget && (
+              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
+                {ikError !== null && (
+                  <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
+                    err: {ikError.toFixed(1)}mm
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Run Analysis */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
@@ -1553,22 +1463,6 @@ export default function App() {
               5 DOF
             </button>
           </div>
-          <button
-            onClick={() => { void runWorkspace(); }}
-            disabled={workspaceRunning}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: workspaceRunning ? '#3a3a3a' : '#464',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: workspaceRunning ? 'default' : 'pointer',
-            }}
-          >
-            {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
-          </button>
           {workspaceError && (
             <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
               {workspaceError}
@@ -1582,28 +1476,12 @@ export default function App() {
           )}
         </div>
 
-        {/* Modo dibujo */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          {robotMode === 'normal' ? (
-            <button
-              onClick={() => { void enterDrawingMode(); }}
-              disabled={transitioning}
-              style={{
-                width: '100%',
-                padding: 8,
-                background: '#464',
-                border: 'none',
-                borderRadius: 4,
-                color: '#ccc',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
-            </button>
-          ) : (
-            <>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#aa8', marginBottom: 6, cursor: 'pointer' }}>
+        {/* Modo dibujo — the entry/exit toggle now lives in the bottom pill
+            bar (same enterDrawingMode/exitDrawingMode wiring); this block
+            keeps the full drawing config UI */}
+        {robotMode === 'drawing' && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#aa8', marginBottom: 6, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={backlashEnabled}
@@ -1943,43 +1821,10 @@ export default function App() {
                   <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
               </div>
-              <button
-                onClick={exitDrawingMode}
-                style={{
-                  width: '100%',
-                  padding: 6,
-                  background: '#333',
-                  border: 'none',
-                  borderRadius: 4,
-                  color: '#a99',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                Salir de modo dibujo (restaura pinza)
-              </button>
-            </>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Reset */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <button
-            onClick={handleReset}
-            style={{
-              width: '100%',
-              padding: '8px',
-              background: '#444',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Reset Home
-          </button>
-        </div>
+        {/* Reset — moved to the bottom pill bar (handleReset) */}
       </div>
 
       {/* 3D Viewport */}
@@ -2086,6 +1931,128 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Right column (EE-1): floating END-EFFECTOR glass card + Fidelity
+            segmented control, moved here from the sidebar (bottom-right
+            overlay, above the pill bar). Wiring identical: same state setter. */}
+        <div style={{
+          position: 'absolute',
+          bottom: 92,
+          right: 16,
+          zIndex: 15,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          gap: 10,
+          width: 260,
+        }}>
+          <InfoPanel robot={robot} rawFrames={rawFrames} />
+          <div
+            className="glass-card"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 12px' }}
+          >
+            <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Fidelidad:</span>
+            <div className="segmented">
+              <button
+                onClick={() => setFidelityMode('low')}
+                className={fidelityMode === 'low' ? 'segmented__opt--active' : undefined}
+                style={segmentOptStyle}
+              >
+                Low
+              </button>
+              <button
+                onClick={() => setFidelityMode('high')}
+                className={fidelityMode === 'high' ? 'segmented__opt--active' : undefined}
+                style={segmentOptStyle}
+              >
+                High
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom pill bar (PB-1): dark pills hosting the pre-existing action
+            handlers, moved from the sidebar buttons — wiring unchanged.
+            Config UIs (Run Analysis selectors, servo calib, demo/gcode
+            blocks) stay in the left column. */}
+        <div style={{
+          position: 'absolute',
+          bottom: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 15,
+          display: 'flex',
+          gap: 8,
+          padding: '8px 10px',
+          borderRadius: 999,
+          background: 'rgba(13, 17, 23, 0.65)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--glass-shadow)',
+          backdropFilter: 'blur(var(--glass-blur))',
+        }}>
+          {connected ? (
+            <button className="pill-btn" onClick={handleDisconnect}>
+              Desconectar
+            </button>
+          ) : (
+            <button className="pill-btn" onClick={handleConnect}>
+              Conectar
+            </button>
+          )}
+          <button
+            className="pill-btn"
+            onClick={() => {
+              if (!ikMode) {
+                const fk = forwardKinematics(robot.segments, robot.baseTransform);
+                const toolM = robot.toolTransform;
+                const ee = fk.frames[fk.frames.length - 1];
+                const toolPose = (() => {
+                  const m = (r: number, c: number) =>
+                    ee[r*4+0]*toolM[0*4+c] + ee[r*4+1]*toolM[1*4+c] +
+                    ee[r*4+2]*toolM[2*4+c] + ee[r*4+3]*toolM[3*4+c];
+                  return [m(0,3), m(1,3), m(2,3)] as [number, number, number];
+                })();
+                setIkTarget(toolPose);
+                setIkMode(true);
+              } else {
+                setIkMode(false);
+                setIkTarget(null);
+              }
+            }}
+          >
+            {ikMode ? 'Desactivar IK' : 'IK Mode'}
+          </button>
+          <button
+            className="pill-btn"
+            onClick={() => { void enterCalibration(); }}
+            disabled={!connected}
+          >
+            Calibrar Servos
+          </button>
+          <button className="pill-btn" onClick={handleReset}>
+            Reset Home
+          </button>
+          <button
+            className="pill-btn"
+            onClick={() => { void runWorkspace(); }}
+            disabled={workspaceRunning}
+          >
+            {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
+          </button>
+          {robotMode === 'normal' ? (
+            <button
+              className="pill-btn"
+              onClick={() => { void enterDrawingMode(); }}
+              disabled={transitioning}
+            >
+              {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
+            </button>
+          ) : (
+            <button className="pill-btn" onClick={exitDrawingMode}>
+              Salir de modo dibujo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Top bar chrome (TB-1): full-width glass strip overlaying the viewport.
