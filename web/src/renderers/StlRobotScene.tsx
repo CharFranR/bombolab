@@ -22,11 +22,12 @@ interface MeshEntry extends VisualLink {
 }
 
 function buildEntries(geometries: THREE.BufferGeometry[]): MeshEntry[] {
-  // ONE shared material for all STL meshes (recolor only — buildEntries untouched)
+  // ONE shared material for all STL meshes — original color/props restored
+  // (user amendment: no dark matte gray); structure untouched (buildEntries identical)
   const material = new THREE.MeshStandardMaterial({
-    color: '#3a3f46',
-    roughness: 0.6,
-    metalness: 0.4,
+    color: '#bbbbcc',
+    roughness: 0.5,
+    metalness: 0.3,
   });
   return geometries.map((geo, i) => {
     const meta = STL_META[i];

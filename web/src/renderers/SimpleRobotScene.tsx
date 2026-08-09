@@ -10,11 +10,11 @@ import IkTarget from '../components/IkTarget';
 const COLORS = {
   floor: '#2a2a30',
   grid: '#444450',
-  link: '#3a3f46',
-  joint: '#4a5058',
-  base: '#2e3338',
-  effector: '#5a616b',
-  tool: '#5a616b',
+  link: '#e8a040',
+  joint: '#ffb432',
+  base: '#787888',
+  effector: '#4cd964',
+  tool: '#4cd964',
   axisX: '#ff4444',
   axisY: '#44ff44',
   axisZ: '#4488ff',
@@ -33,12 +33,12 @@ function Servo({ position, rotation, color }: {
       {/* Cuerpo principal del servo */}
       <mesh castShadow>
         <boxGeometry args={[20, 16, 20]} />
-        <meshStandardMaterial color={color} roughness={0.6} metalness={0.4} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.2} />
       </mesh>
       {/* Eje del servo (disco superior) */}
       <mesh position={[0, 10, 0]} castShadow>
         <cylinderGeometry args={[6, 6, 4, 16]} />
-        <meshStandardMaterial color="#666677" roughness={0.6} metalness={0.4} />
+        <meshStandardMaterial color="#666677" roughness={0.3} metalness={0.4} />
       </mesh>
     </group>
   );
@@ -78,15 +78,15 @@ function Link({ from, to, width = 14 }: {
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial
         color={COLORS.link}
-        roughness={0.6}
-        metalness={0.4}
+        roughness={0.5}
+        metalness={0.3}
       />
       <mesh scale={scale}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           color={COLORS.link}
-          roughness={0.6}
-          metalness={0.4}
+          roughness={0.5}
+          metalness={0.3}
           transparent
           opacity={0.15}
         />
@@ -103,12 +103,12 @@ function Base({ position }: { position: [number, number, number] }) {
       {/* Plataforma base */}
       <mesh receiveShadow position={[0, -7, 0]}>
         <cylinderGeometry args={[30, 35, 14, 24]} />
-        <meshStandardMaterial color={COLORS.base} roughness={0.6} metalness={0.4} />
+        <meshStandardMaterial color="#555566" roughness={0.7} metalness={0.3} />
       </mesh>
       {/* Soporte vertical */}
       <mesh position={[0, 20, 0]} castShadow>
         <cylinderGeometry args={[10, 12, 30, 16]} />
-        <meshStandardMaterial color={COLORS.link} roughness={0.6} metalness={0.4} />
+        <meshStandardMaterial color="#606070" roughness={0.6} metalness={0.2} />
       </mesh>
     </group>
   );
@@ -241,27 +241,27 @@ export default function SimpleRobotScene({
               {/* Cuerpo (riel) */}
               <mesh position={[-30, 0, 0]}>
                 <boxGeometry args={[60, 6, 12]} />
-                <meshStandardMaterial color="#5a616b" roughness={0.6} metalness={0.4} />
+                <meshStandardMaterial color="#7777aa" roughness={0.4} metalness={0.4} />
               </mesh>
               {/* Mordaza izquierda (abre en -Y) */}
               <mesh position={[8, -7 - jawOpen, 0]}>
                 <boxGeometry args={[24, 4, 10]} />
-                <meshStandardMaterial color="#6e7681" roughness={0.6} metalness={0.4} />
+                <meshStandardMaterial color="#ccccdd" roughness={0.3} metalness={0.5} />
               </mesh>
               {/* Mordaza derecha (abre en +Y) */}
               <mesh position={[8, 7 + jawOpen, 0]}>
                 <boxGeometry args={[24, 4, 10]} />
-                <meshStandardMaterial color="#6e7681" roughness={0.6} metalness={0.4} />
+                <meshStandardMaterial color="#ccccdd" roughness={0.3} metalness={0.5} />
               </mesh>
               {/* Diente de sujeción izq */}
               <mesh position={[20, -7 - jawOpen, 0]}>
                 <boxGeometry args={[4, 4, 14]} />
-                <meshStandardMaterial color="#4a5058" roughness={0.6} metalness={0.4} />
+                <meshStandardMaterial color="#9999bb" roughness={0.6} metalness={0.2} />
               </mesh>
               {/* Diente de sujeción der */}
               <mesh position={[20, 7 + jawOpen, 0]}>
                 <boxGeometry args={[4, 4, 14]} />
-                <meshStandardMaterial color="#4a5058" roughness={0.6} metalness={0.4} />
+                <meshStandardMaterial color="#9999bb" roughness={0.6} metalness={0.2} />
               </mesh>
             </group>
           </>

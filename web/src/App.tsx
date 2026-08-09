@@ -1131,16 +1131,24 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
-      {/* Sidebar */}
-      <div style={{
-        width: 280,
-        minWidth: 280,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#24242a',
-        borderRight: '1px solid #333',
-      }}>
+      {/* Sidebar — floating glass column (D9): position clears the 44px fixed
+          top bar (top 56) and the centered pill bar (bottom 92). All child
+          config UIs below keep their exact order, content and wiring. */}
+      <div
+        className="glass-card"
+        style={{
+          position: 'fixed',
+          top: 56,
+          left: 16,
+          bottom: 92,
+          width: 280,
+          minWidth: 280,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          zIndex: 10,
+        }}
+      >
         {/* Header */}
         <div style={{ padding: '16px', borderBottom: '1px solid #333' }}>
           <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#eee' }}>
@@ -2069,7 +2077,7 @@ export default function App() {
           <span className={'badge ' + (connected ? 'badge--online' : 'badge--offline')}>
             {connected ? 'Conectado' : 'Desconectado'}
           </span>
-          <span className="badge badge--online">
+          <span className={'badge ' + (cipraConn === 'connected' ? 'badge--online' : 'badge--offline')}>
             {getConnectionStatusLabel(cipraConn)}
           </span>
           <button

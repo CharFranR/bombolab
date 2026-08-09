@@ -151,11 +151,15 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           gl.setClearColor(0x000000, 0);
         }}
       >
-        {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back) */}
+        {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back).
+            Amendment: key retuned 2.2→1.8 for the lighter original robot colors, and a
+            frontal highlight reflector near the camera makes the robot pop in BOTH
+            fidelity views (shared Canvas level — ADD, does not replace the scheme). */}
         <ambientLight intensity={0.15} />
-        <directionalLight position={[400, 600, 300]} intensity={2.2} castShadow />
+        <directionalLight position={[400, 600, 300]} intensity={1.8} castShadow />
         <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
+        <directionalLight position={[420, 320, 420]} intensity={1.0} color="#ffffff" />
         <hemisphereLight args={['#8888ff', '#444422', 0.15]} />
 
         <RobotSceneDispatcher
