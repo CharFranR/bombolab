@@ -31,7 +31,8 @@ export interface LoadGcodeTextResult {
 }
 
 export interface LoadGcodeTextDeps {
-  /** Builds the autofit target area for the robot's reachable workspace. */
+  /** Builds the autofit target area for the robot's reachable workspace.
+   *  Not consulted when `autofit === false` (real-scale 1:1 mode). */
   safeDrawingArea: () => Promise<DrawingAreaLike>;
   /** Injected from motion/gcode.ts `parseGcode`. */
   parseGcode: (text: string, opts: GcodeOptions) => GcodeParseResult;
@@ -44,6 +45,12 @@ export interface LoadGcodeTextDeps {
   /** Drawing-plane heights. Defaults to 80/85 (mirror DRAW_PLANE_Z/TRAVEL_PLANE_Z). */
   planeZ?: number;
   travelZ?: number;
+  /** Real-scale 1:1 mode: parse without autofit (default false → autofit on,
+   *  coordinates are scaled/centered to fit the safe drawing area). When
+   *  true, `safeDrawingArea` is NOT consulted and the gcode X/Y are used
+   *  verbatim; the pre-flight reachability gate still blocks out-of-reach
+   *  trajectories. */
+  autofit?: boolean;
 }
 
 /** Map a draw-time failure to the canonical error code the publisher
@@ -74,14 +81,20 @@ export async function loadGcodeText(
     setGcodeName,
     planeZ = 80,
     travelZ = 85,
+    autofit = true,
   } = deps;
 
   setGcodeError(null);
   setGcodeName(name);
   setValidating(true);
   try {
-    const area = await safeDrawingArea();
-    const result = parseGcode(text, { area, planeZ, travelZ });
+    const opts: GcodeOptions = { planeZ, travelZ };
+    if (autofit) {
+      opts.area = await safeDrawingArea();
+    } else {
+      opts.autofit = false;
+    }
+    const result = parseGcode(text, opts);
     if (result.commands.length === 0) {
       setGcodeError('El archivo no contiene movimientos dibujables (G0/G1 con lápiz).');
       return { ok: false, reason: 'no-drawable' };

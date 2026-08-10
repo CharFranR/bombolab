@@ -82,6 +82,10 @@ export default function App() {
   const [gcodeName, setGcodeName] = useState<string | null>(null);
   const [gcodeWarnings, setGcodeWarnings] = useState<string[]>([]);
   const [gcodeError, setGcodeError] = useState<string | null>(null);
+  // Real-scale 1:1 mode: parse the gcode WITHOUT autofit so coordinates are
+  // used verbatim (the pattern 150×100 is already authored in robot space).
+  // The reachability gate still blocks trajectories that leave the workspace.
+  const [gcodeAutofit, setGcodeAutofit] = useState(true);
   const gcodeInputRef = useRef<HTMLInputElement | null>(null);
   // Last parsed gcode text + name, kept so the "Reajustar" button can re-autofit
   // into a smaller safe area if the current drawing is rejected by the workspace.
@@ -743,8 +747,9 @@ export default function App() {
         setGcodeError,
         setGcodeWarnings,
         setGcodeName,
+        autofit: gcodeAutofit,
       }),
-    [startTrajectory],
+    [startTrajectory, gcodeAutofit],
   );
 
   const handleStartDemo = useCallback(() => {
@@ -1909,6 +1914,26 @@ export default function App() {
                 >
                   {gcodeName ? `G-code: ${gcodeName}` : 'Cargar .gcode'}
                 </button>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '0 6px',
+                    fontSize: 11,
+                    color: '#999',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={gcodeAutofit}
+                    onChange={(e) => setGcodeAutofit(e.target.checked)}
+                    title="Activado: escala y centra el gcode al área de trabajo. Desactivado: usa las coordenadas tal cual (escala real 1:1)."
+                  />
+                  Autofit
+                </label>
                 <input
                   ref={gcodeInputRef}
                   type="file"
@@ -1986,7 +2011,7 @@ export default function App() {
                     >
                       Cerrar
                     </button>
-                    {drawingBlock.canRefit && (
+                    {drawingBlock.canRefit && gcodeAutofit && (
                       <button
                         onClick={handleRefitGcode}
                         style={{
