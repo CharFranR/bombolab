@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-851ec9e6.js";
+            window.path_to_searchindex_js = "../searchindex-22a7eec5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1cc40636.js"></script>
@@ -190,8 +190,8 @@
 paced by the host (rAF, <code>setInterval</code>, React effects), so command timing is at
 the mercy of the browser. The Thalos execution manifest (waypoints + delta
 timing, firmware executes autonomously) fixes this, but a full manifest cannot
-fit the Arduino Nano’s 2 KB RAM: real drawing trajectories need 1.6–9.6 KB
-(square ~100 samples, gcode 200–600 at 50 ms dt), while only ~1.7 KB are free.</p>
+fit the Arduino Nano’s 2 KB RAM: real drawing trajectories need 2.0–12.0 KB
+(square ~125 samples, gcode 250–750 at 40 ms dt), while only ~1.7 KB are free.</p>
 <h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
 <p>Add a v2 text protocol that keeps the delta-timing waypoint model but streams
 it through a ring-buffer executor with ACK-paced upload:</p>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-851ec9e6.js";
+            window.path_to_searchindex_js = "../searchindex-22a7eec5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1cc40636.js"></script>
@@ -236,7 +236,7 @@ different frame is a new sample.</p>
 <p>Capacity is capped at 100 000 samples (≈10 h at 20 frames/s). Overflow stops
 recording and flags the run as <code>truncated</code>.</p>
 <h3 id="plan-timeline"><a class="header" href="#plan-timeline">Plan timeline</a></h3>
-<p><code>planTimeline(cmds, { ik, robot, startQ, gripperPct, dt = 0.05, startTcp })</code>
+<p><code>planTimeline(cmds, { ik, robot, startQ, gripperPct, dt = 0.04, startTcp })</code>
 samples the analytic trajectory every <code>dt</code> seconds:</p>
 <ul>
 <li><code>move</code> → linear segment at <code>speed</code> (duration = distance / speed);</li>
