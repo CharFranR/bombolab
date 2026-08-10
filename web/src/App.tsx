@@ -681,6 +681,25 @@ export default function App() {
               setPlayerState('idle');
               return false;
             }
+            // Defensa en profundidad: NUNCA mandar EXECUTE con el ring incompleto.
+            // El firmware declaró `built.count` en el MANIFEST; si el web solo
+            // cargó una fracción sin confirmar, el EXECUTE deja al firmware mudo
+            // (sin T-lines) esperando samples que nunca llegan.
+            const ringLimit = 2 * chunkMax;
+            const expectedPreExecute = Math.min(upload.total, ringLimit);
+            if (upload.sent < expectedPreExecute) {
+              manifestModeRef.current = false;
+              setManifestStatus('upload INCOMPLETO: ' + upload.sent + '/' + upload.total + ' — no se envía EXECUTE');
+              setDrawingBlock({
+                reason: `El manifest no se cargó completo antes del EXECUTE (${upload.sent}/${upload.total}). Reintentá o verificá el firmware.`,
+                points: [],
+                canRefit: false,
+              });
+              try { motionPlayerDrop(id); } catch {}
+              setPlayerId(null);
+              setPlayerState('idle');
+              return false;
+            }
             await awaitSendSerial(port, new TextEncoder().encode('EXECUTE\n'));
             pushDiag(`EXECUTE enviado (ring: ${upload.sent})`);
             setManifestStatus(`EXECUTE enviado (ring: ${upload.sent})`);

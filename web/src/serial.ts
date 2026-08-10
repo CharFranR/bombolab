@@ -193,11 +193,17 @@ export function releaseSerial(port: SerialPort): void {
  * Lee líneas del puerto. Con `stopWhen` retorna en cuanto una línea la cumple
  * (sin esperar 8 líneas ni el timeout): crítico para el handshake y las ventanas
  * ACK, donde esperar el batch completo retrasa el EXECUTE varios segundos.
+ *
+ * Con `ignore`, las líneas que la cumplen se DESCARTAN sin contar para el límite
+ * de 8: basura del parser legacy (OK/ERR sin token) o T-lines no pueden cortar
+ * una ventana ACK antes de que llegue el ACK real (bug 2026-08-10: 8 líneas
+ * legacy → éxito falso → EXECUTE con ring incompleto → firmware mudo).
  */
 export async function readSerialLines(
   port: SerialPort,
   timeoutMs = 1500,
   stopWhen?: (line: string) => boolean,
+  ignore?: (line: string) => boolean,
 ): Promise<string[]> {
   if (!port.readable) return [];
   ensureReadLoop(port);
@@ -213,6 +219,7 @@ export async function readSerialLines(
     }
     const line = buf.slice(0, idx).replace(/\r$/, '');
     serialBuffers.set(port, buf.slice(idx + 1));
+    if (ignore && ignore(line)) continue;
     lines.push(line);
     if (stopWhen && stopWhen(line)) return lines;
   }
@@ -353,13 +360,31 @@ export async function uploadManifest(
     if (windowUsed === 0 && sent < total) {
       // stopWhen: retornar apenas llegue el ACK (o un ERR), sin esperar el batch
       // completo — antes cada ventana sumaba ~1.2s de espera al arranque.
-      const lines = await readSerialLines(port, 1200, (l) => l.startsWith('ACK ') || l.startsWith('ERR '));
+      // ignore: el parser legacy responde "OK"/"ERR" SIN token a frames viejos
+      // (residuo del heartbeat/interpolator pre-manifest). Esas líneas no son
+      // el ACK de ESTA ventana: descartarlas evita que 8 líneas basura corten
+      // la espera y produzcan un éxito falso (bug 2026-08-10 → EXECUTE con el
+      // ring incompleto → el firmware ejecuta nada y no emite T-lines).
+      const lines = await readSerialLines(
+        port,
+        1200,
+        (l) => l.startsWith('ACK ') || l.startsWith('ERR '),
+        (l) => !l.startsWith('ACK ') && !l.startsWith('ERR ') && !l.startsWith('HELLO 2 OK'),
+      );
       const err = lines.find((l) => l.startsWith('ERR '));
       if (err) {
         return { sent, total, error: err };
       }
       const acked = lines.some((l) => l.startsWith('ACK '));
       if (!acked) {
+        // Ring incompleto sin confirmación: el firmware no recibió la ventana
+        // (o está en un estado que no la procesa). NO es un éxito: mandar
+        // EXECUTE acá deja al firmware con un manifest declarado y un ring a
+        // medio llenar → no ejecuta → sin T-lines → "no da trazas".
+        if (sent < RING_LIMIT) {
+          return { sent, total, error: `sin ACK del firmware tras ${chunkMax} samples (ring incompleto)` };
+        }
+        // Ring lleno (48): parada legítima, el resto viaja tras EXECUTE.
         return { sent, total };
       }
     }

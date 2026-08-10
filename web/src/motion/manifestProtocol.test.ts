@@ -51,6 +51,10 @@ class FakeV2Firmware {
   /** Modo "firmware v2 en mal estado": rechaza HELLO con ERR BAD_STATE. */
   rejectHello = false;
 
+  /** Modo "firmware mudo": recibe SAMPLEs pero NO emite ACK en las ventanas
+   *  (simula el firmware colgado/en estado raro del bug 2026-08-10). */
+  silentAck = false;
+
   feed(bytes: Uint8Array): void {
     const text = new TextDecoder().decode(bytes);
     for (const raw of text.split('\n')) {
@@ -105,9 +109,13 @@ class FakeV2Firmware {
       this.stored += 1;
       // ACK cada 24 recibidos si el ring tiene espacio (executor no corriendo aquí)
       if (this.received % V2_CHUNK_MAX === 0 && RING_SIZE - this.stored > 0) {
-        const ack = `ACK ${RING_SIZE - this.stored}`;
-        this.log.push(ack);
-        this.output.push(ack);
+        if (!this.silentAck) {
+          const ack = `ACK ${RING_SIZE - this.stored}`;
+          this.log.push(ack);
+          this.output.push(ack);
+        } else {
+          this.log.push(`ACK ${RING_SIZE - this.stored} (suprimido)`);
+        }
       }
       return;
     }
@@ -357,4 +365,46 @@ describe('contrato de protocolo v2 web↔firmware', () => {
     // esto es el comportamiento diseñado — NO genera RING_FULL porque no envía más allá.
     expect(fw.stored).toBeLessThanOrEqual(RING_SIZE);
   }, 10_000);
+
+  it('12 — REGRESIÓN: firmware mudo (sin ACK) con ring incompleto → error explícito, NO éxito falso', async () => {
+    const fw = new FakeV2Firmware();
+    // Simula el bug 2026-08-10: el firmware no confirma la primera ventana
+    // (ring a 24 de 288). Antes uploadManifest retornaba {sent:24} SIN error
+    // y App.tsx mandaba EXECUTE con el ring incompleto → firmware mudo, sin T-lines.
+    fw.silentAck = true;
+    // Residuo típico del parser legacy que además cortaba la ventana ACK antes.
+    fw.injectResidue(['OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK']);
+    const port = new FakeSerialPort(fw);
+    const built = buildManifest(fakeSamples(288)) as Exclude<ReturnType<typeof buildManifest>, Error>;
+
+    const chunkMax = await handshakeV2(port as any);
+    expect(chunkMax).toBe(24);
+    sendManifestHeader(port as any, built.count, built.durationUs);
+
+    const upload = await uploadLines(port, built.lines);
+
+    // Sin ACK y con ring incompleto → el upload DEBE fallar (App.tsx no manda
+    // EXECUTE). Nunca éxito silencioso con el ring a 24 de 288.
+    expect(upload.error).toBeDefined();
+    expect(upload.sent).toBeLessThan(built.count);
+  }, 15_000);
+
+  it('13 — REGRESIÓN: uploadManifest descarta líneas basura y ESPERA el ACK real de la ventana', async () => {
+    const fw = new FakeV2Firmware();
+    // Basura legacy ANTES del ACK legítimo: el web debe ignorarla y seguir
+    // esperando hasta encontrar "ACK 24" (no cortar por el límite de 8 líneas).
+    fw.injectResidue(['OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK']);
+    const port = new FakeSerialPort(fw);
+    const built = buildManifest(fakeSamples(30)) as Exclude<ReturnType<typeof buildManifest>, Error>;
+
+    const chunkMax = await handshakeV2(port as any);
+    expect(chunkMax).toBe(24);
+    sendManifestHeader(port as any, built.count, built.durationUs);
+
+    const upload = await uploadLines(port, built.lines);
+
+    expect(upload.error).toBeUndefined();
+    expect(upload.sent).toBe(built.count); // 30/30 — el ACK real sí llegó
+    expect(fw.log).toContain(`ACK ${RING_SIZE - 24}`);
+  }, 15_000);
 });
