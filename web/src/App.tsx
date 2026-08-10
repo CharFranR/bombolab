@@ -10,7 +10,7 @@ import { runSingularityGate } from './motion/singularityGate';
 import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, awaitSendSerial, releaseSerial, drainSerial, handshakeV2, uploadManifest, continueManifestUpload, sendManifestHeader } from './serial';
 import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
 import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './motion/traceFirmware';
-import { ServoInterpolator, type InterpolationConfig } from './interpolation';
+import { DEFAULT_INTERPOLATION, ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
 import { planTimeline, type PlanSample } from './motion/planTimeline';
 import { downloadTraceCsv, downloadBlob, copyText, exportTraceCsv } from './motion/csv';
@@ -284,7 +284,8 @@ export default function App() {
         sendSerial(port, wire);
       },
       initial,
-      { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
+      // Pacing unificado en 40 ms con el CLI Rust (DEFAULT_INTERPOLATION).
+      { ...DEFAULT_INTERPOLATION, backlash: backlashEnabled ? BACKLASH_US : undefined },
     );
     servoInterpolatorRef.current.keepAlive();
     setConnected(true);

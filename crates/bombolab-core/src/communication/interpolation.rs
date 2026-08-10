@@ -10,7 +10,7 @@ impl Default for InterpolationConfig {
     fn default() -> Self {
         Self {
             step_size: 5,
-            delay_ms: 100,
+            delay_ms: 40,
         }
     }
 }

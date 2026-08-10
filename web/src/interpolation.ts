@@ -27,9 +27,9 @@ export interface InterpolationConfig {
   backlash?: number[];
 }
 
-/** Viewer pacing: 5° per step, 50 ms between steps (user-tuned; the Rust
- *  `InterpolationConfig::default()` keeps 100 ms for serial-test/CLI). */
-export const DEFAULT_INTERPOLATION: InterpolationConfig = { stepSize: 5, delayMs: 50 };
+/** Viewer pacing: 5° per step, 40 ms between steps — unified with the Rust
+ *  `InterpolationConfig::default()` (serial-test/CLI) at 40 ms. */
+export const DEFAULT_INTERPOLATION: InterpolationConfig = { stepSize: 5, delayMs: 40 };
 
 /**
  * Linear interpolation of one channel from `current` to `target`, stepping
