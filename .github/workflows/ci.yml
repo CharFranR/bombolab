@@ -52,21 +52,6 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
-  core-ws-bridge:
-    name: Core with ws-bridge feature
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: crates/bombolab-core
-      - run: cargo check --manifest-path crates/bombolab-core/Cargo.toml --features ws-bridge
-      - run: cargo clippy --manifest-path crates/bombolab-core/Cargo.toml --features ws-bridge -- -D warnings
-
   wasm:
     name: WASM build (wasm32-unknown-unknown)
     runs-on: ubuntu-latest

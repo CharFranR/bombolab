@@ -31,15 +31,9 @@ bombolab/
 │   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
 │   │       │   ├── ik.rs         # IkSolver (DLS IK), IkError
 │   │       │   └── init.rs       # Interactive CLI tester
-│   │       ├── communication/    # Serial communication with hardware
-│   │       │   ├── mod.rs        # ConnectionError, protocol constants
-│   │       │   ├── arduino_nano.rs   # ArduinoNano serial wrapper
-│   │       │   ├── mapper.rs     # ServoMapper (q → servo degrees)
-│   │       │   └── interpolation.rs  # Smooth servo movement
 │   │       └── bin/
 │   │           ├── dh-solve.rs           # DH table solver CLI
-│   │           ├── quaternion-solve.rs   # Quaternion operations CLI
-│   │           └── serial-test.rs        # Interactive serial tester
+│   │           └── quaternion-solve.rs   # Quaternion operations CLI
 │   └── bombolab-wasm/             # WASM bridge
 │       ├── Cargo.toml
 │       └── src/lib.rs             # FK, IK, fabri_creator exports via wasm-bindgen
@@ -85,10 +79,6 @@ The core library contains all math, data models, and kinematics computation. It 
 | `kinematics::forward` | `forward_kinematics()`, `matrix_from_segment()` |
 | `kinematics::ik` | `IkSolver`, `IkError` |
 | `kinematics::init` | Interactive CLI for building robots and testing FK |
-| `communication` | Serial protocol constants, `ConnectionError` enum |
-| `communication::arduino_nano` | `ArduinoNano` serial connection wrapper |
-| `communication::mapper` | `ServoMapper` — maps kinematic q to servo angles |
-| `communication::interpolation` | `InterpolationConfig`, `interpolate_joint()`, `interpolate_all()` |
 
 ### bombolab-wasm
 
@@ -136,11 +126,11 @@ All matrix data is serialized as row-major 3×4 arrays, matching the original Ty
 
 ```
 bombolab (workspace root)
-├── bombolab-core    (nalgebra, serialport, ctrlc)
+├── bombolab-core    (nalgebra)
 └── bombolab-wasm    (bombolab-core + wasm-bindgen + serde)
 ```
 
-The core crate depends on `nalgebra` for linear algebra, `serialport` for hardware communication (behind feature gate `serial` for WASM compat), and `ctrlc` for clean shutdown. The WASM crate adds `wasm-bindgen` and `serde` for JavaScript interop.
+The core crate depends on `nalgebra` for linear algebra. Hardware communication is handled entirely by the browser via WebSerial (`web/src/serial.ts`), so the core crate has no serial dependency. The WASM crate adds `wasm-bindgen` and `serde` for JavaScript interop.
 
 ## References
 

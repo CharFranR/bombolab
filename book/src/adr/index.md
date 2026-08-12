@@ -16,6 +16,7 @@ itself, the ADRs document the decisions.
 | [0006](./0006-workspace-analysis.md) | Deterministic workspace cloud (display bands 50/25) | Accepted |
 | [0007](./0007-plan-vs-execution-trace.md) | Commanded-vs-planned trace comparison | Accepted |
 | [0008](./0008-manifest-protocol-v2.md) | Manifest protocol v2 (delta timing, streamed) | Accepted |
+| [0009](./0009-deprecate-rust-serial-stack.md) | Deprecate Rust serial stack (WebSerial only) | Accepted |
 
 ## How to add an ADR
 

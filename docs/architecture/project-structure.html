@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-22a7eec5.js";
+            window.path_to_searchindex_js = "../searchindex-ae0f75a4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1cc40636.js"></script>
+        <script src="../toc-55f41179.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,15 +209,9 @@
 │   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
 │   │       │   ├── ik.rs         # IkSolver (DLS IK), IkError
 │   │       │   └── init.rs       # Interactive CLI tester
-│   │       ├── communication/    # Serial communication with hardware
-│   │       │   ├── mod.rs        # ConnectionError, protocol constants
-│   │       │   ├── arduino_nano.rs   # ArduinoNano serial wrapper
-│   │       │   ├── mapper.rs     # ServoMapper (q → servo degrees)
-│   │       │   └── interpolation.rs  # Smooth servo movement
 │   │       └── bin/
 │   │           ├── dh-solve.rs           # DH table solver CLI
-│   │           ├── quaternion-solve.rs   # Quaternion operations CLI
-│   │           └── serial-test.rs        # Interactive serial tester
+│   │           └── quaternion-solve.rs   # Quaternion operations CLI
 │   └── bombolab-wasm/             # WASM bridge
 │       ├── Cargo.toml
 │       └── src/lib.rs             # FK, IK, fabri_creator exports via wasm-bindgen
@@ -263,10 +257,6 @@
 <tr><td><code>kinematics::forward</code></td><td><code>forward_kinematics()</code>, <code>matrix_from_segment()</code></td></tr>
 <tr><td><code>kinematics::ik</code></td><td><code>IkSolver</code>, <code>IkError</code></td></tr>
 <tr><td><code>kinematics::init</code></td><td>Interactive CLI for building robots and testing FK</td></tr>
-<tr><td><code>communication</code></td><td>Serial protocol constants, <code>ConnectionError</code> enum</td></tr>
-<tr><td><code>communication::arduino_nano</code></td><td><code>ArduinoNano</code> serial connection wrapper</td></tr>
-<tr><td><code>communication::mapper</code></td><td><code>ServoMapper</code> — maps kinematic q to servo angles</td></tr>
-<tr><td><code>communication::interpolation</code></td><td><code>InterpolationConfig</code>, <code>interpolate_joint()</code>, <code>interpolate_all()</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -314,10 +304,10 @@
 </code></pre>
 <h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency Graph</a></h2>
 <pre><code>bombolab (workspace root)
-├── bombolab-core    (nalgebra, serialport, ctrlc)
+├── bombolab-core    (nalgebra)
 └── bombolab-wasm    (bombolab-core + wasm-bindgen + serde)
 </code></pre>
-<p>The core crate depends on <code>nalgebra</code> for linear algebra, <code>serialport</code> for hardware communication (behind feature gate <code>serial</code> for WASM compat), and <code>ctrlc</code> for clean shutdown. The WASM crate adds <code>wasm-bindgen</code> and <code>serde</code> for JavaScript interop.</p>
+<p>The core crate depends on <code>nalgebra</code> for linear algebra. Hardware communication is handled entirely by the browser via WebSerial (<code>web/src/serial.ts</code>), so the core crate has no serial dependency. The WASM crate adds <code>wasm-bindgen</code> and <code>serde</code> for JavaScript interop.</p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li><a href="./design-decisions.html">Design Decisions</a> – why the code is structured this way</li>

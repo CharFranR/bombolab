@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-22a7eec5.js";
+            window.path_to_searchindex_js = "../searchindex-ae0f75a4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1cc40636.js"></script>
+        <script src="../toc-55f41179.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -202,9 +202,9 @@ fast and deterministic.</p>
 <li>Full servo resolution on the wire (1 µs steps instead of 1° steps).</li>
 <li>The firmware conversion layer disappeared; it stores and forwards native
 pulse widths.</li>
-<li>Unit ambiguity is resolved by range detection, documented in
-<code>book/src/core-concepts/communication.md</code> and covered by the
-<code>cli_serial_test</code> integration test.</li>
+<li>Unit ambiguity is resolved by range detection, documented in the
+WebSerial implementation (<code>web/src/serial.ts</code> /
+<code>web/src/motion/manifestProtocol.ts</code>).</li>
 <li>Host pacing remains the responsibility of the host (interpolation delay and
 motion player <code>update(dt)</code>); the firmware is a deterministic executor.</li>
 </ul>

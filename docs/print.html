@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-22a7eec5.js";
+            window.path_to_searchindex_js = "searchindex-ae0f75a4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-1cc40636.js"></script>
+        <script src="toc-55f41179.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1094,7 +1094,7 @@ let marker = tool_transform() * effector;
 </table>
 </div>
 <p>The 6th value controls the gripper (not part of the 5-DOF kinematic model). The firmware parses the CSV, validates ranges, and drives the servos via PWM.</p>
-<p>See <a href="#serial-communication">Serial Communication</a> for implementation details.</p>
+<p>The browser communicates with the firmware directly via WebSerial (see <code>web/src/serial.ts</code> and the <a href="#adr-0008-manifest-protocol-v2-delta-timing-streamed">manifest protocol v2 ADR</a>); there is no host-side serial module.</p>
 <h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
 <p>The FABRI Creator includes comprehensive tests:</p>
 <pre><code class="language-bash">cargo test -p bombolab-core fabri_creator
@@ -1143,365 +1143,6 @@ pub fn my_robot() -&gt; Robot {
 <li>Add base/tool transforms if your mounting differs</li>
 </ol>
 <p>The <a href="#robot-model">Robot Model</a> page explains the data model in detail.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="serial-communication"><a class="header" href="#serial-communication">Serial Communication</a></h1>
-<p><strong>Hardware interface for sending joint angles to the Arduino Nano firmware.</strong></p>
-<p>The <code>communication</code> module provides a serial connection to the robot’s microcontroller, sending interpolated angle commands and verifying responses.</p>
-<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code>communication/
-├── mod.rs              # ConnectionError, protocol constants, pin mapping
-├── arduino_nano.rs     # ArduinoNano serial wrapper
-├── command.rs          # ServoCommand typed struct
-├── mapper.rs           # ServoMapper — centralized q→servo mapping
-└── interpolation.rs    # Smooth multi-joint movement
-</code></pre>
-<h2 id="quick-start-2"><a class="header" href="#quick-start-2">Quick Start</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::{
-    ArduinoNano, ServoCommand, InterpolationConfig, interpolate_all,
-};
-
-// Connect to Arduino
-let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
-
-// Send angles via ServoCommand (typed struct: 5 joints + gripper)
-let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
-nano.send(&amp;cmd)?;
-
-// Or interpolate smoothly between positions
-let current = [90, 115, 110, 170, 90, 90];
-let target = [90, 120, 100, 170, 90, 90];
-let config = InterpolationConfig::default();
-
-let steps = interpolate_all(&amp;current, &amp;target, &amp;config);
-for step in &amp;steps {
-    let cmd = ServoCommand::from_raw_array(step);
-    nano.send(&amp;cmd)?;
-    std::thread::sleep(std::time::Duration::from_millis(config.delay_ms));
-}
-
-nano.disconnect()?;
-<span class="boring">}</span></code></pre>
-<h2 id="serial-protocol-1"><a class="header" href="#serial-protocol-1">Serial Protocol</a></h2>
-<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Constant</th><th>Value</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>BAUD_RATE</code></td><td>115200</td><td>Serial baud rate</td></tr>
-<tr><td><code>JOINT_COUNT</code></td><td>6</td><td>Values per message (5 joints + gripper)</td></tr>
-<tr><td><code>ANGLE_MIN</code></td><td>10</td><td>Minimum servo angle (degrees)</td></tr>
-<tr><td><code>ANGLE_MAX</code></td><td>170</td><td>Maximum servo angle (degrees)</td></tr>
-<tr><td><code>READ_TIMEOUT_MS</code></td><td>1000</td><td>Read timeout (milliseconds)</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="message-format"><a class="header" href="#message-format">Message Format</a></h3>
-<pre><code>TX: "90,115,110,170,90,90\n"
-RX: "OK\n"
-</code></pre>
-<p>The 6 values map to:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Index</th><th>Servo</th><th>Joint</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td>0</td><td>S1</td><td>J1</td><td>Base yaw</td></tr>
-<tr><td>1</td><td>S2</td><td>J2</td><td>Shoulder pitch</td></tr>
-<tr><td>2</td><td>S3</td><td>J3</td><td>Elbow pitch</td></tr>
-<tr><td>3</td><td>S4</td><td>J4</td><td>Wrist roll</td></tr>
-<tr><td>4</td><td>S5</td><td>J5</td><td>Wrist pitch</td></tr>
-<tr><td>5</td><td>S6</td><td>—</td><td>Gripper</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Note:</strong> The gripper (index 5) is not part of the 5-DOF kinematic model but is included in the serial protocol for hardware control.</p>
-<h2 id="arduinonano"><a class="header" href="#arduinonano">ArduinoNano</a></h2>
-<h3 id="connection"><a class="header" href="#connection">Connection</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::{ArduinoNano, ServoCommand};
-
-// List available ports
-let ports = ArduinoNano::list_ports()?;
-
-// Connect
-let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
-
-// Build a typed command and send it
-let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
-nano.send(&amp;cmd)?;
-
-// Or send and wait for OK/ERR response
-nano.send_and_verify(&amp;cmd)?;
-
-// Clean disconnect (also handled by Drop)
-nano.disconnect()?;
-<span class="boring">}</span></code></pre>
-<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>list_ports()</code></td><td>Returns available serial port names</td></tr>
-<tr><td><code>connect(port_name)</code></td><td>Opens connection at 115200 baud</td></tr>
-<tr><td><code>send(cmd)</code></td><td>Sends a <code>ServoCommand</code> as CSV</td></tr>
-<tr><td><code>send_and_verify(cmd)</code></td><td>Send + read + check for “OK”</td></tr>
-<tr><td><code>read_response()</code></td><td>Reads one line (expects “OK” or “ERR”)</td></tr>
-<tr><td><code>disconnect()</code></td><td>Flush and close port</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h3>
-<p>All methods return <code>Result&lt;T, ConnectionError&gt;</code>:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::ConnectionError;
-
-match nano.send_and_verify(&amp;cmd) {
-    Ok(()) =&gt; println!("Angles sent"),
-    Err(ConnectionError::InvalidResponse { port, response }) =&gt; {
-        eprintln!("Arduino returned: {}", response);
-    }
-    Err(ConnectionError::WriteFailed { port, source }) =&gt; {
-        eprintln!("Serial write failed: {}", source);
-    }
-    Err(e) =&gt; eprintln!("Error: {}", e),
-}
-<span class="boring">}</span></code></pre>
-<h2 id="servocommand"><a class="header" href="#servocommand">ServoCommand</a></h2>
-<p><code>ServoCommand</code> is a typed struct that replaces raw <code>[i32; 6]</code> arrays with semantic fields:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct ServoCommand {
-    pub joints: [f64; 5],  // 5 joint angles in degrees
-    pub gripper: u8,        // gripper angle 0–255
-}
-<span class="boring">}</span></code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new(joints, gripper)</code></td><td>Creates a <code>ServoCommand</code>, validates joints [10°, 170°] and gripper 0–255</td></tr>
-<tr><td><code>to_wire()</code></td><td>Serializes to <code>"a1,a2,a3,a4,a5,g\n"</code> for the serial protocol</td></tr>
-<tr><td><code>to_raw_array()</code></td><td>Converts to <code>[i32; 6]</code> for use with <code>interpolate_all()</code></td></tr>
-<tr><td><code>from_raw_array(arr)</code></td><td>Builds from an <code>[i32; 6]</code> (e.g., from interpolation output)</td></tr>
-</tbody>
-</table>
-</div>
-<p>The wire format is identical to the previous raw-array API — no protocol breakage.</p>
-<h2 id="servomapper"><a class="header" href="#servomapper">ServoMapper</a></h2>
-<p><code>ServoMapper</code> centralizes the conversion from kinematic coordinates (q in radians) to servo angles (degrees), combining offsets, clamping, and gripper into a single step:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::{fabri_creator, communication::ServoMapper};
-
-let robot = fabri_creator();
-let mapper = ServoMapper::new(&amp;robot);
-
-// q = [0,0,0,0,0] → servo angles at home pose
-let cmd = mapper.map_q(&amp;[0.0; 5], 90);
-assert_eq!(cmd.to_wire(), "90,115,110,170,90,90\n");
-<span class="boring">}</span></code></pre>
-<p><strong>What <code>ServoMapper</code> does internally:</strong></p>
-<ol>
-<li>Delegates to <code>Robot::q_to_servo()</code> to add per-joint offsets (radians)</li>
-<li>Converts radians to degrees</li>
-<li>Clamps each joint to [10°, 170°]</li>
-<li>Packages everything into a <code>ServoCommand</code></li>
-</ol>
-<h2 id="interpolation"><a class="header" href="#interpolation">Interpolation</a></h2>
-<p>Moving directly from one angle to another can cause jerky motion. The interpolation module generates smooth intermediate steps.</p>
-<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::InterpolationConfig;
-
-let config = InterpolationConfig {
-    step_size: 5,   // degrees per step
-    delay_ms: 40,  // milliseconds between steps (default, unified with web)
-};
-<span class="boring">}</span></code></pre>
-<h3 id="single-joint"><a class="header" href="#single-joint">Single Joint</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::interpolate_joint;
-
-// 90° → 100° with step 5°
-let steps = interpolate_joint(90, 100, 5);
-assert_eq!(steps, vec![95, 100]);
-
-// Non-exact step: 90° → 102° with step 5°
-let steps = interpolate_joint(90, 102, 5);
-assert_eq!(steps, vec![95, 100, 102]);
-<span class="boring">}</span></code></pre>
-<h3 id="all-joints"><a class="header" href="#all-joints">All Joints</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::interpolate_all;
-
-let current = [90, 90, 90, 90, 90, 90];
-let target = [95, 100, 85, 115, 90, 90];
-let config = InterpolationConfig { step_size: 5, delay_ms: 0 };
-
-let steps = interpolate_all(&amp;current, &amp;target, &amp;config);
-
-// All joints move simultaneously:
-// - Faster joints pad with their final value
-// - All arrive at target in the same number of steps
-assert_eq!(steps.len(), 5); // J3 (90→115) dictates step count
-<span class="boring">}</span></code></pre>
-<p><strong>Key behavior:</strong></p>
-<ul>
-<li>Each joint interpolates independently</li>
-<li>Shorter movements pad with their final value</li>
-<li>All joints arrive at the target simultaneously</li>
-</ul>
-<h2 id="cli-tool-serial-test"><a class="header" href="#cli-tool-serial-test">CLI Tool: serial-test</a></h2>
-<p>An interactive REPL for testing serial communication:</p>
-<pre><code class="language-bash">cargo run --bin serial-test
-</code></pre>
-<h3 id="commands"><a class="header" href="#commands">Commands</a></h3>
-<pre><code>&gt; 1 90        # Move servo 1 to 90°
-&gt; all 90 115 110 170 90 90  # Move all servos
-&gt; quit        # Disconnect and exit
-</code></pre>
-<h3 id="features"><a class="header" href="#features">Features</a></h3>
-<ul>
-<li>Auto-detects USB serial devices (<code>/dev/ttyUSB*</code>, <code>/dev/ttyACM*</code>)</li>
-<li>Ctrl+C handler for clean disconnect</li>
-<li>Angle validation (10–170° range)</li>
-<li>Smooth interpolation between positions</li>
-</ul>
-<h2 id="integration-with-robot-model"><a class="header" href="#integration-with-robot-model">Integration with Robot Model</a></h2>
-<p>The <code>ServoMapper</code> bridges kinematic q (radians) to servo angles (degrees), centralizing offset and clamping logic:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::{
-    fabri_creator,
-    communication::{ArduinoNano, ServoMapper, ServoCommand, interpolate_all_command},
-};
-
-let robot = fabri_creator();
-let mapper = ServoMapper::new(&amp;robot);
-let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
-
-// Map kinematic q to ServoCommand
-let q = vec![0.1, -0.2, 0.3, -0.1, 0.15];
-let target_cmd = mapper.map_q(&amp;q, 90); // 90 = gripper angle
-
-// Interpolate smoothly from home to target
-let home = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
-let steps = interpolate_all_command(&amp;home, &amp;target_cmd, &amp;Default::default());
-
-for step in &amp;steps {
-    nano.send(&amp;step)?;
-    std::thread::sleep(std::time::Duration::from_millis(40));
-}
-<span class="boring">}</span></code></pre>
-<p>No manual rad→deg conversion, clamping, or gripper appending needed — <code>ServoMapper</code> handles it all.</p>
-<h2 id="testing-1"><a class="header" href="#testing-1">Testing</a></h2>
-<pre><code class="language-bash"># Run communication module tests
-cargo test -p bombolab-core communication
-
-# Run interpolation tests specifically
-cargo test -p bombolab-core interpolation
-</code></pre>
-<p>The interpolation tests cover:</p>
-<ul>
-<li>Exact multiples, non-exact steps, no movement</li>
-<li>Ascending and descending angles</li>
-<li>Multi-joint padding and synchronization</li>
-</ul>
-<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
-<h3 id="port-not-found"><a class="header" href="#port-not-found">Port not found</a></h3>
-<pre><code>Error: port not found: /dev/ttyUSB0
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Arduino not plugged in</li>
-<li>Wrong port name (check with <code>ls /dev/ttyUSB* /dev/ttyACM*</code>)</li>
-<li>Permission issue (user not in <code>dialout</code> group)</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<pre><code class="language-bash"># Check available ports
-ls /dev/ttyUSB* /dev/ttyACM*
-
-# Add yourself to the dialout group (Linux)
-sudo usermod -a -G dialout $USER
-# Then log out and back in
-</code></pre>
-<h3 id="permission-denied"><a class="header" href="#permission-denied">Permission denied</a></h3>
-<pre><code>Error: failed to open /dev/ttyUSB0: Permission denied
-</code></pre>
-<p><strong>Fix:</strong> Add your user to the <code>dialout</code> group:</p>
-<pre><code class="language-bash">sudo usermod -a -G dialout $USER
-# Log out and back in for changes to take effect
-</code></pre>
-<h3 id="arduino-not-responding"><a class="header" href="#arduino-not-responding">Arduino not responding</a></h3>
-<pre><code>Error: invalid response from /dev/ttyUSB0: ""
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Arduino firmware not uploaded</li>
-<li>Wrong baud rate (must be 115200)</li>
-<li>Arduino reset (unplug and replug)</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Verify firmware is uploaded: open Arduino IDE Serial Monitor at 115200 baud, type <code>90,115,110,170,90,90</code> and press Enter. You should see <code>OK</code>.</li>
-<li>Check baud rate matches: <code>BAUD_RATE</code> in <code>communication/mod.rs</code> must match the firmware’s <code>Serial.begin()</code> value.</li>
-</ol>
-<h3 id="servos-jittering-or-moving-erratically"><a class="header" href="#servos-jittering-or-moving-erratically">Servos jittering or moving erratically</a></h3>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Insufficient power supply (USB power may not be enough for all servos)</li>
-<li>Angles outside valid range</li>
-<li>Serial data corruption</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Use an external 5V power supply for servos (not USB power)</li>
-<li>Ensure angles are between 10° and 170°</li>
-<li>Check serial cable length — keep under 1 meter for reliable communication</li>
-</ol>
-<h3 id="intermittent-err-responses"><a class="header" href="#intermittent-err-responses">Intermittent ERR responses</a></h3>
-<pre><code>Error: invalid response from /dev/ttyUSB0: "ERR"
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Angle out of range (firmware validates 10–170°)</li>
-<li>Mechanical obstruction preventing servo movement</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Check which joint caused the error (log the angles being sent)</li>
-<li>Verify all angles are within 10–170°</li>
-<li>Move the robot manually to check for mechanical binding</li>
-</ol>
-<h3 id="timeout-waiting-for-response"><a class="header" href="#timeout-waiting-for-response">Timeout waiting for response</a></h3>
-<pre><code>Error: read timeout on /dev/ttyUSB0 after 1000ms
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Arduino frozen or crashed</li>
-<li>Serial buffer overflow (sending too fast)</li>
-<li>USB connection unstable</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Reset Arduino (unplug and replug)</li>
-<li>Increase delay between commands (currently 40ms default)</li>
-<li>Try a different USB port or cable</li>
-</ol>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="jacobian"><a class="header" href="#jacobian">Jacobian</a></h1>
 <p><strong>The geometric Jacobian relates joint velocities to end-effector velocities.</strong> Given joint speeds <code>q̇</code>, it computes the resulting linear and angular velocity of the end effector:</p>
@@ -1554,7 +1195,7 @@ assert_eq!(j.ncols(), 2);
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="inverse-kinematics"><a class="header" href="#inverse-kinematics">Inverse Kinematics</a></h1>
 <p><strong>The IK solver finds joint angles that place the end effector at a desired position and orientation.</strong> You specify a 3D target + rotation, and the solver returns joint angles.</p>
-<h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
 <p>The IK is split into two independent solvers composed into a pipeline:</p>
 <pre><code>TargetPose (position + rotation)
       │
@@ -1646,7 +1287,7 @@ let result = solver.solve_position(&amp;target, &amp;q_init, &amp;robot, &amp;ba
 <p>The damping term <code>λ²·I</code> ensures the pseudoinverse is well-behaved near singularities. Higher damping = smaller, safer steps. Lower damping = faster convergence but risk of instability near singular configurations.</p>
 <h3 id="step-size-clamping"><a class="header" href="#step-size-clamping">Step Size Clamping</a></h3>
 <p>The solver limits each iteration’s total joint change to <code>step_size</code> radians. If the raw DLS step exceeds this, the entire step vector is scaled down. This prevents wildly large joint movements when far from the target.</p>
-<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1795,15 +1436,9 @@ let result = solve_drawing_ik_v2(
 │   │       │   ├── forward.rs    # forward_kinematics(), matrix_from_segment()
 │   │       │   ├── ik.rs         # IkSolver (DLS IK), IkError
 │   │       │   └── init.rs       # Interactive CLI tester
-│   │       ├── communication/    # Serial communication with hardware
-│   │       │   ├── mod.rs        # ConnectionError, protocol constants
-│   │       │   ├── arduino_nano.rs   # ArduinoNano serial wrapper
-│   │       │   ├── mapper.rs     # ServoMapper (q → servo degrees)
-│   │       │   └── interpolation.rs  # Smooth servo movement
 │   │       └── bin/
 │   │           ├── dh-solve.rs           # DH table solver CLI
-│   │           ├── quaternion-solve.rs   # Quaternion operations CLI
-│   │           └── serial-test.rs        # Interactive serial tester
+│   │           └── quaternion-solve.rs   # Quaternion operations CLI
 │   └── bombolab-wasm/             # WASM bridge
 │       ├── Cargo.toml
 │       └── src/lib.rs             # FK, IK, fabri_creator exports via wasm-bindgen
@@ -1849,10 +1484,6 @@ let result = solve_drawing_ik_v2(
 <tr><td><code>kinematics::forward</code></td><td><code>forward_kinematics()</code>, <code>matrix_from_segment()</code></td></tr>
 <tr><td><code>kinematics::ik</code></td><td><code>IkSolver</code>, <code>IkError</code></td></tr>
 <tr><td><code>kinematics::init</code></td><td>Interactive CLI for building robots and testing FK</td></tr>
-<tr><td><code>communication</code></td><td>Serial protocol constants, <code>ConnectionError</code> enum</td></tr>
-<tr><td><code>communication::arduino_nano</code></td><td><code>ArduinoNano</code> serial connection wrapper</td></tr>
-<tr><td><code>communication::mapper</code></td><td><code>ServoMapper</code> — maps kinematic q to servo angles</td></tr>
-<tr><td><code>communication::interpolation</code></td><td><code>InterpolationConfig</code>, <code>interpolate_joint()</code>, <code>interpolate_all()</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1900,10 +1531,10 @@ let result = solve_drawing_ik_v2(
 </code></pre>
 <h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency Graph</a></h2>
 <pre><code>bombolab (workspace root)
-├── bombolab-core    (nalgebra, serialport, ctrlc)
+├── bombolab-core    (nalgebra)
 └── bombolab-wasm    (bombolab-core + wasm-bindgen + serde)
 </code></pre>
-<p>The core crate depends on <code>nalgebra</code> for linear algebra, <code>serialport</code> for hardware communication (behind feature gate <code>serial</code> for WASM compat), and <code>ctrlc</code> for clean shutdown. The WASM crate adds <code>wasm-bindgen</code> and <code>serde</code> for JavaScript interop.</p>
+<p>The core crate depends on <code>nalgebra</code> for linear algebra. Hardware communication is handled entirely by the browser via WebSerial (<code>web/src/serial.ts</code>), so the core crate has no serial dependency. The WASM crate adds <code>wasm-bindgen</code> and <code>serde</code> for JavaScript interop.</p>
 <h2 id="references-4"><a class="header" href="#references-4">References</a></h2>
 <ul>
 <li><a href="#design-decisions">Design Decisions</a> – why the code is structured this way</li>
@@ -2014,6 +1645,7 @@ itself, the ADRs document the decisions.</p>
 <tr><td><a href="#adr-0006-deterministic-workspace-analysis-cloud">0006</a></td><td>Deterministic workspace cloud (display bands 50/25)</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0007-plan-vs-execution-trace">0007</a></td><td>Commanded-vs-planned trace comparison</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-0008-manifest-protocol-v2-delta-timing-streamed">0008</a></td><td>Manifest protocol v2 (delta timing, streamed)</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-0009-deprecate-rust-serial-stack">0009</a></td><td>Deprecate Rust serial stack (WebSerial only)</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -2090,9 +1722,9 @@ fast and deterministic.</p>
 <li>Full servo resolution on the wire (1 µs steps instead of 1° steps).</li>
 <li>The firmware conversion layer disappeared; it stores and forwards native
 pulse widths.</li>
-<li>Unit ambiguity is resolved by range detection, documented in
-<code>book/src/core-concepts/communication.md</code> and covered by the
-<code>cli_serial_test</code> integration test.</li>
+<li>Unit ambiguity is resolved by range detection, documented in the
+WebSerial implementation (<code>web/src/serial.ts</code> /
+<code>web/src/motion/manifestProtocol.ts</code>).</li>
 <li>Host pacing remains the responsibility of the host (interpolation delay and
 motion player <code>update(dt)</code>); the firmware is a deterministic executor.</li>
 </ul>
@@ -2611,6 +2243,50 @@ command timing, not servo latency.</li>
 interpolator path.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-0009-deprecate-rust-serial-stack"><a class="header" href="#adr-0009-deprecate-rust-serial-stack">ADR-0009: Deprecate Rust Serial Stack</a></h1>
+<ul>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-12</li>
+</ul>
+<h2 id="context-8"><a class="header" href="#context-8">Context</a></h2>
+<p>The host-side serial path lived in Rust: the <code>communication</code> module in
+<code>bombolab-core</code> (<code>ArduinoNano</code>, <code>ServoMapper</code>, <code>ServoCommand</code>,
+interpolation), the <code>serial-test</code> CLI debug tool, the <code>ws-bridge</code>
+WebSocket→serial server, the <code>serial</code>/<code>ws-bridge</code> feature gates, and the
+<code>serialport</code>/<code>ctrlc</code>/<code>futures-util</code>/<code>serde</code>/<code>serde_json</code>/<code>tokio</code>/
+<code>tokio-tungstenite</code> dependencies. The browser talks to the firmware
+directly via WebSerial (protocol v2 manifest, ADR-0008): it performs the
+handshake, streams <code>SAMPLE</code> lines with ACK pacing, and executes plans
+without any Rust intermediary. The Rust serial stack was dead code —
+nothing referenced it — and the wasm build never compiled it
+(<code>default-features = false</code>).</p>
+<h2 id="decision-8"><a class="header" href="#decision-8">Decision</a></h2>
+<p>Remove the entire legacy Rust serial stack from the repository:</p>
+<ul>
+<li>Delete the <code>communication</code> module (11 files) and its re-exports.</li>
+<li>Delete the <code>serial-test</code> and <code>ws-bridge</code> binaries and their tests.</li>
+<li>Delete the <code>serial</code> / <code>ws-bridge</code> features and the now-unused
+dependencies (<code>serialport</code>, <code>ctrlc</code>, <code>futures-util</code>, <code>serde</code>,
+<code>serde_json</code>, <code>tokio</code>, <code>tokio-tungstenite</code>).</li>
+<li>Remove the <code>core-ws-bridge</code> CI job and the <code>cli_serial_test</code>
+integration test.</li>
+<li>Drop the <code>communication</code> and <code>serial-test</code> book pages; record this
+decision as ADR-0009.</li>
+</ul>
+<h2 id="consequences-8"><a class="header" href="#consequences-8">Consequences</a></h2>
+<ul>
+<li>Fewer dependencies: <code>bombolab-core</code> now depends only on <code>nalgebra</code>.</li>
+<li>No dead hardware path: there is exactly one way to talk to the
+firmware, the browser WebSerial implementation.</li>
+<li>CLI debug tooling moved to the browser (the WebSerial code paths in
+<code>web/src/serial.ts</code> and <code>web/src/motion/manifestProtocol.ts</code> are the
+live debug/verification surface).</li>
+<li>The wire protocol decisions (ADR-0002, ADR-0008) remain in force,
+now implemented in TypeScript instead of Rust.</li>
+<li>Rollback: the deleted code is recoverable from git history; no
+firmware or wasm changes were required.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="dh-solve"><a class="header" href="#dh-solve">dh-solve</a></h1>
 <p><strong>Interactive CLI tool for solving DH parameter tables.</strong> Enter your robot’s Denavit-Hartenberg parameters and get the full solution: A matrices, intermediate frames, and end-effector pose.</p>
 <h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
@@ -2851,69 +2527,9 @@ let combined = solve_multiply(&amp;[rotate_x, rotate_y]);
 <li><a href="#bombolab-core-api-reference">bombolab-core API</a> – Quaternion type and operations reference</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="serial-test"><a class="header" href="#serial-test">serial-test</a></h1>
-<p><strong>Interactive CLI for testing serial communication with the Arduino Nano.</strong></p>
-<h2 id="usage-3"><a class="header" href="#usage-3">Usage</a></h2>
-<pre><code class="language-bash">cargo run --bin serial-test
-</code></pre>
-<h2 id="features-1"><a class="header" href="#features-1">Features</a></h2>
-<ul>
-<li>Auto-detects USB serial devices (<code>/dev/ttyUSB*</code>, <code>/dev/ttyACM*</code>)</li>
-<li>Interactive REPL for sending angle commands</li>
-<li>Smooth interpolation between positions</li>
-<li>Clean Ctrl+C shutdown</li>
-</ul>
-<h2 id="example-session"><a class="header" href="#example-session">Example Session</a></h2>
-<pre><code>=== Serial Test — Arduino Nano ===
-
-Found USB device: /dev/ttyUSB0
-Connected to /dev/ttyUSB0
-
-Commands:
-  &lt;servo&gt; &lt;angle&gt;       Move single servo (1-6, angle 10-170)
-  all &lt;a1&gt; &lt;a2&gt; ... &lt;a6&gt;  Move all servos
-  quit / exit           Disconnect and exit
-
-&gt; 1 90
-Moving 1 steps...
-Done.
-&gt; all 90 120 100 170 90 90
-Moving 5 steps...
-Done.
-&gt; quit
-Disconnecting...
-Done.
-</code></pre>
-<h2 id="commands-1"><a class="header" href="#commands-1">Commands</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Command</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>&lt;servo&gt; &lt;angle&gt;</code></td><td>Move single servo (1-6) to angle (10-170°)</td></tr>
-<tr><td><code>all &lt;a1&gt; &lt;a2&gt; ... &lt;a6&gt;</code></td><td>Move all 6 servos to specified angles</td></tr>
-<tr><td><code>quit</code> / <code>exit</code></td><td>Disconnect and exit</td></tr>
-<tr><td><code>Ctrl+C</code></td><td>Clean disconnect and exit</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="port-detection"><a class="header" href="#port-detection">Port Detection</a></h2>
-<p>The tool automatically filters for USB serial devices:</p>
-<ul>
-<li><code>/dev/ttyUSB*</code> — FTDI-based adapters</li>
-<li><code>/dev/ttyACM*</code> — Native USB devices (Arduino Nano, etc.)</li>
-</ul>
-<p>If multiple devices are found, you’ll be prompted to select one.</p>
-<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
-<ul>
-<li><a href="#serial-communication">Serial Communication</a> — module documentation</li>
-<li><a href="#fabri-creator">FABRI Creator</a> — robot configuration</li>
-</ul>
-<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="ik-solve"><a class="header" href="#ik-solve">ik-solve</a></h1>
 <p><strong>Interactive CLI tool for inverse kinematics on the FABRI Creator 5-DOF robot.</strong> Given a target position (and optional orientation), finds joint angles that place the end effector at the target.</p>
-<h2 id="usage-4"><a class="header" href="#usage-4">Usage</a></h2>
+<h2 id="usage-3"><a class="header" href="#usage-3">Usage</a></h2>
 <pre><code class="language-bash"># From the bombolab-core crate directory:
 cargo run --bin ik-solve &lt;x_mm&gt; &lt;y_mm&gt; &lt;z_mm&gt; [roll_deg] [pitch_deg] [yaw_deg]
 </code></pre>
@@ -2970,10 +2586,6 @@ pub use kinematics::{IkSolver, IkError};
 // Robot model
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
 pub use robot::fabri_creator::{base_transform, fabri_creator, tool_transform};
-
-// Communication
-pub use communication::{ServoCommand, ServoMapper, ArduinoNano, ConnectionError};
-pub use communication::{InterpolationConfig, interpolate_all, interpolate_all_command};
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="math-module-math"><a class="header" href="#math-module-math">Math Module (<code>math</code>)</a></h2>
@@ -3139,7 +2751,7 @@ pub enum JacobianError {
 <li><code>end_effector</code> — end-effector transform (usually <code>intermediates.last()</code>)</li>
 </ul>
 <p><strong>Returns</strong>: <code>6 × n</code> matrix where column <code>i</code> = <code>[z_i × (p_ee − p_i); z_i]</code> for revolute, <code>[z_i; 0]</code> for prismatic.</p>
-<h3 id="constants-1"><a class="header" href="#constants-1">Constants</a></h3>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub const PI: f64 = std::f64::consts::PI;
@@ -3333,93 +2945,6 @@ pub enum Error {
 </span>pub fn fabri_creator() -&gt; Robot
 pub fn base_transform() -&gt; Iso3  // 57mm vertical offset from ground
 pub fn tool_transform() -&gt; Iso3  // 75mm along X (marker tip)
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="communication-module-communication"><a class="header" href="#communication-module-communication">Communication Module (<code>communication</code>)</a></h2>
-<h3 id="servocommand-1"><a class="header" href="#servocommand-1"><code>ServoCommand</code></a></h3>
-<p>Typed struct for sending joint angles + gripper over serial:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct ServoCommand {
-    pub joints: [f64; 5],  // 5 joint angles in degrees
-    pub gripper: u8,        // gripper angle 0–255
-}
-<span class="boring">}</span></code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new</code></td><td><code>(joints: [f64;5], gripper: u8) -&gt; Result&lt;Self, &amp;'static str&gt;</code></td><td>Validates joints [10°,170°] and gripper [0,255]</td></tr>
-<tr><td><code>to_wire</code></td><td><code>(&amp;self) -&gt; String</code></td><td><code>"a1,a2,a3,a4,a5,g\n"</code> for serial</td></tr>
-<tr><td><code>to_raw_array</code></td><td><code>(&amp;self) -&gt; [i32; 6]</code></td><td>For interpolation with existing API</td></tr>
-<tr><td><code>from_raw_array</code></td><td><code>(&amp;[i32; 6]) -&gt; Self</code></td><td>Convert interpolation output back</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="servomapper-1"><a class="header" href="#servomapper-1"><code>ServoMapper</code></a></h3>
-<p>Maps kinematic q (radians) to servo angles (degrees), centralizing offset and clamping:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct ServoMapper&lt;'a&gt; {
-    robot: &amp;'a Robot,
-    angle_min: f64,  // default: 10.0°
-    angle_max: f64,  // default: 170.0°
-}
-<span class="boring">}</span></code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new</code></td><td><code>(robot: &amp;Robot) -&gt; Self</code></td><td>Create with defaults</td></tr>
-<tr><td><code>map_q</code></td><td><code>(&amp;self, q: &amp;[f64], gripper: u8) -&gt; ServoCommand</code></td><td>Full conversion + clamping</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="arduinonano-1"><a class="header" href="#arduinonano-1"><code>ArduinoNano</code></a></h3>
-<p>Serial wrapper for the Arduino Nano firmware.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>list_ports</code></td><td><code>() -&gt; Result&lt;Vec&lt;String&gt;&gt;</code></td><td>Available serial ports</td></tr>
-<tr><td><code>connect</code></td><td><code>(port_name: &amp;str) -&gt; Result&lt;Self&gt;</code></td><td>Open at 115200 baud</td></tr>
-<tr><td><code>send</code></td><td><code>(&amp;mut self, cmd: &amp;ServoCommand) -&gt; Result&lt;()&gt;</code></td><td>Send angles as CSV</td></tr>
-<tr><td><code>send_and_verify</code></td><td><code>(&amp;mut self, cmd: &amp;ServoCommand) -&gt; Result&lt;()&gt;</code></td><td>Send + wait for “OK”</td></tr>
-<tr><td><code>read_response</code></td><td><code>(&amp;mut self) -&gt; Result&lt;String&gt;</code></td><td>Read one line</td></tr>
-<tr><td><code>disconnect</code></td><td><code>(&amp;mut self) -&gt; Result&lt;()&gt;</code></td><td>Flush and close</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="connectionerror"><a class="header" href="#connectionerror"><code>ConnectionError</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub enum ConnectionError {
-    PortNotFound { port: String },
-    OpenFailed { port: String, source: String },
-    WriteFailed { port: String, source: String },
-    ReadFailed { port: String, source: String },
-    Timeout { port: String, ms: u64 },
-    InvalidResponse { port: String, response: String },
-}
-<span class="boring">}</span></code></pre>
-<p>Implements <code>Display</code> and <code>std::error::Error</code>.</p>
-<h3 id="interpolation-1"><a class="header" href="#interpolation-1">Interpolation</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct InterpolationConfig {
-    pub step_size: i32,   // degrees per step (default: 5)
-    pub delay_ms: u64,    // ms between steps (default: 40)
-}
-
-pub fn interpolate_joint(current: i32, target: i32, step_size: i32) -&gt; Vec&lt;i32&gt;
-pub fn interpolate_all(current: &amp;[i32; 6], target: &amp;[i32; 6], config: &amp;InterpolationConfig) -&gt; Vec&lt;[i32; 6]&gt;
-pub fn interpolate_all_command(current: &amp;ServoCommand, target: &amp;ServoCommand, config: &amp;InterpolationConfig) -&gt; Vec&lt;ServoCommand&gt;
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="kinematics-module-kinematics"><a class="header" href="#kinematics-module-kinematics">Kinematics Module (<code>kinematics</code>)</a></h2>
@@ -3700,7 +3225,7 @@ let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
 // Convert rotation matrix to quaternion
 let rotation = UnitQuaternion::from_rotation_matrix(&amp;(rot_z * rot_x));
 <span class="boring">}</span></code></pre>
-<h2 id="testing-2"><a class="header" href="#testing-2">Testing</a></h2>
+<h2 id="testing-1"><a class="header" href="#testing-1">Testing</a></h2>
 <h3 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h3>
 <p>Every module should have tests. Place them in a <code>#[cfg(test)] mod tests</code> block at the end of the file.</p>
 <p>Test naming convention:</p>

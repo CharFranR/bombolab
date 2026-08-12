@@ -194,7 +194,7 @@ The FABRI Creator communicates with an Arduino Nano over serial:
 
 The 6th value controls the gripper (not part of the 5-DOF kinematic model). The firmware parses the CSV, validates ranges, and drives the servos via PWM.
 
-See [Serial Communication](./communication.md) for implementation details.
+The browser communicates with the firmware directly via WebSerial (see `web/src/serial.ts` and the [manifest protocol v2 ADR](../adr/0008-manifest-protocol-v2.md)); there is no host-side serial module.
 
 ## Testing
 

@@ -22,10 +22,6 @@ pub use kinematics::{IkSolver, IkError};
 // Robot model
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
 pub use robot::fabri_creator::{base_transform, fabri_creator, tool_transform};
-
-// Communication
-pub use communication::{ServoCommand, ServoMapper, ArduinoNano, ConnectionError};
-pub use communication::{InterpolationConfig, interpolate_all, interpolate_all_command};
 ```
 
 ---
@@ -370,86 +366,6 @@ Ready-made robot configuration for the 5-DOF educational arm:
 pub fn fabri_creator() -> Robot
 pub fn base_transform() -> Iso3  // 57mm vertical offset from ground
 pub fn tool_transform() -> Iso3  // 75mm along X (marker tip)
-```
-
----
-
-## Communication Module (`communication`)
-
-### `ServoCommand`
-
-Typed struct for sending joint angles + gripper over serial:
-
-```rust
-pub struct ServoCommand {
-    pub joints: [f64; 5],  // 5 joint angles in degrees
-    pub gripper: u8,        // gripper angle 0–255
-}
-```
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `new` | `(joints: [f64;5], gripper: u8) -> Result<Self, &'static str>` | Validates joints [10°,170°] and gripper [0,255] |
-| `to_wire` | `(&self) -> String` | `"a1,a2,a3,a4,a5,g\n"` for serial |
-| `to_raw_array` | `(&self) -> [i32; 6]` | For interpolation with existing API |
-| `from_raw_array` | `(&[i32; 6]) -> Self` | Convert interpolation output back |
-
-### `ServoMapper`
-
-Maps kinematic q (radians) to servo angles (degrees), centralizing offset and clamping:
-
-```rust
-pub struct ServoMapper<'a> {
-    robot: &'a Robot,
-    angle_min: f64,  // default: 10.0°
-    angle_max: f64,  // default: 170.0°
-}
-```
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `new` | `(robot: &Robot) -> Self` | Create with defaults |
-| `map_q` | `(&self, q: &[f64], gripper: u8) -> ServoCommand` | Full conversion + clamping |
-
-### `ArduinoNano`
-
-Serial wrapper for the Arduino Nano firmware.
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `list_ports` | `() -> Result<Vec<String>>` | Available serial ports |
-| `connect` | `(port_name: &str) -> Result<Self>` | Open at 115200 baud |
-| `send` | `(&mut self, cmd: &ServoCommand) -> Result<()>` | Send angles as CSV |
-| `send_and_verify` | `(&mut self, cmd: &ServoCommand) -> Result<()>` | Send + wait for "OK" |
-| `read_response` | `(&mut self) -> Result<String>` | Read one line |
-| `disconnect` | `(&mut self) -> Result<()>` | Flush and close |
-
-### `ConnectionError`
-
-```rust
-pub enum ConnectionError {
-    PortNotFound { port: String },
-    OpenFailed { port: String, source: String },
-    WriteFailed { port: String, source: String },
-    ReadFailed { port: String, source: String },
-    Timeout { port: String, ms: u64 },
-    InvalidResponse { port: String, response: String },
-}
-```
-
-Implements `Display` and `std::error::Error`.
-
-### Interpolation
-
-```rust
-pub struct InterpolationConfig {
-    pub step_size: i32,   // degrees per step (default: 5)
-    pub delay_ms: u64,    // ms between steps (default: 40)
-}
-
-pub fn interpolate_joint(current: i32, target: i32, step_size: i32) -> Vec<i32>
-pub fn interpolate_all(current: &[i32; 6], target: &[i32; 6], config: &InterpolationConfig) -> Vec<[i32; 6]>
-pub fn interpolate_all_command(current: &ServoCommand, target: &ServoCommand, config: &InterpolationConfig) -> Vec<ServoCommand>
 ```
 
 ---

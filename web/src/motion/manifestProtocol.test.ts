@@ -6,7 +6,7 @@
  * (gate `manifest_ready` — protocol_v2.cpp handle_sample).
  *
  * FIX MÍNIMO (una capa, solo web): `sendManifestHeader` envía `MANIFEST <count> <durationUs>`
- * como línea individual tras el handshake y antes de los SAMPLEs (como el CLI serial-test).
+ * como línea individual tras el handshake y antes de los SAMPLEs.
  * El firmware no responde a MANIFEST; el error, si ocurre, aparece en la primera ventana ACK.
  *
  * Estructura:

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-22a7eec5.js";
+            window.path_to_searchindex_js = "../searchindex-ae0f75a4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1cc40636.js"></script>
+        <script src="../toc-55f41179.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,10 +200,6 @@ pub use kinematics::{IkSolver, IkError};
 // Robot model
 pub use robot::{DHParams, Error, Joint, JointType, Result, Robot, Segment};
 pub use robot::fabri_creator::{base_transform, fabri_creator, tool_transform};
-
-// Communication
-pub use communication::{ServoCommand, ServoMapper, ArduinoNano, ConnectionError};
-pub use communication::{InterpolationConfig, interpolate_all, interpolate_all_command};
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="math-module-math"><a class="header" href="#math-module-math">Math Module (<code>math</code>)</a></h2>
@@ -563,93 +559,6 @@ pub enum Error {
 </span>pub fn fabri_creator() -&gt; Robot
 pub fn base_transform() -&gt; Iso3  // 57mm vertical offset from ground
 pub fn tool_transform() -&gt; Iso3  // 75mm along X (marker tip)
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="communication-module-communication"><a class="header" href="#communication-module-communication">Communication Module (<code>communication</code>)</a></h2>
-<h3 id="servocommand"><a class="header" href="#servocommand"><code>ServoCommand</code></a></h3>
-<p>Typed struct for sending joint angles + gripper over serial:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct ServoCommand {
-    pub joints: [f64; 5],  // 5 joint angles in degrees
-    pub gripper: u8,        // gripper angle 0–255
-}
-<span class="boring">}</span></code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new</code></td><td><code>(joints: [f64;5], gripper: u8) -&gt; Result&lt;Self, &amp;'static str&gt;</code></td><td>Validates joints [10°,170°] and gripper [0,255]</td></tr>
-<tr><td><code>to_wire</code></td><td><code>(&amp;self) -&gt; String</code></td><td><code>"a1,a2,a3,a4,a5,g\n"</code> for serial</td></tr>
-<tr><td><code>to_raw_array</code></td><td><code>(&amp;self) -&gt; [i32; 6]</code></td><td>For interpolation with existing API</td></tr>
-<tr><td><code>from_raw_array</code></td><td><code>(&amp;[i32; 6]) -&gt; Self</code></td><td>Convert interpolation output back</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="servomapper"><a class="header" href="#servomapper"><code>ServoMapper</code></a></h3>
-<p>Maps kinematic q (radians) to servo angles (degrees), centralizing offset and clamping:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct ServoMapper&lt;'a&gt; {
-    robot: &amp;'a Robot,
-    angle_min: f64,  // default: 10.0°
-    angle_max: f64,  // default: 170.0°
-}
-<span class="boring">}</span></code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new</code></td><td><code>(robot: &amp;Robot) -&gt; Self</code></td><td>Create with defaults</td></tr>
-<tr><td><code>map_q</code></td><td><code>(&amp;self, q: &amp;[f64], gripper: u8) -&gt; ServoCommand</code></td><td>Full conversion + clamping</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="arduinonano"><a class="header" href="#arduinonano"><code>ArduinoNano</code></a></h3>
-<p>Serial wrapper for the Arduino Nano firmware.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Signature</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>list_ports</code></td><td><code>() -&gt; Result&lt;Vec&lt;String&gt;&gt;</code></td><td>Available serial ports</td></tr>
-<tr><td><code>connect</code></td><td><code>(port_name: &amp;str) -&gt; Result&lt;Self&gt;</code></td><td>Open at 115200 baud</td></tr>
-<tr><td><code>send</code></td><td><code>(&amp;mut self, cmd: &amp;ServoCommand) -&gt; Result&lt;()&gt;</code></td><td>Send angles as CSV</td></tr>
-<tr><td><code>send_and_verify</code></td><td><code>(&amp;mut self, cmd: &amp;ServoCommand) -&gt; Result&lt;()&gt;</code></td><td>Send + wait for “OK”</td></tr>
-<tr><td><code>read_response</code></td><td><code>(&amp;mut self) -&gt; Result&lt;String&gt;</code></td><td>Read one line</td></tr>
-<tr><td><code>disconnect</code></td><td><code>(&amp;mut self) -&gt; Result&lt;()&gt;</code></td><td>Flush and close</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="connectionerror"><a class="header" href="#connectionerror"><code>ConnectionError</code></a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub enum ConnectionError {
-    PortNotFound { port: String },
-    OpenFailed { port: String, source: String },
-    WriteFailed { port: String, source: String },
-    ReadFailed { port: String, source: String },
-    Timeout { port: String, ms: u64 },
-    InvalidResponse { port: String, response: String },
-}
-<span class="boring">}</span></code></pre>
-<p>Implements <code>Display</code> and <code>std::error::Error</code>.</p>
-<h3 id="interpolation"><a class="header" href="#interpolation">Interpolation</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct InterpolationConfig {
-    pub step_size: i32,   // degrees per step (default: 5)
-    pub delay_ms: u64,    // ms between steps (default: 40)
-}
-
-pub fn interpolate_joint(current: i32, target: i32, step_size: i32) -&gt; Vec&lt;i32&gt;
-pub fn interpolate_all(current: &amp;[i32; 6], target: &amp;[i32; 6], config: &amp;InterpolationConfig) -&gt; Vec&lt;[i32; 6]&gt;
-pub fn interpolate_all_command(current: &amp;ServoCommand, target: &amp;ServoCommand, config: &amp;InterpolationConfig) -&gt; Vec&lt;ServoCommand&gt;
 <span class="boring">}</span></code></pre>
 <hr>
 <h2 id="kinematics-module-kinematics"><a class="header" href="#kinematics-module-kinematics">Kinematics Module (<code>kinematics</code>)</a></h2>

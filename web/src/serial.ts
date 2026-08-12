@@ -285,8 +285,9 @@ function sampleQ(line: string): number[] | null {
 /**
  * Envía el encabezado `MANIFEST <count> <durationUs>` que el firmware v2 exige
  * ANTES del primer SAMPLE (gate `manifest_ready` en protocol_v2.cpp handle_sample).
- * El firmware NO responde a esta línea (verificable en el CLI serial-test, que la
- * envía sin leer respuesta). Si el firmware rechaza el encabezado, el error se
+ * El firmware NO responde a esta línea (el firmware v2 la acepta y continúa
+ * en silencio; el web no lee respuesta hasta la primera ventana ACK de
+ * `uploadManifest`). Si el firmware rechaza el encabezado, el error se
  * superficializa en la primera ventana ACK de `uploadManifest`.
  */
 export async function sendManifestHeader(port: SerialPort, count: number, durationUs: number): Promise<void> {
