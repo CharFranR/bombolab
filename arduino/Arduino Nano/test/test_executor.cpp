@@ -176,6 +176,43 @@ static void test_trace_hook_fires_with_elapsed_time() {
     TEST_ASSERT_EQUAL(1600, g_applied[0]);
 }
 
+static void test_pacing_survives_ring_empty() {
+    V2Executor e;
+    uint16_t j[V2_JOINT_COUNT];
+    v2_executor_init(&e, fake_now, fake_apply, fake_ack);
+    fill(j, 1500);
+    // Fase 1: cargar y ejecutar 2 muestras (dt 0 y 50000) → el ring se vacía
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_store(&e, j, 0));
+    j[0] = 1600;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_store(&e, j, 50000));
+    e.declared_total = 4;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_start(&e));
+    g_now = 50000;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_tick(&e));
+    TEST_ASSERT_EQUAL(2, g_apply_count);
+    TEST_ASSERT_EQUAL(0, e.in_use); // ring vacío → target_time queda stale
+    // Fase 2: refill MUCHO después (el web tardó: ventana de lectura de 3s).
+    // Con target_time stale el tick consumiría AMBAS muestras de una (modo
+    // ráfaga → el brazo "lata" y los ACK densos desbordan el ring web-side).
+    g_now = 200000;
+    j[0] = 1700;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_store(&e, j, 50000));
+    j[0] = 1800;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_store(&e, j, 50000));
+    // Tick inmediato tras el refill: solo la primera se consume ya ("está
+    // atrasada"); la segunda espera su dt de 50000us.
+    g_now = 200100;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_tick(&e));
+    TEST_ASSERT_EQUAL(3, g_apply_count);
+    TEST_ASSERT_EQUAL(1700, g_applied[0]);
+    TEST_ASSERT_EQUAL(1, e.in_use);
+    g_now = 250100;
+    TEST_ASSERT_EQUAL(V2_OK, v2_executor_tick(&e));
+    TEST_ASSERT_EQUAL(4, g_apply_count);
+    TEST_ASSERT_EQUAL(1800, g_applied[0]);
+    TEST_ASSERT_TRUE(v2_executor_finished(&e));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_pacing_follows_dt_of_next_sample);
@@ -186,5 +223,6 @@ int main() {
     RUN_TEST(test_stop_holds_and_discard_resets);
     RUN_TEST(test_wrap_safe_delta);
     RUN_TEST(test_trace_hook_fires_with_elapsed_time);
+    RUN_TEST(test_pacing_survives_ring_empty);
     return UNITY_END();
 }

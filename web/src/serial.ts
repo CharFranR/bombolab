@@ -245,7 +245,15 @@ export async function handshakeV2(port: SerialPort): Promise<number | Error> {
     await awaitSendSerial(port, new TextEncoder().encode('HELLO 2\n'));
     // stopWhen: retornar apenas aparezca el HELLO OK (o un rechazo v2), sin
     // esperar el batch de 8 líneas — antes esto retrasaba el EXECUTE ~1.5s.
-    const lines = await readSerialLines(port, 1500, (l) => l.startsWith('HELLO 2 OK') || l.startsWith('ERR '));
+    // ignore: respuestas legacy SIN token ("OK"/"ERR") re-entregadas tarde por
+    // transportes lentos (p. ej. WebSerial de Firefox) — no llenan el batch y
+    // no tapan el HELLO OK real (bug 2026-08-12 b: handshake 08:55 con 8 OKs).
+    const lines = await readSerialLines(
+      port,
+      1500,
+      (l) => l.startsWith('HELLO 2 OK') || l.startsWith('ERR '),
+      (l) => l === 'OK' || l === 'ERR',
+    );
     for (const line of lines) {
       seen.push(line);
       if (line.startsWith('HELLO 2 OK CHUNK_MAX')) {
@@ -287,6 +295,9 @@ export async function sendManifestHeader(port: SerialPort, count: number, durati
 
 export async function continueManifestUpload(
   port: SerialPort,
+  /** Slots del ring del firmware (2×chunkMax del handshake). Tras el EXECUTE
+   *  el ring arranca lleno; cada T-line confirma una muestra consumida. */
+  ringSize: number,
   remainingLines: string[],
   onProgress?: (sent: number, total: number) => void,
   onTelemetry?: (tUs: number, joints: number[]) => void,
@@ -296,14 +307,16 @@ export async function continueManifestUpload(
   const total = remainingLines.length;
   let sent = 0;
   let done = false;
+  let consumed = 0; // T-lines vistas: cada una = un slot del ring liberado
   while (sent < total && !done) {
     const lines = await readSerialLines(port, 3000);
     let free = 0;
     for (const line of lines) {
       if (line.startsWith('T ')) {
         const tm = /^T (\d+) ((\d+ ){5}\d+)$/.exec(line);
-        if (tm && onTelemetry) {
-          onTelemetry(Number(tm[1]), tm[2].split(' ').map(Number));
+        if (tm) {
+          consumed += 1;
+          onTelemetry?.(Number(tm[1]), tm[2].split(' ').map(Number));
         }
         continue;
       }
@@ -318,10 +331,18 @@ export async function continueManifestUpload(
         done = true;
       }
     }
-    if (free <= 0) {
+    // Tope de vuelo exacto (bug 2026-08-12 → ERR BAD_STATE por ring lleno en
+    // v2_executor_store): el ACK reporta los slots libres en el instante de su
+    // emisión, pero los writes del web aterrizan con retardo (buffer del OS).
+    // Enviar `free` a ciegas deja en vuelo más samples de los que el ring puede
+    // aceptar → el firmware aborta el manifest. El ring arranca lleno tras el
+    // EXECUTE; cada T-line confirma un consumo = un slot liberado → el web solo
+    // puede llevar `consumed - sent` samples sin confirmar.
+    const sendable = Math.max(0, consumed - sent);
+    const toSend = Math.min(free, sendable, total - sent);
+    if (toSend <= 0) {
       continue;
     }
-    const toSend = Math.min(free, total - sent);
     for (let i = 0; i < toSend; i++) {
       await awaitSendSerial(port, enc.encode(remainingLines[sent + i] + '\n'));
       const q = sampleQ(remainingLines[sent + i]);
@@ -365,17 +386,40 @@ export async function uploadManifest(
       // el ACK de ESTA ventana: descartarlas evita que 8 líneas basura corten
       // la espera y produzcan un éxito falso (bug 2026-08-10 → EXECUTE con el
       // ring incompleto → el firmware ejecuta nada y no emite T-lines).
-      const lines = await readSerialLines(
-        port,
-        1200,
-        (l) => l.startsWith('ACK ') || l.startsWith('ERR '),
-        (l) => !l.startsWith('ACK ') && !l.startsWith('ERR ') && !l.startsWith('HELLO 2 OK'),
-      );
+      const readWindow = () =>
+        readSerialLines(
+          port,
+          3000,
+          (l) => l.startsWith('ACK ') || l.startsWith('ERR '),
+          (l) => !l.startsWith('ACK ') && !l.startsWith('ERR ') && !l.startsWith('HELLO 2 OK'),
+        );
+      // Ring lleno (48): el firmware NO ACKea (free=0 por diseño) — ventana
+      // corta y sin re-lectura; el resto viaja tras EXECUTE.
+      const isRingFull = sent >= RING_LIMIT;
+      const lines = isRingFull
+        ? await readSerialLines(
+            port,
+            1200,
+            (l) => l.startsWith('ACK ') || l.startsWith('ERR '),
+            (l) => !l.startsWith('ACK ') && !l.startsWith('ERR ') && !l.startsWith('HELLO 2 OK'),
+          )
+        : await readWindow();
       const err = lines.find((l) => l.startsWith('ERR '));
       if (err) {
         return { sent, total, error: err };
       }
-      const acked = lines.some((l) => l.startsWith('ACK '));
+      let acked = lines.some((l) => l.startsWith('ACK '));
+      if (!acked && !isRingFull) {
+        // Re-lectura extra: transportes lentos (p. ej. el WebSerial de Firefox)
+        // pueden entregar el ACK con retardo. NO se re-envía nada → sin riesgo
+        // de duplicados ni de desincronizar el ring (bug 2026-08-12 b).
+        const retry = await readWindow();
+        const err2 = retry.find((l) => l.startsWith('ERR '));
+        if (err2) {
+          return { sent, total, error: err2 };
+        }
+        acked = retry.some((l) => l.startsWith('ACK '));
+      }
       if (!acked) {
         // Ring incompleto sin confirmación: el firmware no recibió la ventana
         // (o está en un estado que no la procesa). NO es un éxito: mandar

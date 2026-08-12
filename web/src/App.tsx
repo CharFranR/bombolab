@@ -798,6 +798,7 @@ export default function App() {
               let tCount = 0;
               const res = await continueManifestUpload(
                 port,
+                2 * chunkMax, // ring del firmware (2×chunkMax): tope de vuelo exacto
                 remaining,
                 undefined,
                 (tUs, joints) => {
