@@ -18,6 +18,8 @@ import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
+import GamepadControls from './components/GamepadControls';
+import { mapGamepadToCommands, clampAngle, type GamepadCommand } from './gamepad';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
@@ -64,6 +66,17 @@ export default function App() {
   const [transitioning, setTransitioning] = useState(false);
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
+  // ─── Gamepad (rate) control ──────────────────────────────────────────────
+  // Velocity-style sticks: active only while enabled AND the same gates that
+  // disable the manual sliders (normal mode, no IK target) AND no trajectory
+  // playback. The readout is throttled in the loop (see below) so this panel
+  // does not re-render at 60 Hz.
+  const [gamepadEnabled, setGamepadEnabled] = useState(false);
+  const [gamepadId, setGamepadId] = useState<string | null>(null);
+  const [gamepadReadout, setGamepadReadout] = useState<GamepadCommand | null>(null);
+  const [gamepadApiAvailable] = useState(
+    () => typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function',
+  );
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
@@ -393,6 +406,81 @@ export default function App() {
     }, 1000);
     return () => clearInterval(id);
   }, [connected]);
+
+  // ─── Gamepad rAF loop ───────────────────────────────────────────────────
+  // Reads the gamepad every animation frame and accumulates q += v·dt into
+  // the SAME `robot` state the sliders drive, so the 3D view follows without
+  // hardware; the existing `sendQ` effect (robot/gripper change → interpolator
+  // → sendSerial) then pushes the wire frames through the exact same path as
+  // manual control. Gates are re-checked per frame via refs and the loop
+  // self-pauses (no accumulation, no sends, readout zeroed) whenever any of
+  // them closes — it never commands during drawing/IK/playback, and a
+  // gamepad disconnect simply leaves the state untouched (no surprise frame).
+  const robotModeRef = useRef(robotMode);
+  robotModeRef.current = robotMode;
+  const playerStateRef = useRef(playerState);
+  playerStateRef.current = playerState;
+  const ikModeRef = useRef(ikMode);
+  ikModeRef.current = ikMode;
+  const robotRef = useRef(robot);
+  robotRef.current = robot;
+  useEffect(() => {
+    if (!gamepadEnabled) return;
+    let raf = 0;
+    let lastT = 0;
+    let lastReadoutT = 0;
+    let lastSeenId: string | null = null;
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      const gatesOpen =
+        robotRef.current !== null &&
+        robotModeRef.current === 'normal' &&
+        playerStateRef.current === 'idle' &&
+        !ikModeRef.current &&
+        !manifestModeRef.current;
+      // Status is polled even while gated so the panel shows connect/disconnect.
+      let gp: Gamepad | null = null;
+      try {
+        const gps = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+        gp = gps.find((g): g is Gamepad => g !== null) ?? null;
+      } catch { /* gamepad API unavailable or threw */ }
+      const id = gp?.id ?? null;
+      if (id !== lastSeenId) {
+        lastSeenId = id;
+        setGamepadId(id);
+      }
+      if (!gatesOpen) {
+        if (now - lastReadoutT > 200) { setGamepadReadout(null); lastReadoutT = now; }
+        return;
+      }
+      if (!gp) {
+        if (now - lastReadoutT > 200) { setGamepadReadout(null); lastReadoutT = now; }
+        return;
+      }
+      const dt = lastT > 0 ? Math.min((now - lastT) / 1000, 0.1) : 0;
+      lastT = now;
+      const cmd = mapGamepadToCommands(gp);
+      if (now - lastReadoutT > 100) { setGamepadReadout(cmd); lastReadoutT = now; }
+      setRobot(prev => {
+        if (!prev) return prev;
+        let changed = false;
+        const segments = prev.segments.map((seg, i) => {
+          const v = cmd.jointVelocities[i] ?? 0;
+          if (v === 0) return seg;
+          const q = clampAngle(seg.q + v * dt, seg.q_min, seg.q_max);
+          if (q === seg.q) return seg;
+          changed = true;
+          return { ...seg, q };
+        });
+        return changed ? { ...prev, segments } : prev;
+      });
+      if (cmd.gripperDeltaPct !== 0) {
+        setGripper(prev => Math.min(100, Math.max(0, prev + cmd.gripperDeltaPct * dt)));
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [gamepadEnabled]);
 
   const handleReset = useCallback(() => {
     const home = fabriCreator();
@@ -1299,6 +1387,11 @@ export default function App() {
     [robot],
   );
 
+  // Gamepad loop gates, mirrored for the panel badge (same gates as the
+  // rAF loop above: normal mode + no IK target + no trajectory playback).
+  const gamepadActive =
+    gamepadEnabled && robotMode === 'normal' && playerState === 'idle' && !ikMode && !manifestModeRef.current;
+
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
   return (
@@ -1403,6 +1496,15 @@ export default function App() {
             onGripperChange={setGripper}
             onChange={handleJointChange}
             disabled={ikMode}
+          />
+
+          <GamepadControls
+            enabled={gamepadEnabled}
+            onEnabledChange={setGamepadEnabled}
+            apiAvailable={gamepadApiAvailable}
+            gamepadId={gamepadId}
+            commands={gamepadReadout}
+            active={gamepadActive}
           />
 
         {/* Info panel */}
