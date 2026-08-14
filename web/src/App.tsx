@@ -1599,16 +1599,8 @@ export default function App() {
                 <button
                   onClick={() => gcodeInputRef.current?.click()}
                   disabled={transitioning}
-                  style={{
-                    flex: 1,
-                    padding: 8,
-                    background: activeDemo === 'gcode' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid ' + (activeDemo === 'gcode' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
-                    borderRadius: 6,
-                    color: activeDemo === 'gcode' ? 'var(--c-cyan)' : 'var(--c-gray)',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
+                  className={activeDemo === 'gcode' ? 'ctl-btn ctl-btn--active' : 'ctl-btn'}
+                  style={{ flex: 1 }}
                 >
                   {gcodeName ? `G-code: ${gcodeName}` : 'Cargar .gcode'}
                 </button>
@@ -1648,9 +1640,9 @@ export default function App() {
                 <div
                   className="anim-pop"
                   style={{
-                    padding: 8,
+                    padding: 12,
                     marginBottom: 6,
-                    borderRadius: 4,
+                    borderRadius: 'var(--radius-ctl)',
                     background: '#300',
                     border: '1px solid #833',
                     color: '#f88',
@@ -1714,9 +1706,9 @@ export default function App() {
                 <div
                   className="anim-pop"
                   style={{
-                    padding: 8,
+                    padding: 12,
                     marginBottom: 6,
-                    borderRadius: 4,
+                    borderRadius: 'var(--radius-ctl)',
                     background: '#232',
                     border: '1px solid rgba(0, 242, 254, 0.45)',
                   }}
@@ -1730,7 +1722,7 @@ export default function App() {
                       style={{
                         padding: 6,
                         marginBottom: 4,
-                        borderRadius: 4,
+                        borderRadius: 'var(--radius-ctl)',
                         background: '#1d1d20',
                         border: '1px solid var(--border)',
                       }}
@@ -1743,30 +1735,19 @@ export default function App() {
                     <button
                       onClick={() => { void handleDrawCipraJob(job); }}
                       disabled={cipraJobs.drawingId !== null || transitioning}
-                      style={{
-                        flex: 1,
-                        padding: '4px 6px',
-                        fontSize: 11,
-                        background: 'rgba(0, 242, 254, 0.16)',
-                        border: '1px solid rgba(0, 242, 254, 0.45)',
-                        borderRadius: 6,
-                        color: 'var(--c-cyan)',
-                        cursor: cipraJobs.drawingId !== null || transitioning ? 'not-allowed' : 'pointer',
-                      }}
+                      className="ctl-btn ctl-btn--active"
+                      style={{ flex: 1 }}
                     >
                       Dibujar
                     </button>
                     <button
                       onClick={() => handleDiscardCipraJob(job.id)}
+                      className="ctl-btn"
                       style={{
                         flex: 1,
-                        padding: '4px 6px',
-                        fontSize: 11,
-                        background: '#533',
-                        border: '1px solid #833',
-                        borderRadius: 6,
-                        color: '#fcc',
-                        cursor: 'pointer',
+                        background: 'rgba(190, 60, 60, 0.18)',
+                        border: '1px solid rgba(210, 80, 80, 0.45)',
+                        color: '#e88',
                       }}
                     >
                           Descartar
@@ -1917,7 +1898,7 @@ export default function App() {
               right: 16,
               zIndex: 20,
               width: 280,
-              padding: '8px 16px',
+              padding: 12,
             }}
           >
             <div style={{ fontSize: 12, color: 'var(--c-cyan)', fontWeight: 600 }}>
@@ -1936,15 +1917,12 @@ export default function App() {
                     setCipraNoticeDismissed(true);
                   }}
                   disabled={transitioning}
+                  className="ctl-btn"
                   style={{
                     flex: 1,
-                    padding: '4px 6px',
-                    fontSize: 11,
                     background: '#464',
                     border: 'none',
-                    borderRadius: 6,
                     color: 'var(--c-text)',
-                    cursor: 'pointer',
                   }}
                 >
                   Ir al modo dibujo
@@ -1952,16 +1930,8 @@ export default function App() {
               )}
               <button
                 onClick={() => setCipraNoticeDismissed(true)}
-                style={{
-                  flex: 1,
-                  padding: '4px 6px',
-                  fontSize: 11,
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid #444',
-                  borderRadius: 6,
-                  color: 'var(--c-text-dim)',
-                  cursor: 'pointer',
-                }}
+                className="ctl-btn"
+                style={{ flex: 1 }}
               >
                 Cerrar
               </button>

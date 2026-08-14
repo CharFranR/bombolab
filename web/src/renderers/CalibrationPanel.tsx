@@ -27,28 +27,19 @@ function getTranslation(m: THREE.Matrix4): [number, number, number] {
 }
 
 const stepBtnStyle: React.CSSProperties = {
-  padding: '1px 3px',
-  fontSize: 9,
+  minHeight: 24,
+  padding: '2px 4px',
+  fontSize: 10,
   background: 'rgba(255, 255, 255, 0.04)',
   border: '1px solid var(--border)',
-  borderRadius: 6,
+  borderRadius: 'var(--radius-ctl)',
   color: 'var(--c-text-dim)',
   cursor: 'pointer',
   fontFamily: 'monospace',
+  transition: 'border-color 0.15s ease, background 0.15s ease',
 };
 
 const STEPS = [-50, -10, -1, 1, 10, 50] as const;
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '4px 6px',
-  fontSize: 12,
-  background: 'rgba(255, 255, 255, 0.04)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  color: '#ddd',
-  boxSizing: 'border-box',
-};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -132,29 +123,22 @@ export default function CalibrationPanel({
         top: 16,
         right: 16,
         zIndex: 10,
-        padding: 16,
+        padding: 12,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
         minWidth: 200,
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
+      <div className="card-title">
         Calibration
       </div>
       <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
         <select
           value=""
           onChange={handleTargetChange}
-          style={{
-            width: '100%',
-            padding: '6px 8px',
-            fontSize: 12,
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            color: '#ddd',
-          }}
+          className="ctl-input"
+          style={{ width: '100%', boxSizing: 'border-box' }}
         >
         <option value="">-- Select a piece --</option>
         {ALL_STL_FILES.map((file) => (
@@ -175,14 +159,14 @@ export default function CalibrationPanel({
         top: 16,
         right: 16,
         zIndex: 10,
-        padding: 16,
+        padding: 12,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
         minWidth: 200,
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
+      <div className="card-title">
         Calibration
       </div>
 
@@ -191,15 +175,8 @@ export default function CalibrationPanel({
         <select
           value={target}
           onChange={handleTargetChange}
-          style={{
-            width: '100%',
-            padding: '6px 8px',
-            fontSize: 12,
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            color: '#ddd',
-          }}
+          className="ctl-input"
+          style={{ width: '100%', boxSizing: 'border-box' }}
         >
         <option value="">-- Select --</option>
         {ALL_STL_FILES.map((file) => (
@@ -213,7 +190,7 @@ export default function CalibrationPanel({
         {/* X */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#ff6666', textAlign: 'center' }}>X</span>
-          <input type="number" step={0.1} value={x} onChange={handleXChange} style={inputStyle} />
+          <input type="number" step={0.1} value={x} onChange={handleXChange} className="ctl-input" style={{ width: '100%', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
             {STEPS.map((s) => (
               <button key={s} style={stepBtnStyle}
@@ -227,7 +204,7 @@ export default function CalibrationPanel({
         {/* Y */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#66ff66', textAlign: 'center' }}>Y</span>
-          <input type="number" step={0.1} value={y} onChange={handleYChange} style={inputStyle} />
+          <input type="number" step={0.1} value={y} onChange={handleYChange} className="ctl-input" style={{ width: '100%', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
             {STEPS.map((s) => (
               <button key={s} style={stepBtnStyle}
@@ -241,7 +218,7 @@ export default function CalibrationPanel({
         {/* Z */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#4488ff', textAlign: 'center' }}>Z</span>
-          <input type="number" step={0.1} value={z} onChange={handleZChange} style={inputStyle} />
+          <input type="number" step={0.1} value={z} onChange={handleZChange} className="ctl-input" style={{ width: '100%', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
             {STEPS.map((s) => (
               <button key={s} style={stepBtnStyle}
@@ -262,42 +239,57 @@ export default function CalibrationPanel({
           style={{ flex: 1 }} />
         <input type="number" step={0.01} value={globalScale}
           onChange={(e) => { const v = parseFloat(e.target.value) || 1; setGlobalScale(v); stlScaleRef.current = v; }}
-          style={{ ...inputStyle, width: 60 }} />
+          className="ctl-input"
+          style={{ width: 60, boxSizing: 'border-box' }} />
       </div>
 
       {/* Gizmo mode toggle */}
       <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>Gizmo</label>
       <div style={{ display: 'flex', gap: 4 }}>
-        <button onClick={() => onGizmoModeChange('translate')}
+        <button
+          onClick={() => onGizmoModeChange('translate')}
+          className={gizmoMode === 'translate' ? 'ctl-btn ctl-btn--active' : 'ctl-btn'}
+          style={{ flex: 1 }}
+        >↕ Translate</button>
+        <button
+          onClick={() => onGizmoModeChange('rotate')}
+          className="ctl-btn"
           style={{
-            flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
-            background: gizmoMode === 'translate' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-            border: `1px solid ${gizmoMode === 'translate' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'}`,
-            borderRadius: 6, color: 'var(--c-text)',
-          }}>↕ Translate</button>
-        <button onClick={() => onGizmoModeChange('rotate')}
-          style={{
-            flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
-            background: gizmoMode === 'rotate' ? 'rgba(0, 102, 255, 0.18)' : 'rgba(255, 255, 255, 0.04)',
-            border: `1px solid ${gizmoMode === 'rotate' ? 'rgba(0, 102, 255, 0.5)' : 'var(--border)'}`,
-            borderRadius: 6, color: 'var(--c-text)',
-          }}>↻ Rotate</button>
+            flex: 1,
+            ...(gizmoMode === 'rotate'
+              ? { background: 'rgba(0, 102, 255, 0.18)', border: '1px solid rgba(0, 102, 255, 0.5)', color: 'var(--c-cobalt)' }
+              : {}),
+          }}
+        >↻ Rotate</button>
       </div>
 
       {/* Buttons */}
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
         <button onClick={onSave}
-          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: 'rgba(0, 242, 254, 0.16)', border: '1px solid rgba(0, 242, 254, 0.45)', borderRadius: 6, color: 'var(--c-cyan)', cursor: 'pointer' }}>
+          className="ctl-btn ctl-btn--active"
+          style={{ flex: 1 }}>
            Save
         </button>
         <button onClick={onUpload}
-          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: 'rgba(0, 102, 255, 0.18)', border: '1px solid rgba(0, 102, 255, 0.5)', borderRadius: 6, color: 'var(--c-cobalt)', cursor: 'pointer' }}>
+          className="ctl-btn"
+          style={{
+            flex: 1,
+            background: 'rgba(0, 102, 255, 0.18)',
+            border: '1px solid rgba(0, 102, 255, 0.5)',
+            color: 'var(--c-cobalt)',
+          }}>
            Upload
         </button>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={onReload}
-          style={{ flex: 1, padding: '4px 0', fontSize: 10, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', borderRadius: 6, color: '#e88', cursor: 'pointer' }}>
+          className="ctl-btn"
+          style={{
+            flex: 1,
+            background: 'rgba(190, 60, 60, 0.18)',
+            border: '1px solid rgba(210, 80, 80, 0.45)',
+            color: '#e88',
+          }}>
            Reload defaults
         </button>
       </div>
