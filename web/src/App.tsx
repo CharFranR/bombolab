@@ -1382,12 +1382,12 @@ export default function App() {
               <button
                 onClick={cancelWorkspace}
                 style={{
-                  padding: '2px 8px',
+                  padding: '2px 10px',
                   fontSize: 11,
-                  background: '#553',
-                  border: 'none',
-                  borderRadius: 3,
-                  color: '#dc8',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: 999,
+                  color: 'var(--c-cyan)',
                   cursor: 'pointer',
                 }}
               >
@@ -1405,10 +1405,10 @@ export default function App() {
                   flex: 1,
                   padding: '3px 0',
                   fontSize: 11,
-                  background: workspaceCount === n ? '#553' : '#3a3a3a',
-                  border: '1px solid ' + (workspaceCount === n ? '#885' : '#444'),
-                  borderRadius: 3,
-                  color: '#ccc',
+                  background: workspaceCount === n ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid ' + (workspaceCount === n ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                  borderRadius: 6,
+                  color: workspaceCount === n ? 'var(--c-cyan)' : 'var(--c-gray)',
                   cursor: 'pointer',
                 }}
               >
@@ -1424,10 +1424,10 @@ export default function App() {
                 flex: 1,
                 padding: '3px 0',
                 fontSize: 11,
-                background: workspaceMode === 'drawing-plane' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (workspaceMode === 'drawing-plane' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: '#ccc',
+                background: workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid ' + (workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                borderRadius: 6,
+                color: workspaceMode === 'drawing-plane' ? 'var(--c-cyan)' : 'var(--c-gray)',
                 cursor: 'pointer',
               }}
             >
@@ -1439,10 +1439,10 @@ export default function App() {
                 flex: 1,
                 padding: '3px 0',
                 fontSize: 11,
-                background: workspaceMode === 'full-5dof' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (workspaceMode === 'full-5dof' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: '#ccc',
+                background: workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid ' + (workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                borderRadius: 6,
+                color: workspaceMode === 'full-5dof' ? 'var(--c-cyan)' : 'var(--c-gray)',
                 cursor: 'pointer',
               }}
             >
@@ -1484,10 +1484,10 @@ export default function App() {
                     style={{
                       padding: '2px 8px',
                       fontSize: 11,
-                      background: demoSizeCm === cm ? '#553' : '#3a3a3a',
-                      border: '1px solid ' + (demoSizeCm === cm ? '#885' : '#444'),
-                      borderRadius: 3,
-                      color: demoSizeCm === cm ? '#ddc' : '#888',
+                      background: demoSizeCm === cm ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (demoSizeCm === cm ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: demoSizeCm === cm ? 'var(--c-cyan)' : 'var(--c-gray)',
                       cursor: 'pointer',
                     }}
                   >
@@ -1502,10 +1502,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'square' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'square' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'square' ? '#ddc' : '#888',
+                    background: activeDemo === 'square' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'square' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'square' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1518,10 +1518,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'lines' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'lines' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'lines' ? '#ddc' : '#888',
+                    background: activeDemo === 'lines' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'lines' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'lines' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 12,
                     cursor: 'pointer',
                   }}
@@ -1534,10 +1534,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'arc' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'arc' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'arc' ? '#ddc' : '#888',
+                    background: activeDemo === 'arc' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'arc' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'arc' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 12,
                     cursor: 'pointer',
                   }}
@@ -1552,10 +1552,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'gcode' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'gcode' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'gcode' ? '#ddc' : '#888',
+                    background: activeDemo === 'gcode' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'gcode' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'gcode' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1646,10 +1646,10 @@ export default function App() {
                           flex: 1,
                           padding: '2px 6px',
                           fontSize: 11,
-                          background: '#533',
-                          border: '1px solid #885',
-                          borderRadius: 3,
-                          color: '#ddc',
+                          background: 'transparent',
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          color: 'var(--c-cyan)',
                           cursor: 'pointer',
                         }}
                       >
