@@ -1628,10 +1628,10 @@ export default function App() {
                         flex: 1,
                         padding: '2px 6px',
                         fontSize: 11,
-                        background: '#333',
+                        background: 'rgba(255, 255, 255, 0.04)',
                         border: '1px solid #444',
-                        borderRadius: 3,
-                        color: '#aaa',
+                        borderRadius: 6,
+                        color: 'var(--c-text-dim)',
                         cursor: 'pointer',
                       }}
                     >
@@ -1664,7 +1664,7 @@ export default function App() {
                     marginBottom: 6,
                     borderRadius: 4,
                     background: '#232',
-                    border: '1px solid #364',
+                    border: '1px solid rgba(0, 242, 254, 0.45)',
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 11, color: '#9d9' }}>
@@ -1678,43 +1678,43 @@ export default function App() {
                         marginBottom: 4,
                         borderRadius: 4,
                         background: '#1d1d20',
-                        border: '1px solid #333',
+                        border: '1px solid var(--border)',
                       }}
                     >
-                      <div style={{ fontSize: 11, color: '#ccc', fontWeight: 600 }}>{job.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--c-text)', fontWeight: 600 }}>{job.name}</div>
                       <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>
                         id {job.id.slice(0, 8)} · {job.status}
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          onClick={() => { void handleDrawCipraJob(job); }}
-                          disabled={cipraJobs.drawingId !== null || transitioning}
-                          style={{
-                            flex: 1,
-                            padding: '4px 6px',
-                            fontSize: 11,
-                            background: '#364',
-                            border: '1px solid #487',
-                            borderRadius: 3,
-                            color: '#cfc',
-                            cursor: cipraJobs.drawingId !== null || transitioning ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          Dibujar
-                        </button>
-                        <button
-                          onClick={() => handleDiscardCipraJob(job.id)}
-                          style={{
-                            flex: 1,
-                            padding: '4px 6px',
-                            fontSize: 11,
-                            background: '#533',
-                            border: '1px solid #833',
-                            borderRadius: 3,
-                            color: '#fcc',
-                            cursor: 'pointer',
-                          }}
-                        >
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={() => { void handleDrawCipraJob(job); }}
+                      disabled={cipraJobs.drawingId !== null || transitioning}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        fontSize: 11,
+                        background: 'rgba(0, 242, 254, 0.16)',
+                        border: '1px solid rgba(0, 242, 254, 0.45)',
+                        borderRadius: 6,
+                        color: 'var(--c-cyan)',
+                        cursor: cipraJobs.drawingId !== null || transitioning ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      Dibujar
+                    </button>
+                    <button
+                      onClick={() => handleDiscardCipraJob(job.id)}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        fontSize: 11,
+                        background: '#533',
+                        border: '1px solid #833',
+                        borderRadius: 6,
+                        color: '#fcc',
+                        cursor: 'pointer',
+                      }}
+                    >
                           Descartar
                         </button>
                       </div>
@@ -1728,10 +1728,10 @@ export default function App() {
                   disabled={playerId === null}
                   style={{
                     padding: '8px 12px',
-                    background: '#3a3a3a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: playerState === 'running' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: playerState === 'running' ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: playerState === 'running' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1743,10 +1743,10 @@ export default function App() {
                   disabled={playerId === null}
                   style={{
                     padding: '8px 12px',
-                    background: '#633',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: 'rgba(190, 60, 60, 0.18)',
+                    border: '1px solid rgba(210, 80, 80, 0.45)',
+                    borderRadius: 6,
+                    color: '#e88',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1760,10 +1760,10 @@ export default function App() {
                   disabled={traceResult === null || traceResult.samples.length === 0}
                   style={{
                     padding: '8px 12px',
-                    background: '#3a3a3a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1771,7 +1771,7 @@ export default function App() {
                   Exportar traza CSV
                 </button>
                 {traceResult !== null && traceResult.samples.length > 0 && (
-                  <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--c-gray)', alignSelf: 'center' }}>
                     {traceResult.samples.length} muestras
                     {traceResult.truncated ? ' · traza truncada' : ''}
                   </div>
@@ -1781,10 +1781,10 @@ export default function App() {
                   disabled={firmwareTrace.length === 0}
                   style={{
                     padding: '8px 12px',
-                    background: '#3a3a3a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1792,15 +1792,15 @@ export default function App() {
                   Exportar traza firmware CSV
                 </button>
                 {firmwareTrace.length > 0 && (
-                  <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--c-gray)', alignSelf: 'center' }}>
                     firmware: {firmwareTraceStats(firmwareTrace).count} muestras ·{' '}
                     {(firmwareTraceStats(firmwareTrace).durationUs / 1e6).toFixed(2)} s
                   </div>
                 )}
               </div>
               <PlanExecPanel trace={traceResult} plan={tracePlan} />
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
-                Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
+              <div style={{ fontSize: 11, color: 'var(--c-gray)', marginBottom: 6 }}>
+                Trayectoria: <b style={{ color: 'var(--c-text)' }}>{playerState}</b>
                 {playerId !== null && playerState !== 'idle' && (
                   <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
@@ -1867,10 +1867,10 @@ export default function App() {
               padding: '8px 16px',
             }}
           >
-            <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
+            <div style={{ fontSize: 12, color: 'var(--c-cyan)', fontWeight: 600 }}>
                Trabajo nuevo desde CIPRA
             </div>
-            <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
+            <div style={{ fontSize: 11, color: 'var(--c-text-dim)', margin: '4px 0' }}>
               {cipraJobs.lastNotice.whileDrawing
                 ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
                 : 'Se recibió un trabajo nuevo de CIPRA.'}
@@ -1889,8 +1889,8 @@ export default function App() {
                     fontSize: 11,
                     background: '#464',
                     border: 'none',
-                    borderRadius: 3,
-                    color: '#ccc',
+                    borderRadius: 6,
+                    color: 'var(--c-text)',
                     cursor: 'pointer',
                   }}
                 >
@@ -1903,10 +1903,10 @@ export default function App() {
                   flex: 1,
                   padding: '4px 6px',
                   fontSize: 11,
-                  background: '#333',
+                  background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid #444',
-                  borderRadius: 3,
-                  color: '#aaa',
+                  borderRadius: 6,
+                  color: 'var(--c-text-dim)',
                   cursor: 'pointer',
                 }}
               >
