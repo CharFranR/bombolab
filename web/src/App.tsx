@@ -1149,14 +1149,6 @@ export default function App() {
           zIndex: 10,
         }}
       >
-        {/* Header — panel label only: the brand already lives in the top bar,
-            so the redundant sidebar h1 was removed (dedup). */}
-        <div style={{ padding: '16px', borderBottom: '1px solid #333' }}>
-          <p style={{ fontSize: 13, color: '#aaa', margin: 0 }}>
-            FABRI Creator · 5-DOF
-          </p>
-        </div>
-
         {/* Joint sliders */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           <JointControls
@@ -2049,7 +2041,7 @@ export default function App() {
         style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 5 }}
       >
         <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: '#e6edf3' }}>
-          BOMBOLAB — FABRI Creator
+          BOMBOLAB — FABRI Creator · 5-DOF
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={'badge ' + (connected ? 'badge--online' : 'badge--offline')}>
