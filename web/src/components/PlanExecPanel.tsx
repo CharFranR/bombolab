@@ -114,7 +114,7 @@ function SeriesChart({ values, unit, refValue }: { values: number[]; unit: strin
   const x = (i: number) => (values.length > 1 ? (i / (values.length - 1)) * W : W / 2);
   const y = (v: number) => H - 10 - ((v - min) / (max - min)) * (H - 18);
   return (
-    <svg width={W} height={H} style={{ marginTop: 4, background: '#1a1a1e', borderRadius: 4 }}>
+    <svg width={W} height={H} style={{ marginTop: 4, background: 'rgba(255,255,255,0.04)', borderRadius: 6 }}>
       <line x1={0} y1={y(0)} x2={W} y2={y(0)} stroke="#2c2c32" strokeWidth={1} />
       {[0.25, 0.5, 0.75].map((f) => (
         <line key={f} x1={W * f} y1={4} x2={W * f} y2={H - 10} stroke="#2c2c32" strokeWidth={1} />
@@ -225,8 +225,8 @@ export default function PlanExecPanel({
   };
 
   return (
-    <div className="glass-card" style={{ padding: '8px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+    <div className="glass-card" style={{ padding: '12px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Comandado vs planificado</span>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>
           Importar CSV
