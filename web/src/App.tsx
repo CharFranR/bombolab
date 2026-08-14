@@ -1162,7 +1162,7 @@ export default function App() {
 
         {/* Calibration mode — visible only in high fidelity */}
         {fidelityMode === 'high' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
             <label className="toggle">
               <input
                 type="checkbox"
@@ -1177,7 +1177,7 @@ export default function App() {
 
         {/* Debug visualization toggles — visible only in high fidelity */}
         {fidelityMode === 'high' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
             <div
               className="debug-acc"
               onClick={() => setDebugOpen(!debugOpen)}
@@ -1244,14 +1244,14 @@ export default function App() {
             row was removed (top bar badge shows it); this block now renders the
             serialError feedback ONLY, and only when an error exists. */}
         {serialError && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
           </div>
         )}
 
         {/* Calibración de servos (deadband/backlash) — manual */}
         {calibRunning && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 11, color: 'var(--c-cyan)', marginBottom: 6 }}>{calibStatus}</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
                 {SERVO_NAMES.map((n, i) => (
@@ -1332,8 +1332,8 @@ export default function App() {
           )}
         {ikMode && robotMode !== 'drawing' && (
           <>
-            <div style={{ padding: '4px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--c-gray)', marginRight: 4 }}>Dibujo:</span>
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
               {[0, 1, 2].map(mode => (
                 <button
                   key={mode}
@@ -1354,7 +1354,7 @@ export default function App() {
               ))}
 
             </div>
-            <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
+            <div style={{ padding: '0 16px 4px', fontSize: 10, color: 'var(--c-text-faint)' }}>
               Rueda mouse: sube/baja Z
             </div>
           </>
@@ -1363,7 +1363,7 @@ export default function App() {
         {/* IK target readout — the IK Mode toggle itself now lives in the
             bottom pill bar (same inline toggle logic, moved) */}
         {ikMode && (
-          <div style={{ padding: '8px 16px' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
             {ikTarget && (
               <div style={{ fontSize: 11, color: 'var(--c-gray)', marginTop: 4 }}>
                 Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
@@ -1378,9 +1378,9 @@ export default function App() {
         )}
 
         {/* Run Analysis */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Análisis de workspace</span>
+            <span className="section-label">Análisis de workspace</span>
             {workspaceRunning && (
               <button
                 onClick={cancelWorkspace}
@@ -1487,11 +1487,11 @@ export default function App() {
               padding: '12px 16px',
             }}
           >
-            <div style={{ fontSize: 11, color: 'var(--c-gray)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+            <div className="card-title">
               Drawing Mode
             </div>
             <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--c-gray)', marginRight: 4 }}>Dibujo:</span>
+              <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
               {[0, 1, 2].map(mode => (
                 <button
                   key={mode}
@@ -1512,18 +1512,19 @@ export default function App() {
               ))}
 
             </div>
-            <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
+            <div style={{ padding: '0 16px 4px', fontSize: 10, color: 'var(--c-text-faint)' }}>
               Rueda mouse: sube/baja Z
             </div>
             <div style={{ padding: '8px 16px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-dim)', marginBottom: 6, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={backlashEnabled}
-                  onChange={(e) => handleBacklashToggle(e.target.checked)}
-                />
-                Compensación de backlash (experimental, 2°/1°)
-              </label>
+            <label className="toggle" style={{ marginBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={backlashEnabled}
+                onChange={(e) => handleBacklashToggle(e.target.checked)}
+              />
+              <span className="toggle__track"><span className="toggle__knob" /></span>
+              Compensación de backlash (experimental, 2°/1°)
+            </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, color: '#777' }}>Tamaño:</span>
                 {[5, 7, 8].map((cm) => (

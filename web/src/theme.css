@@ -36,6 +36,11 @@
   --r-card: 12px;
   --r-pill: 999px;
 
+  /* Structural radii (design system E3) — named aliases for shared recipes */
+  --radius-card: 12px;
+  --radius-ctl: 6px;
+  --radius-pill: 999px;
+
   /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
@@ -76,6 +81,76 @@
   text-transform: uppercase;
   color: var(--c-gray);
   font-family: var(--font-sans);
+}
+
+/* ---- Structural design system (E3-E5): shared card/section recipes ---- */
+
+/* Card title recipe: uppercase heading inside component cards */
+.card-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--c-gray);
+  font-family: var(--font-sans);
+}
+
+/* Section label recipe: small muted label for sidebar/panel sections */
+.section-label {
+  font-size: 11px;
+  color: var(--c-gray);
+  font-family: var(--font-sans);
+}
+
+/* Control button recipe: neutral glass control, cyan active tint */
+.ctl-btn {
+  min-height: 27px;
+  padding: 4px 10px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--c-gray);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.2s ease;
+}
+.ctl-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 242, 254, 0.5);
+}
+.ctl-btn:active {
+  transform: translateY(0);
+}
+.ctl-btn--active {
+  background: rgba(0, 242, 254, 0.16);
+  border-color: rgba(0, 242, 254, 0.45);
+  color: var(--c-cyan);
+}
+.ctl-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Text/number input recipe: glass field with cyan focus outline */
+.ctl-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+  color: var(--c-text);
+  font-size: 11px;
+  font-family: var(--font-sans);
+}
+.ctl-input:focus {
+  outline: 1px solid rgba(0, 242, 254, 0.5);
+  border-color: rgba(0, 242, 254, 0.45);
 }
 
 /* Ultra-thin floating top bar */
