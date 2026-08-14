@@ -1163,12 +1163,13 @@ export default function App() {
         {/* Calibration mode — visible only in high fidelity */}
         {fidelityMode === 'high' && (
           <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer' }}>
+            <label className="toggle">
               <input
                 type="checkbox"
                 checked={calibrationMode}
                 onChange={(e) => setCalibrationMode(e.target.checked)}
               />
+              <span className="toggle__track"><span className="toggle__knob" /></span>
               Calibration Mode
             </label>
           </div>
@@ -1198,36 +1199,40 @@ export default function App() {
             </div>
             {debugOpen && (
               <>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
+                <label className="toggle" style={{ marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showJointFrames}
                     onChange={(e) => setDebugToggles(prev => ({ ...prev, showJointFrames: e.target.checked }))}
                   />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
                   Show Joint Frames
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
+                <label className="toggle" style={{ marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showStlOrigins}
                     onChange={(e) => setDebugToggles(prev => ({ ...prev, showStlOrigins: e.target.checked }))}
                   />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
                   Show STL Origins
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
+                <label className="toggle" style={{ marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showCalibrationAxes}
                     onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
                   />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
                   Show Calibration Axes
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
+                <label className="toggle" style={{ marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showCandidates ?? false}
                     onChange={(e) => setDebugToggles(prev => ({ ...prev, showCandidates: e.target.checked }))}
                   />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
                   Show Calibrator Candidates
                 </label>
               </>
