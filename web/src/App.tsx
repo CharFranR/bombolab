@@ -1327,7 +1327,7 @@ export default function App() {
                 <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
                 <button onClick={exitCalibration} style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88' }}>Salir</button>
               </div>
-              {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
+              {calibAnalyzerOpen && <div className="anim-in"><ServoCalibAnalyzer log={calibLog} /></div>}
             </div>
           )}
         {ikMode && robotMode !== 'drawing' && (
@@ -1645,6 +1645,7 @@ export default function App() {
               )}
               {drawingBlock && (
                 <div
+                  className="anim-pop"
                   style={{
                     padding: 8,
                     marginBottom: 6,
@@ -1710,6 +1711,7 @@ export default function App() {
               )}
               {cipraPanelJobs.length > 0 && (
                 <div
+                  className="anim-pop"
                   style={{
                     padding: 8,
                     marginBottom: 6,
@@ -1907,7 +1909,7 @@ export default function App() {
         {cipraJobs.lastNotice && !cipraNoticeDismissed && (
           <div
             role="alert"
-            className="glass-card"
+            className="glass-card anim-in"
             style={{
               position: 'absolute',
               top: 16,

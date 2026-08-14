@@ -61,6 +61,10 @@
   box-shadow: var(--glass-shadow);
   color: #e6edf3;
   font-family: var(--font-sans);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.glass-card:hover {
+  border-color: rgba(0, 242, 254, 0.25);
 }
 
 /* Uppercase panel title inside glass cards */
@@ -88,6 +92,7 @@
   backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--border);
   font-family: var(--font-sans);
+  transition: box-shadow 0.3s ease;
 }
 
 /* Status badge base: dot + label */
@@ -144,13 +149,18 @@
   font-family: var(--font-sans);
   cursor: pointer;
   transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.1s ease;
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.2s ease;
 }
 .pill-btn:hover {
-  border-color: rgba(0, 242, 254, 0.45);
+  transform: translateY(-1px);
+  border-color: rgba(0, 242, 254, 0.5);
   box-shadow: 0 0 12px rgba(0, 242, 254, 0.35);
+}
+.pill-btn:active {
+  transform: translateY(0);
 }
 .pill-btn:disabled {
   opacity: 0.45;
@@ -172,6 +182,19 @@
   background: rgba(0, 242, 254, 0.16);
   border-color: rgba(0, 242, 254, 0.45);
   color: var(--c-cyan);
+}
+.segmented__opt,
+.segmented__opt--active {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+}
+.segmented__opt:hover,
+.segmented__opt--active:hover {
+  transform: translateY(-1px);
+}
+.segmented__opt:active,
+.segmented__opt--active:active {
+  transform: translateY(0);
 }
 
 /* Joint slider: 2px rail + bright thumb (webkit + moz). The --fill custom
@@ -318,5 +341,49 @@
   }
   50% {
     opacity: 0.55;
+  }
+}
+
+/* ---- Entrance animations (D4) ---- */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Utility entrance classes — .anim-in for cards/overlays, .anim-pop for
+   small notice boxes. `both` fill mode keeps the first frame hidden. */
+.anim-in {
+  animation: fadeSlideIn 0.3s ease-out both;
+}
+
+.anim-pop {
+  animation: scaleIn 0.25s ease-out both;
+}
+
+/* Accessibility guard: collapse all motion for users who opt out. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
