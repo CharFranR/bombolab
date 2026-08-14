@@ -1330,7 +1330,7 @@ export default function App() {
               {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
             </div>
           )}
-        {ikMode && (
+        {ikMode && robotMode !== 'drawing' && (
           <>
             <div style={{ padding: '4px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 11, color: 'var(--c-gray)', marginRight: 4 }}>Dibujo:</span>
@@ -1465,11 +1465,57 @@ export default function App() {
           )}
         </div>
 
-        {/* Modo dibujo — the entry/exit toggle now lives in the bottom pill
-            bar (same enterDrawingMode/exitDrawingMode wiring); this block
-            keeps the full drawing config UI */}
-        {robotMode === 'drawing' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+
+        {/* Reset — moved to the bottom pill bar (handleReset) */}
+      </div>
+
+        {/* Modo dibujo — floating glass card (D2): drawing options moved out
+            of the sidebar so it does not saturate in drawing mode. Same
+            wiring/handlers/strings; the sidebar keeps the Dibujo selector
+            only in standalone IK mode (robotMode !== 'drawing'). */}
+        {robotMode === 'drawing' && ikMode && (
+          <div
+            className="glass-card anim-in"
+            style={{
+              position: 'fixed',
+              top: 64,
+              right: 16,
+              width: 320,
+              maxHeight: 'calc(100vh - 160px)',
+              overflowY: 'auto',
+              zIndex: 15,
+              padding: '12px 16px',
+            }}
+          >
+            <div style={{ fontSize: 11, color: 'var(--c-gray)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+              Drawing Mode
+            </div>
+            <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--c-gray)', marginRight: 4 }}>Dibujo:</span>
+              {[0, 1, 2].map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setDrawingMode(mode)}
+                  style={{
+                    flex: 1,
+                    padding: '3px 0',
+                    fontSize: 11,
+                    background: drawingMode === mode ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (drawingMode === mode ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: drawingMode === mode ? 'var(--c-cyan)' : 'var(--c-gray)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mode === 0 ? 'Off' : `Modo ${mode}`}
+                </button>
+              ))}
+
+            </div>
+            <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
+              Rueda mouse: sube/baja Z
+            </div>
+            <div style={{ padding: '8px 16px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-dim)', marginBottom: 6, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -1810,11 +1856,10 @@ export default function App() {
                   <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
               </div>
+            </div>
           </div>
         )}
 
-        {/* Reset — moved to the bottom pill bar (handleReset) */}
-      </div>
 
       {/* 3D Viewport */}
       <div className="app-viewport" style={{ flex: 1, position: 'relative' }}>
