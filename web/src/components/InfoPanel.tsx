@@ -25,7 +25,7 @@ export default function InfoPanel({ robot, rawFrames }: { robot: RobotDef; rawFr
   // the cyan accent, structure/logic unchanged.
   return (
     <div className="glass-card" style={{ padding: '12px 16px' }}>
-      <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: '#ccc', textTransform: 'uppercase', letterSpacing: 1 }}>
+      <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1 }}>
         End-Effector
       </h3>
 

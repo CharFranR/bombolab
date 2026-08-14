@@ -140,28 +140,28 @@ function PanelBody({ active, plan }: { active: TraceResult; plan: PlanSample[] |
   const deviation = useMemo(() => (plan ? deviationSeries(plan, active.samples) : null), [active, plan]);
   return (
     <>
-      <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#aaa', marginBottom: 4 }}>
+      <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--c-text-dim)', marginBottom: 4 }}>
         frames comandados {summary.framesWritten} · muestras {summary.samples} · dedupe{' '}
         {summary.dedupe}
         {summary.truncated ? ' · traza truncada' : ''}
       </div>
-      <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>
+      <div style={{ fontSize: 10, color: 'var(--c-gray)', marginBottom: 4 }}>
         duración real {fmtS(summary.durationRealMs)} s
         {summary.durationPlanMs !== null ? ` · planificada ${fmtS(summary.durationPlanMs)} s` : ''}
       </div>
       {summary.sendTimeError !== null && (
-        <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>
+        <div style={{ fontSize: 10, color: 'var(--c-gray)', marginBottom: 4 }}>
           error de envío (comandado vs planificado): media {fmtMs(summary.sendTimeError.mean)} ms · máx
           |{fmtMs(summary.sendTimeError.maxAbs)}| ms · σ {fmtMs(summary.sendTimeError.sigma)} ms
         </div>
       )}
-      <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>
+      <div style={{ fontSize: 10, color: 'var(--c-gray)', marginBottom: 4 }}>
         gaps entre frames: {summary.gaps.count} · min {fmtMs(summary.gaps.min)} ms · media{' '}
         {fmtMs(summary.gaps.mean)} ms · máx {fmtMs(summary.gaps.max)} ms · σ {fmtMs(summary.gaps.sigma)}{' '}
         ms · &gt;1 s: {summary.gaps.over1s}
       </div>
       {summary.deviation !== null && (
-        <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>
+        <div style={{ fontSize: 10, color: 'var(--c-gray)', marginBottom: 4 }}>
           desviación por joint (comandado vs planificado):{' '}
           {summary.deviation.perJoint
             .map((d, j) => `${JOINT_LABELS[j]} media ${fmtUs(d.mean)} µs · máx ${fmtUs(d.max)} µs`)
@@ -172,24 +172,24 @@ function PanelBody({ active, plan }: { active: TraceResult; plan: PlanSample[] |
       )}
       {jitter !== null && (
         <div data-chart="jitter" style={{ marginTop: 6 }}>
-          <div style={{ fontSize: 10, color: '#888' }}>Error de envío por muestra (jitter)</div>
+          <div style={{ fontSize: 10, color: 'var(--c-gray)' }}>Error de envío por muestra (jitter)</div>
           <SeriesChart values={jitter} unit="ms" />
         </div>
       )}
       {gaps.length > 0 && (
         <div data-chart="gaps" style={{ marginTop: 6 }}>
-          <div style={{ fontSize: 10, color: '#888' }}>Gaps entre frames · ref 1 s</div>
+          <div style={{ fontSize: 10, color: 'var(--c-gray)' }}>Gaps entre frames · ref 1 s</div>
           <SeriesChart values={gaps} unit="ms" refValue={1000} />
         </div>
       )}
       {deviation !== null && (
         <div data-chart="deviation" style={{ marginTop: 6 }}>
-          <div style={{ fontSize: 10, color: '#888', marginBottom: 2 }}>
+          <div style={{ fontSize: 10, color: 'var(--c-gray)', marginBottom: 2 }}>
             Desviación por joint (comandado vs planificado)
           </div>
           {deviation.map((series, j) => (
             <div key={j} style={{ marginBottom: 4 }}>
-              <span style={{ fontSize: 9, color: '#666' }}>{JOINT_LABELS[j]}</span>
+              <span style={{ fontSize: 9, color: 'var(--c-text-faint)' }}>{JOINT_LABELS[j]}</span>
               <SeriesChart values={series} unit="µs" />
             </div>
           ))}
@@ -227,7 +227,7 @@ export default function PlanExecPanel({
   return (
     <div className="glass-card" style={{ padding: '8px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: '#888' }}>Comandado vs planificado</span>
+        <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Comandado vs planificado</span>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>
           Importar CSV
           <input

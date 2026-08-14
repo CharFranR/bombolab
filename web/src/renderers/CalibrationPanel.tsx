@@ -29,10 +29,10 @@ function getTranslation(m: THREE.Matrix4): [number, number, number] {
 const stepBtnStyle: React.CSSProperties = {
   padding: '1px 3px',
   fontSize: 9,
-  background: '#2a2a2a',
-  border: '1px solid #444',
-  borderRadius: 3,
-  color: '#aaa',
+  background: 'rgba(255, 255, 255, 0.04)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  color: 'var(--c-text-dim)',
   cursor: 'pointer',
   fontFamily: 'monospace',
 };
@@ -43,9 +43,9 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '4px 6px',
   fontSize: 12,
-  background: '#3a3a3a',
-  border: '1px solid #555',
-  borderRadius: 4,
+  background: 'rgba(255, 255, 255, 0.04)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
   color: '#ddd',
   boxSizing: 'border-box',
 };
@@ -142,26 +142,26 @@ export default function CalibrationPanel({
       <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
         Calibration
       </div>
-      <label style={{ fontSize: 11, color: '#888' }}>STL File</label>
-      <select
-        value=""
-        onChange={handleTargetChange}
-        style={{
-          width: '100%',
-          padding: '6px 8px',
-          fontSize: 12,
-          background: '#3a3a3a',
-          border: '1px solid #555',
-          borderRadius: 4,
-          color: '#ddd',
-        }}
-      >
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
+        <select
+          value=""
+          onChange={handleTargetChange}
+          style={{
+            width: '100%',
+            padding: '6px 8px',
+            fontSize: 12,
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            color: '#ddd',
+          }}
+        >
         <option value="">-- Select a piece --</option>
         {ALL_STL_FILES.map((file) => (
           <option key={file} value={file}>{file}</option>
         ))}
       </select>
-      <span style={{ fontSize: 10, color: '#666' }}>
+      <span style={{ fontSize: 10, color: 'var(--c-text-faint)' }}>
         Pick a piece above to start calibrating
       </span>
     </div>
@@ -187,20 +187,20 @@ export default function CalibrationPanel({
       </div>
 
       {/* STL file selector */}
-      <label style={{ fontSize: 11, color: '#888' }}>STL File</label>
-      <select
-        value={target}
-        onChange={handleTargetChange}
-        style={{
-          width: '100%',
-          padding: '6px 8px',
-          fontSize: 12,
-          background: '#3a3a3a',
-          border: '1px solid #555',
-          borderRadius: 4,
-          color: '#ddd',
-        }}
-      >
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
+        <select
+          value={target}
+          onChange={handleTargetChange}
+          style={{
+            width: '100%',
+            padding: '6px 8px',
+            fontSize: 12,
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            color: '#ddd',
+          }}
+        >
         <option value="">-- Select --</option>
         {ALL_STL_FILES.map((file) => (
           <option key={file} value={file}>{file}</option>
@@ -208,7 +208,7 @@ export default function CalibrationPanel({
       </select>
 
       {/* Translation inputs */}
-      <label style={{ fontSize: 11, color: '#888' }}>Translation (mm) — drag gizmo or type/step</label>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>Translation (mm) — drag gizmo or type/step</label>
       <div style={{ display: 'flex', gap: 4 }}>
         {/* X */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -255,7 +255,7 @@ export default function CalibrationPanel({
       </div>
 
       {/* Global scale */}
-      <label style={{ fontSize: 11, color: '#888' }}>STL Scale (global)</label>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL Scale (global)</label>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         <input type="range" min={0.1} max={5} step={0.01} value={globalScale}
           onChange={(e) => { const v = parseFloat(e.target.value); setGlobalScale(v); stlScaleRef.current = v; }}
@@ -266,38 +266,38 @@ export default function CalibrationPanel({
       </div>
 
       {/* Gizmo mode toggle */}
-      <label style={{ fontSize: 11, color: '#888' }}>Gizmo</label>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>Gizmo</label>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={() => onGizmoModeChange('translate')}
           style={{
             flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
-            background: gizmoMode === 'translate' ? '#364' : '#3a3a3a',
-            border: `1px solid ${gizmoMode === 'translate' ? '#6a6' : '#555'}`,
-            borderRadius: 4, color: '#ccc',
+            background: gizmoMode === 'translate' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+            border: `1px solid ${gizmoMode === 'translate' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'}`,
+            borderRadius: 6, color: 'var(--c-text)',
           }}>↕ Translate</button>
         <button onClick={() => onGizmoModeChange('rotate')}
           style={{
             flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
-            background: gizmoMode === 'rotate' ? '#346' : '#3a3a3a',
-            border: `1px solid ${gizmoMode === 'rotate' ? '#66a' : '#555'}`,
-            borderRadius: 4, color: '#ccc',
+            background: gizmoMode === 'rotate' ? 'rgba(0, 102, 255, 0.18)' : 'rgba(255, 255, 255, 0.04)',
+            border: `1px solid ${gizmoMode === 'rotate' ? 'rgba(0, 102, 255, 0.5)' : 'var(--border)'}`,
+            borderRadius: 6, color: 'var(--c-text)',
           }}>↻ Rotate</button>
       </div>
 
       {/* Buttons */}
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
         <button onClick={onSave}
-          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#364', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: 'rgba(0, 242, 254, 0.16)', border: '1px solid rgba(0, 242, 254, 0.45)', borderRadius: 6, color: 'var(--c-cyan)', cursor: 'pointer' }}>
            Save
         </button>
         <button onClick={onUpload}
-          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#346', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: 'rgba(0, 102, 255, 0.18)', border: '1px solid rgba(0, 102, 255, 0.5)', borderRadius: 6, color: 'var(--c-cobalt)', cursor: 'pointer' }}>
            Upload
         </button>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={onReload}
-          style={{ flex: 1, padding: '4px 0', fontSize: 10, background: '#633', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          style={{ flex: 1, padding: '4px 0', fontSize: 10, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', borderRadius: 6, color: '#e88', cursor: 'pointer' }}>
            Reload defaults
         </button>
       </div>

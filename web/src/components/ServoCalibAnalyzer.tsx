@@ -178,7 +178,7 @@ function Histogram({ stats }: { stats: JointStats }) {
             style={{
               width: 14,
               height: Math.max(2, (c / maxCount) * 36),
-              background: c > 0 ? '#aa8' : '#2a2a2a',
+              background: c > 0 ? 'var(--c-cyan)' : 'rgba(255, 255, 255, 0.05)',
               borderRadius: 2,
             }}
           />
@@ -243,7 +243,7 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
   return (
     <div className="glass-card" style={{ padding: '8px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: '#888' }}>Analizador de backlash</span>
+        <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Analizador de backlash</span>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>
           Importar CSV
           <input
@@ -272,8 +272,8 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
       {stats.map((s) => (
         <div key={s.joint} style={{ marginBottom: 10, border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: 12, color: '#ccc', fontWeight: 600 }}>J{s.joint}</span>
-            <span style={{ fontSize: 10, color: '#888', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 12, color: 'var(--c-text)', fontWeight: 600 }}>J{s.joint}</span>
+            <span style={{ fontSize: 10, color: 'var(--c-gray)', fontFamily: 'monospace' }}>
               n={s.count} · media {s.mean.toFixed(1)}° · mediana {s.median.toFixed(1)}° · σ{' '}
               {s.sigma.toFixed(1)}° · [{s.min}–{s.max}]°
             </span>
@@ -284,7 +284,7 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
           </div>
           <Histogram stats={s} />
           <Scatter stats={s} />
-          <div style={{ fontSize: 9, color: '#666', marginTop: 2 }}>
+          <div style={{ fontSize: 9, color: 'var(--c-text-faint)', marginTop: 2 }}>
             {s.sigma <= 0.75 && s.count >= 3
               ? 'σ baja → compensación fija viable'
               : s.count >= 3
