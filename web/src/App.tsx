@@ -32,7 +32,7 @@ function LoadingScreen({ error }: { error?: string }) {
       {error ? (
         <p style={{ fontSize: 14, color: '#e55' }}>Error: {error}</p>
       ) : (
-        <p style={{ fontSize: 16, color: '#888' }}>Cargando WASM...</p>
+        <p style={{ fontSize: 16, color: 'var(--c-gray)' }}>Cargando WASM...</p>
       )}
     </div>
   );
@@ -908,10 +908,10 @@ export default function App() {
   const SERVO_NAMES = ['J1 yaw', 'J2 shoulder', 'J3 elbow', 'J4 roll', 'J5 pitch', 'Gripper'];
   const stepBtn: React.CSSProperties = {
     padding: '6px 10px',
-    background: '#3a3a3a',
-    border: 'none',
-    borderRadius: 4,
-    color: '#ccc',
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    color: 'var(--c-gray)',
     fontSize: 12,
     cursor: 'pointer',
   };
@@ -1162,8 +1162,8 @@ export default function App() {
 
         {/* Calibration mode — visible only in high fidelity */}
         {fidelityMode === 'high' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer' }}>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={calibrationMode}
@@ -1176,7 +1176,7 @@ export default function App() {
 
         {/* Debug visualization toggles — visible only in high fidelity */}
         {fidelityMode === 'high' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
             <div
               className="debug-acc"
               onClick={() => setDebugOpen(!debugOpen)}
@@ -1185,7 +1185,7 @@ export default function App() {
                 alignItems: 'center',
                 gap: 6,
                 fontSize: 11,
-                color: '#888',
+                color: 'var(--c-gray)',
                 marginBottom: debugOpen ? 6 : 0,
               }}
             >
@@ -1198,7 +1198,7 @@ export default function App() {
             </div>
             {debugOpen && (
               <>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showJointFrames}
@@ -1206,7 +1206,7 @@ export default function App() {
                   />
                   Show Joint Frames
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showStlOrigins}
@@ -1214,7 +1214,7 @@ export default function App() {
                   />
                   Show STL Origins
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showCalibrationAxes}
@@ -1222,7 +1222,7 @@ export default function App() {
                   />
                   Show Calibration Axes
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--c-text-dim)', cursor: 'pointer', marginBottom: 4 }}>
                   <input
                     type="checkbox"
                     checked={debugToggles.showCandidates ?? false}
@@ -1239,15 +1239,15 @@ export default function App() {
             row was removed (top bar badge shows it); this block now renders the
             serialError feedback ONLY, and only when an error exists. */}
         {serialError && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
             <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
           </div>
         )}
 
         {/* Calibración de servos (deadband/backlash) — manual */}
         {calibRunning && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-            <div style={{ fontSize: 11, color: '#aa8', marginBottom: 6 }}>{calibStatus}</div>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 11, color: 'var(--c-cyan)', marginBottom: 6 }}>{calibStatus}</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
                 {SERVO_NAMES.map((n, i) => (
                   <button
@@ -1258,10 +1258,10 @@ export default function App() {
                       minWidth: 60,
                       padding: '4px 2px',
                       fontSize: 10,
-                      background: calibJoint === i ? '#553' : '#3a3a3a',
-                      border: '1px solid ' + (calibJoint === i ? '#885' : '#444'),
-                      borderRadius: 3,
-                      color: calibJoint === i ? '#ddc' : '#888',
+                      background: calibJoint === i ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (calibJoint === i ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: calibJoint === i ? 'var(--c-cyan)' : 'var(--c-gray)',
                       cursor: 'pointer',
                     }}
                   >
@@ -1277,7 +1277,7 @@ export default function App() {
                   −5°
                 </button>
                 <button onClick={() => calibStep(-1)} style={stepBtn}>−1°</button>
-                <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#ccc', minWidth: 40, textAlign: 'center' }}>
+                <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--c-text)', minWidth: 40, textAlign: 'center' }}>
                   {calibPose[calibJoint]}°
                 </span>
                 <button onClick={() => calibStep(1)} style={stepBtn}>+1°</button>
@@ -1293,7 +1293,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => calibRecord(false)}
-                    style={{ ...stepBtn, background: '#633', flex: 1, padding: 8 }}
+                    style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88', flex: 1, padding: 8 }}
                   >
                      No se movió
                   </button>
@@ -1309,20 +1309,26 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setCalibAnalyzerOpen(!calibAnalyzerOpen)}
-                  style={{ ...stepBtn, flex: 1, background: calibAnalyzerOpen ? '#553' : '#3a3a3a' }}
+                  style={{
+                    ...stepBtn,
+                    flex: 1,
+                    background: calibAnalyzerOpen ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: calibAnalyzerOpen ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
+                    color: calibAnalyzerOpen ? 'var(--c-cyan)' : 'var(--c-gray)',
+                  }}
                 >
                   {calibAnalyzerOpen ? 'Ocultar análisis' : 'Analizar'}
                 </button>
                 <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
-                <button onClick={exitCalibration} style={{ ...stepBtn, background: '#633' }}>Salir</button>
+                <button onClick={exitCalibration} style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88' }}>Salir</button>
               </div>
               {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
             </div>
           )}
         {ikMode && (
           <>
-            <div style={{ padding: '4px 16px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>Dibujo:</span>
+            <div style={{ padding: '4px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--c-gray)', marginRight: 4 }}>Dibujo:</span>
               {[0, 1, 2].map(mode => (
                 <button
                   key={mode}
@@ -1331,10 +1337,10 @@ export default function App() {
                     flex: 1,
                     padding: '3px 0',
                     fontSize: 11,
-                    background: drawingMode === mode ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (drawingMode === mode ? '#885' : '#444'),
-                    borderRadius: 3,
-                    color: drawingMode === mode ? '#ddc' : '#888',
+                    background: drawingMode === mode ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (drawingMode === mode ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: drawingMode === mode ? 'var(--c-cyan)' : 'var(--c-gray)',
                     cursor: 'pointer',
                   }}
                 >
@@ -1354,7 +1360,7 @@ export default function App() {
         {ikMode && (
           <div style={{ padding: '8px 16px' }}>
             {ikTarget && (
-              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--c-gray)', marginTop: 4 }}>
                 Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
                 {ikError !== null && (
                   <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
@@ -1367,9 +1373,9 @@ export default function App() {
         )}
 
         {/* Run Analysis */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: '#888' }}>Análisis de workspace</span>
+            <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Análisis de workspace</span>
             {workspaceRunning && (
               <button
                 onClick={cancelWorkspace}
@@ -1447,7 +1453,7 @@ export default function App() {
             </div>
           )}
           {workspaceStats && (
-            <div style={{ fontSize: 10, color: '#888', marginTop: 6, fontFamily: 'monospace' }}>
+            <div style={{ fontSize: 10, color: 'var(--c-gray)', marginTop: 6, fontFamily: 'monospace' }}>
               válidos {workspaceStats.n_valid} · rechazados {workspaceStats.n_rejected} · reach{' '}
               {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
             </div>
@@ -1458,8 +1464,8 @@ export default function App() {
             bar (same enterDrawingMode/exitDrawingMode wiring); this block
             keeps the full drawing config UI */}
         {robotMode === 'drawing' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#aa8', marginBottom: 6, cursor: 'pointer' }}>
+          <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-dim)', marginBottom: 6, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={backlashEnabled}

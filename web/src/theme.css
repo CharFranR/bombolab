@@ -5,7 +5,7 @@
    lives here; every rule maps to the design token contract.
    ============================================================ */
 
-/* ---- Design tokens (24) ---- */
+/* ---- Design tokens (27) ---- */
 :root {
   /* Palette */
   --bg0: #0D1117;
@@ -13,6 +13,9 @@
   --c-cyan: #00F2FE;
   --c-cobalt: #0066FF;
   --c-gray: #8B949E;
+  --c-text: #d0d7de;
+  --c-text-dim: #9aa4b2;
+  --c-text-faint: #6e7681;
   --border: #FFFFFF15;
 
   /* Glass surfaces */

@@ -26,7 +26,7 @@ export default function JointControls({
 }) {
   return (
     <div className="glass-card" style={{ padding: '12px 16px' }}>
-      <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: '#ccc', textTransform: 'uppercase', letterSpacing: 1 }}>
+      <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1 }}>
         Joint Control
       </h3>
 
@@ -36,10 +36,10 @@ export default function JointControls({
         return (
           <div key={i} style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <label style={{ fontSize: 13, color: '#aaa' }}>
+              <label style={{ fontSize: 13, color: 'var(--c-text-dim)' }}>
                 {JOINT_NAMES[i] ?? `J${i + 1}`}
               </label>
-              <span style={{ fontSize: 12, color: '#888', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 12, color: 'var(--c-gray)', fontFamily: 'monospace' }}>
                 {(seg.q * DEG).toFixed(1)}°
               </span>
             </div>
@@ -58,10 +58,10 @@ export default function JointControls({
       })}
 
       {/* Gripper */}
-      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #333' }}>
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <label style={{ fontSize: 13, color: '#aaa' }}>Gripper</label>
-          <span style={{ fontSize: 12, color: '#888', fontFamily: 'monospace' }}>
+          <label style={{ fontSize: 13, color: 'var(--c-text-dim)' }}>Gripper</label>
+          <span style={{ fontSize: 12, color: 'var(--c-gray)', fontFamily: 'monospace' }}>
             {gripper}%
           </span>
         </div>
