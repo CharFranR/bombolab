@@ -289,16 +289,15 @@ export default function StlRobotScene({
       {/* Radial-fade isometric grid (D5) — same recipe as SimpleRobotScene */}
       <Grid
         position={[0, -0.5, 0]}
-        args={[300, 300]}
+        args={[1600, 1600]}
         cellSize={10}
-        cellThickness={1}
-        cellColor="#6b6b78"
+        cellThickness={0.35}
+        cellColor="#5f5f6b"
         sectionSize={50}
-        sectionThickness={1.6}
-        sectionColor="#7d8796"
-        fadeDistance={900}
-        fadeStrength={0.6}
-        infiniteGrid
+        sectionThickness={0.9}
+        sectionColor="#70798a"
+        fadeDistance={780}
+        fadeStrength={1.1}
       />
       {entries.map((entry, i) => {
         const isTarget = targetEntry && targetEntry.index === i;

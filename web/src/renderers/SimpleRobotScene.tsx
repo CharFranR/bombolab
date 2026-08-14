@@ -9,7 +9,7 @@ import IkTarget from '../components/IkTarget';
 
 const COLORS = {
   floor: '#2a2a30',
-  grid: '#6b6b78',
+  grid: '#5f5f6b',
   link: '#e8a040',
   joint: '#ffb432',
   base: '#787888',
@@ -194,16 +194,15 @@ export default function SimpleRobotScene({
       {/* Piso */}
       <Grid
         position={[0, -0.5, 0]}
-        args={[300, 300]}
+        args={[1600, 1600]}
         cellSize={10}
-        cellThickness={1}
+        cellThickness={0.35}
         cellColor={COLORS.grid}
         sectionSize={50}
-        sectionThickness={1.6}
-        sectionColor="#7d8796"
-        fadeDistance={900}
-        fadeStrength={0.6}
-        infiniteGrid
+        sectionThickness={0.9}
+        sectionColor="#70798a"
+        fadeDistance={780}
+        fadeStrength={1.1}
       />
 
       {/* Ejes */}
