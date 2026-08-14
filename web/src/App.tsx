@@ -1970,9 +1970,12 @@ export default function App() {
 
         {/* Right column (EE-1): floating END-EFFECTOR glass card + Fidelity
             segmented control, moved here from the sidebar (bottom-right
-            overlay, above the pill bar). Wiring identical: same state setter. */}
+            overlay, above the pill bar). Wiring identical: same state setter.
+            E2: while the drawing card is open (fixed top 64 / right 16 / z 15),
+            the column drops below it (top: 520) and slides back up after. */}
         <div style={{
           position: 'absolute',
+          top: robotMode === 'drawing' ? 520 : 'auto',
           bottom: 92,
           right: 16,
           zIndex: 15,
@@ -1981,6 +1984,7 @@ export default function App() {
           alignItems: 'stretch',
           gap: 10,
           width: 260,
+          transition: 'top .3s ease',
         }}>
           <InfoPanel robot={robot} rawFrames={rawFrames} />
           <div
