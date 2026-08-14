@@ -9,7 +9,7 @@ import IkTarget from '../components/IkTarget';
 
 const COLORS = {
   floor: '#2a2a30',
-  grid: '#55555f',
+  grid: '#6b6b78',
   link: '#e8a040',
   joint: '#ffb432',
   base: '#787888',
@@ -196,13 +196,13 @@ export default function SimpleRobotScene({
         position={[0, -0.5, 0]}
         args={[300, 300]}
         cellSize={10}
-        cellThickness={0.75}
+        cellThickness={1}
         cellColor={COLORS.grid}
         sectionSize={50}
-        sectionThickness={1.25}
-        sectionColor="#6a7380"
-        fadeDistance={600}
-        fadeStrength={1}
+        sectionThickness={1.6}
+        sectionColor="#7d8796"
+        fadeDistance={900}
+        fadeStrength={0.6}
         infiniteGrid
       />
 

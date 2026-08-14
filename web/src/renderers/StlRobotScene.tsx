@@ -291,13 +291,13 @@ export default function StlRobotScene({
         position={[0, -0.5, 0]}
         args={[300, 300]}
         cellSize={10}
-        cellThickness={0.75}
-        cellColor="#55555f"
+        cellThickness={1}
+        cellColor="#6b6b78"
         sectionSize={50}
-        sectionThickness={1.25}
-        sectionColor="#6a7380"
-        fadeDistance={600}
-        fadeStrength={1}
+        sectionThickness={1.6}
+        sectionColor="#7d8796"
+        fadeDistance={900}
+        fadeStrength={0.6}
         infiniteGrid
       />
       {entries.map((entry, i) => {
