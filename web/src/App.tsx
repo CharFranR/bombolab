@@ -1149,12 +1149,10 @@ export default function App() {
           zIndex: 10,
         }}
       >
-        {/* Header */}
+        {/* Header — panel label only: the brand already lives in the top bar,
+            so the redundant sidebar h1 was removed (dedup). */}
         <div style={{ padding: '16px', borderBottom: '1px solid #333' }}>
-          <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#eee' }}>
-            Bombolab
-          </h1>
-          <p style={{ fontSize: 12, color: '#666', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 13, color: '#aaa', margin: 0 }}>
             FABRI Creator · 5-DOF
           </p>
         </div>
@@ -1245,34 +1243,14 @@ export default function App() {
           </div>
         )}
 
-        {/* Conexión robot físico (WebSerial) */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: connected ? '#4cd964' : '#666',
-            }} />
-            <span style={{ fontSize: 12, color: '#888' }}>
-              {connected ? 'Conectado' : 'Desconectado'}
-            </span>
-          </div>
-          {serialError && (
+        {/* Conexión robot físico (WebSerial) — the dot + Conectado/Desconectado
+            row was removed (top bar badge shows it); this block now renders the
+            serialError feedback ONLY, and only when an error exists. */}
+        {serialError && (
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
             <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
-          )}
-        </div>
-
-        {/* Conexión CIPRA (subscriber) — status indicator, never a modal (R15) */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: cipraConn === 'connected' ? '#4cd964' : cipraConn === 'connecting' ? '#c8a84' : '#666',
-            }} />
-            <span role="status" style={{ fontSize: 12, color: '#888' }}>
-              {getConnectionStatusLabel(cipraConn)}
-            </span>
           </div>
-        </div>
+        )}
 
         {/* Calibración de servos (deadband/backlash) — manual */}
         {calibRunning && (
@@ -2077,7 +2055,7 @@ export default function App() {
           <span className={'badge ' + (connected ? 'badge--online' : 'badge--offline')}>
             {connected ? 'Conectado' : 'Desconectado'}
           </span>
-          <span className={'badge ' + (cipraConn === 'connected' ? 'badge--online' : 'badge--offline')}>
+          <span role="status" className={'badge ' + (cipraConn === 'connected' ? 'badge--online' : 'badge--offline')}>
             {getConnectionStatusLabel(cipraConn)}
           </span>
           <button
