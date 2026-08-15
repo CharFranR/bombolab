@@ -1,6 +1,6 @@
 import { useMemo, useRef, useCallback } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
-import { Grid, TransformControls } from '@react-three/drei';
+import { Grid, Line, TransformControls } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
@@ -106,17 +106,16 @@ export default function StlRobotScene({
     [workspacePoints],
   );
 
-  // Full trace geometry mounted once; the line is revealed progressively
-  // with geometry.setDrawRange in useFrame. Reads traceProgressRef (a ref
-  // the app updates in its rAF loop) so this scene is NOT re-rendered by
-  // React on every frame delta — only setDrawRange changes, GPU-side.
-  const traceGeoRef = useRef<THREE.BufferGeometry>(null);
-  const traceArray = useMemo(
-    () => (tracePath && tracePath.length > 0 ? new Float32Array(tracePath.flat()) : null),
-    [tracePath],
-  );
+  // Full trace line mounted once — drei Line (Line2 + LineMaterial): pixel
+  // width + antialiasing, because core three.js 1px lines are effectively
+  // invisible at floor level (sub-pixel over the bright pool/grid). Revealed
+  // progressively with geometry.setDrawRange in useFrame. Reads
+  // traceProgressRef (a ref the app updates in its rAF loop) so this scene is
+  // NOT re-rendered by React on every frame delta — only setDrawRange
+  // changes, GPU-side.
+  const traceLineRef = useRef<any>(null);
   useFrame(() => {
-    const g = traceGeoRef.current;
+    const g = traceLineRef.current?.geometry as THREE.BufferGeometry | undefined;
     if (!g) return;
     const attr = g.getAttribute('position');
     if (!attr) return;
@@ -354,20 +353,15 @@ export default function StlRobotScene({
           <pointsMaterial size={5} vertexColors transparent opacity={0.5} depthWrite={false} />
         </points>
       )}
-      {/* Progressive trace of the drawing path (three.js coords, z = plane).
-          Full geometry mounts once; setDrawRange in useFrame reveals it. */}
-      {tracePath && tracePath.length > 1 && traceArray && (
-        <line>
-          <bufferGeometry ref={traceGeoRef}>
-            <bufferAttribute
-              attach="attributes-position"
-              count={tracePath.length}
-              array={traceArray}
-              itemSize={3}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color="#ff8866" linewidth={2} />
-        </line>
+      {/* Progressive trace of the drawing path (three.js coords, on the floor).
+          drei Line: pixel-width, antialiased stroke that reads on the pool. */}
+      {tracePath && tracePath.length > 1 && (
+        <Line
+          ref={traceLineRef}
+          points={tracePath as [number, number, number][]}
+          color="#ff8866"
+          lineWidth={3}
+        />
       )}
       {/* IK target */}
       {ikTarget && onIkTargetChange && (
