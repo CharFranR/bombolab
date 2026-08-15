@@ -13,6 +13,19 @@ export const gizmoLink = {
   quaternion: new THREE.Quaternion(),
 };
 
+// ─── GizmoSync: publish main-camera orientation every frame ────────────────
+// Mounted INSIDE the main canvas. useFrame runs after the scene renders, so
+// the gizmo always mirrors the camera's final (post-orbit, post-flight)
+// orientation. The two canvases never re-render each other — the quaternion
+// crosses the boundary by value through the module-level singleton.
+
+export function GizmoSync() {
+  useFrame(({ camera }) => {
+    gizmoLink.quaternion.copy(camera.quaternion);
+  });
+  return null;
+}
+
 // ─── Gizmo visuals ─────────────────────────────────────────────────────────
 // Fixed orthographic projection (no perspective distortion) with a dedicated
 // camera at [0,0,7] looking at the origin. Only the group rotates — the
