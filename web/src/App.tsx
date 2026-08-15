@@ -1132,8 +1132,11 @@ export default function App() {
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
       {/* Sidebar — floating glass column (D9): position clears the 44px fixed
-          top bar (top 56) and the centered pill bar (bottom 92). All child
-          config UIs below keep their exact order, content and wiring. */}
+          top bar (top 56) and the centered pill bar (bottom 92). CAD
+          contextual-inspector layout: JointControls, End-Effector (moved from
+          the right column), Fidelity, "Análisis" toggle, then the persistent
+          toggles. The whole panel scrolls (overflowY auto) — blocks flow in
+          order, JointControls keeps its own styling. */}
       <div
         className="glass-card"
         style={{
@@ -1145,12 +1148,12 @@ export default function App() {
           minWidth: 280,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+          overflowY: 'auto',
           zIndex: 10,
         }}
       >
         {/* Joint sliders */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div>
           <JointControls
             segments={robot.segments}
             gripper={gripper}
@@ -1158,6 +1161,34 @@ export default function App() {
             onChange={handleJointChange}
             disabled={ikMode}
           />
+        </div>
+
+        {/* End-Effector (EE-1) — moved from the right column into the left
+            panel (CAD inspector layout). Component and wiring byte-identical. */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+          <InfoPanel robot={robot} rawFrames={rawFrames} />
+        </div>
+
+        {/* Fidelity segmented control — moved from the right column. Wiring
+            byte-identical (same state setter). */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Fidelidad:</span>
+          <div className="segmented">
+            <button
+              onClick={() => setFidelityMode('low')}
+              className={fidelityMode === 'low' ? 'segmented__opt--active' : undefined}
+              style={segmentOptStyle}
+            >
+              Low
+            </button>
+            <button
+              onClick={() => setFidelityMode('high')}
+              className={fidelityMode === 'high' ? 'segmented__opt--active' : undefined}
+              style={segmentOptStyle}
+            >
+              High
+            </button>
+          </div>
         </div>
 
         {/* Calibration mode — visible only in high fidelity */}
@@ -1938,49 +1969,6 @@ export default function App() {
             </div>
           </div>
         )}
-
-        {/* Right column (EE-1): floating END-EFFECTOR glass card + Fidelity
-            segmented control, moved here from the sidebar (bottom-right
-            overlay, above the pill bar). Wiring identical: same state setter.
-            E2: while the drawing card is open (fixed top 64 / right 16 / z 15),
-            the column drops below it (top: 520) and slides back up after. */}
-        <div style={{
-          position: 'absolute',
-          top: robotMode === 'drawing' ? 520 : 'auto',
-          bottom: 92,
-          right: 16,
-          zIndex: 15,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'stretch',
-          gap: 10,
-          width: 260,
-          transition: 'top .3s ease',
-        }}>
-          <InfoPanel robot={robot} rawFrames={rawFrames} />
-          <div
-            className="glass-card"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 12px' }}
-          >
-            <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Fidelidad:</span>
-            <div className="segmented">
-              <button
-                onClick={() => setFidelityMode('low')}
-                className={fidelityMode === 'low' ? 'segmented__opt--active' : undefined}
-                style={segmentOptStyle}
-              >
-                Low
-              </button>
-              <button
-                onClick={() => setFidelityMode('high')}
-                className={fidelityMode === 'high' ? 'segmented__opt--active' : undefined}
-                style={segmentOptStyle}
-              >
-                High
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* Bottom pill bar (PB-1): dark pills hosting the pre-existing action
             handlers, moved from the sidebar buttons — wiring unchanged.
