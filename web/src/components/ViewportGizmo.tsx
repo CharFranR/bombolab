@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Edges, Html, useCursor } from '@react-three/drei';
 import * as THREE from 'three';
@@ -9,6 +9,20 @@ import * as THREE from 'three';
 // quaternion every frame; the gizmo scene mirrors it so the cube/axes always
 // show the current view orientation (Blender-style navigation gizmo).
 
+// Drag manipulation request: the gizmo canvas accumulates pointer deltas from
+// window-level pointermove/pointerup listeners and publishes them here;
+// GizmoSync consumes them per-frame so motion stays smooth. All drag modes
+// manipulate the VIEW (camera / orbit target) — never the robot model.
+export type GizmoDragMode = 'pan' | 'panAxis';
+
+export type GizmoDrag = {
+  mode: GizmoDragMode;
+  // World-space unit axis for axis-constrained pan (null for free pan).
+  axis: THREE.Vector3 | null;
+  dx: number; // accumulated horizontal delta (px, DOM sign: right = +)
+  dy: number; // accumulated vertical delta (px, DOM sign: down = +)
+};
+
 export const gizmoLink = {
   quaternion: new THREE.Quaternion(),
   // Distance from the main camera to the orbit target, published each frame so
@@ -16,6 +30,10 @@ export const gizmoLink = {
   cameraDistance: 900,
   // Click-to-fly request: set by the gizmo canvas, consumed by GizmoSync.
   flight: null as { dir: THREE.Vector3; dist: number } | null,
+  // Active drag request: set by the gizmo canvas on pointerdown (empty deltas),
+  // accumulated on pointermove, cleared on pointerup. GizmoSync applies the
+  // deltas per-frame and zeroes them after consuming.
+  drag: null as GizmoDrag | null,
 };
 
 // ─── Click-to-fly constants ────────────────────────────────────────────────
@@ -28,6 +46,21 @@ const FLY_DURATION = 0.7; // seconds — snappy but not jarring
 const ROBOT_TARGET = new THREE.Vector3(0, 200, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 const scratchMatrix = new THREE.Matrix4();
+// Scratch vectors/quaternion for per-frame drag math (no allocations).
+const rightVec = new THREE.Vector3();
+const upVec = new THREE.Vector3();
+const panVec = new THREE.Vector3();
+const axisCam = new THREE.Vector3();
+const camInvQ = new THREE.Quaternion();
+
+// ─── Drag manipulation constants ────────────────────────────────────────────
+// Press+release with less than CLICK_SLOP_PX of movement is a CLICK (keeps the
+// existing click-to-fly). Anything at/over the threshold is a DRAG (pan /
+// axis-constrained pan — orbit arrives with the rings).
+const CLICK_SLOP_PX = 4;
+// Feel factor: apply 80% of the geometrically exact world-per-pixel scale so
+// pans track the cursor slightly relaxed (AutoCAD-style, never 1:1 twitchy).
+const PAN_FEEL = 0.8;
 
 type Flight = {
   elapsed: number;
@@ -54,6 +87,10 @@ function requestFlight(dir: THREE.Vector3) {
 
 export function GizmoSync() {
   const flightRef = useRef<Flight | null>(null);
+  // Owns the controls.enabled=false window during gizmo drags so we only
+  // restore the flag when a drag we started actually ends (a concurrent IK
+  // drag on the main canvas disables controls through its own React prop).
+  const dragActiveRef = useRef(false);
 
   useFrame((state, delta) => {
     const camera = state.camera;
@@ -84,7 +121,9 @@ export function GizmoSync() {
         flightRef.current = null;
         controls.enabled = true;
       }
-    } else if (gizmoLink.flight) {
+      return; // the flight owns the camera this frame — no drag consumption
+    }
+    if (gizmoLink.flight) {
       // Consume the request and build the end pose. The gizmo cube's local
       // axes ARE the world axes, so the clicked face/axis direction is used
       // directly as the world direction. three's Matrix4.lookAt is pole-safe
@@ -101,6 +140,51 @@ export function GizmoSync() {
         endPos,
         endQuat: new THREE.Quaternion().setFromRotationMatrix(scratchMatrix),
       };
+    }
+
+    // ─── View-space drag manipulation (pan / axis-constrained pan) ─────────
+    // Deltas published by the gizmo canvas are consumed per frame, so the
+    // camera + orbit target move continuously while the pointer moves. Only
+    // the VIEW moves — the robot model, IK, gcode and drawing-plane semantics
+    // are untouched (drag never reaches the scene graph).
+    const drag = gizmoLink.drag;
+    if (drag) {
+      const { mode, axis, dx, dy } = drag;
+      drag.dx = 0;
+      drag.dy = 0; // consumed
+      dragActiveRef.current = true;
+      controls.enabled = false;
+
+      // World-per-pixel at the target depth: distance * 2*tan(fov/2) mapped
+      // onto the canvas height. state.size is the MAIN canvas size in px.
+      const dist = camera.position.distanceTo(controls.target);
+      const fov = (camera as THREE.PerspectiveCamera).fov ?? 35;
+      const worldPerPx =
+        (dist * 2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) /
+        state.size.height;
+      const scale = worldPerPx * PAN_FEEL;
+
+      if (mode === 'pan') {
+        // Face drag: translate camera + target in the view plane. The robot
+        // follows the cursor: a rightward drag (dx>0) moves the camera left.
+        rightVec.set(1, 0, 0).applyQuaternion(camera.quaternion);
+        upVec.set(0, 1, 0).applyQuaternion(camera.quaternion);
+        panVec.set(0, 0, 0).addScaledVector(rightVec, -dx * scale);
+        panVec.addScaledVector(upVec, dy * scale);
+        camera.position.add(panVec);
+        controls.target.add(panVec);
+      } else if (mode === 'panAxis' && axis) {
+        // Axis drag: project the screen delta onto the world axis (in camera
+        // space) and translate camera + target ONLY along that axis.
+        axisCam.copy(axis).applyQuaternion(camInvQ.copy(camera.quaternion).invert());
+        const dot = axisCam.x * dx + axisCam.y * -dy; // screen delta in camera space
+        const delta = dot * scale;
+        camera.position.addScaledVector(axis, -delta);
+        controls.target.addScaledVector(axis, -delta);
+      }
+    } else if (dragActiveRef.current) {
+      dragActiveRef.current = false;
+      controls.enabled = true;
     }
   });
 
@@ -135,12 +219,35 @@ const RING_ARC = 2.4; // radians ≈ 137° — arc rings, not full circles
 const RING_OPACITY = 0.7;
 const GUIDE_RADIUS = 1.95; // dashed guide circle around the whole assembly
 
+// ─── Drag session (gizmo canvas) ─────────────────────────────────────────────
+// Started by R3F pointerdown on a face/axis/ring, driven by WINDOW-level
+// pointermove/pointerup listeners (the pointer regularly leaves the small
+// mini canvas mid-drag). Deltas are accumulated in DOM pixel space (dx right,
+// dy down) and published to gizmoLink.drag for GizmoSync to consume per-frame.
+// On release, movement below CLICK_SLOP_PX is treated as a CLICK → the stored
+// flyDir triggers the existing click-to-fly; anything above is a DRAG.
+
+type DragSession = {
+  mode: GizmoDragMode;
+  axis: THREE.Vector3 | null;
+  flyDir: THREE.Vector3 | null; // click-to-fly direction (faces/axes only)
+  pointerId: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  dx: number;
+  dy: number;
+};
+
 function GizmoScene() {
   const group = useRef<THREE.Group>(null!);
   const cubeRef = useRef<THREE.Mesh>(null!);
   const [faceHovered, setFaceHovered] = useState<number | null>(null);
   const canvas = useThree((s) => s.gl.domElement);
   useCursor(faceHovered !== null, 'pointer', 'auto', canvas);
+
+  const sessionRef = useRef<DragSession | null>(null);
 
   // Fixed materials for the six cube faces (BoxGeometry group order:
   // +X, -X, +Y, -Y, +Z, -Z). MeshBasicMaterial = unlit flat CAD look.
@@ -162,6 +269,76 @@ function GizmoScene() {
     // sees (same as drei's GizmoHelper: invert(mainCamera.matrix)).
     group.current.quaternion.copy(gizmoLink.quaternion).invert();
   });
+
+  // Window-level pointer listeners — mounted once. They only act while a
+  // session is active, so plain hovers on the main canvas are unaffected.
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      const s = sessionRef.current;
+      if (!s || e.pointerId !== s.pointerId) return;
+      s.dx += e.clientX - s.lastX;
+      s.dy += e.clientY - s.lastY;
+      s.lastX = e.clientX;
+      s.lastY = e.clientY;
+      if (gizmoLink.drag) {
+        gizmoLink.drag.dx = s.dx;
+        gizmoLink.drag.dy = s.dy;
+      }
+    };
+    const handleEnd = (e: PointerEvent, cancelled: boolean) => {
+      const s = sessionRef.current;
+      if (!s || e.pointerId !== s.pointerId) return;
+      sessionRef.current = null;
+      gizmoLink.drag = null; // → GizmoSync restores controls.enabled
+      const moved =
+        Math.hypot(e.clientX - s.startX, e.clientY - s.startY) >= CLICK_SLOP_PX;
+      if (!cancelled && !moved && s.flyDir) requestFlight(s.flyDir);
+    };
+    const handleUp = (e: PointerEvent) => handleEnd(e, false);
+    const handleCancel = (e: PointerEvent) => handleEnd(e, true);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleCancel);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleCancel);
+    };
+  }, []);
+
+  // Started by R3F onPointerDown on a cube face / axis shaft / ring. The
+  // empty drag request published here makes GizmoSync lock the orbit controls
+  // immediately (even a plain click disables them until release — no jitter).
+  const startDrag = useCallback(
+    (
+      e: ThreeEvent<PointerEvent>,
+      mode: GizmoDragMode,
+      axis: THREE.Vector3 | null,
+      flyDir: THREE.Vector3 | null,
+    ) => {
+      if (e.button !== 0) return; // left button / primary touch only
+      e.stopPropagation();
+      sessionRef.current = {
+        mode,
+        axis,
+        flyDir,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        dx: 0,
+        dy: 0,
+      };
+      gizmoLink.drag = {
+        mode,
+        axis: axis ? axis.clone() : null,
+        dx: 0,
+        dy: 0,
+      };
+    },
+    [],
+  );
 
   const handleFaceOver = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
@@ -190,10 +367,14 @@ function GizmoScene() {
         material={faceMaterials}
         onPointerOver={handleFaceOver}
         onPointerOut={handleFaceOut}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (e.face?.normal) requestFlight(e.face.normal);
-        }}
+        onPointerDown={(e) =>
+          startDrag(
+            e,
+            'pan',
+            null,
+            e.face?.normal ? e.face.normal.clone() : null,
+          )
+        }
       >
         <boxGeometry args={[1, 1, 1]} />
         <Edges color={CUBE_EDGES} lineWidth={1} />
@@ -217,7 +398,7 @@ function GizmoScene() {
 
       {/* Cartesian axes with arrowheads + X/Y/Z labels */}
       {AXIS_DEFS.map((axis) => (
-        <Axis key={axis.key} axis={axis} cubeRef={cubeRef} />
+        <Axis key={axis.key} axis={axis} cubeRef={cubeRef} onDragStart={startDrag} />
       ))}
     </group>
   );
@@ -311,9 +492,17 @@ function GuideCircle() {
   return <primitive object={line} />;
 }
 
-function Axis({ axis, cubeRef }: {
+type DragStarter = (
+  e: ThreeEvent<PointerEvent>,
+  mode: GizmoDragMode,
+  axis: THREE.Vector3 | null,
+  flyDir: THREE.Vector3 | null,
+) => void;
+
+function Axis({ axis, cubeRef, onDragStart }: {
   axis: (typeof AXIS_DEFS)[number];
   cubeRef: RefObject<THREE.Mesh>;
+  onDragStart: DragStarter;
 }) {
   const [hovered, setHovered] = useState(false);
   const canvas = useThree((s) => s.gl.domElement);
@@ -329,8 +518,10 @@ function Axis({ axis, cubeRef }: {
         : [0, 0, 0];
 
   // Like the cube, the axis shafts are world-aligned (the parent group only
-  // rotates the whole gizmo) → clicking an axis flies straight to that view.
+  // rotates the whole gizmo): pressing an axis starts an axis-constrained pan,
+  // and releasing without movement flies straight to that axis view.
   const color = hovered ? axis.hover : axis.color;
+  const axisVec = new THREE.Vector3(...axis.dir);
 
   return (
     <group rotation={rotation}>
@@ -343,10 +534,7 @@ function Axis({ axis, cubeRef }: {
           e.stopPropagation();
           setHovered(false);
         }}
-        onClick={(e) => {
-          e.stopPropagation();
-          requestFlight(new THREE.Vector3(...axis.dir));
-        }}
+        onPointerDown={(e) => onDragStart(e, 'panAxis', axisVec, axisVec)}
       >
         {/* Shaft from the cube face (0.5) out to ~1.1 */}
         <mesh position={[0, 0.8, 0]}>
