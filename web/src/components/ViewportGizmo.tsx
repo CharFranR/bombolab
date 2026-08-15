@@ -224,7 +224,7 @@ const CUBE_EDGES = 'rgba(23, 32, 46, 0.4)';
 // ─── Surrounding geometry (premium CAD look) ────────────────────────────────
 // Negative semi-axes start at the cube center and reach past the rings;
 // the portion inside the opaque cube is hidden by depth. Dashed lines need
-// computeLineDistances() before they render (done via onUpdate).
+// computeLineDistances() before they render (done when building the Line).
 
 const NEG_AXIS_LENGTH = 1.4;
 const RING_RADIUS = 1.55; // rotation rings in the plane perpendicular to each axis
