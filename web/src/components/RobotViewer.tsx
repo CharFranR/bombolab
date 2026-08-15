@@ -186,7 +186,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
             1100 (origin at 900) keep a legacy-style bright cone wrapping the whole
             robot without washing the far grid. Shared Canvas level → benefits BOTH
             fidelity views. */}
-        <ambientLight intensity={0.3} />
+        <ambientLight intensity={0.55} />
         <directionalLight position={[400, 600, 300]} intensity={1.5} castShadow />
         <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
@@ -199,7 +199,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           distance={1100}
           color="#ffffff"
         />
-        <hemisphereLight args={['#8888ff', '#444422', 0.35]} />
+        <hemisphereLight args={['#8888ff', '#444422', 0.5]} />
 
         {/* Visible floor light pool under the robot (y just above the grid plane,
             rotated flat, centered on the robot's origin). Unlit decal → always reads
