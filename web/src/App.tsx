@@ -631,6 +631,12 @@ export default function App() {
       loadGcodeText(text, name, {
         safeDrawingArea: () => safeDrawingArea(DRAW_PLANE_Z),
         parseGcode,
+        // MUST match the drawing plane: loadGcodeText defaults to 80/85, which
+        // made gcode/CIPRA commands parse at z=80 — the trace filter (now at
+        // DRAW_PLANE_Z=70) then produced an EMPTY trace and the drawing
+        // floated above the floor again.
+        planeZ: DRAW_PLANE_Z,
+        travelZ: TRAVEL_PLANE_Z,
         startTrajectory,
         setValidating,
         setGcodeError,
