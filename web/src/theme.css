@@ -409,6 +409,90 @@
   cursor: not-allowed;
 }
 
+/* Premium custom dropdown (replaces the native <select>: the OS-native popup
+   ignores `color-scheme` on some browsers — white tray on light OS themes —
+   so the menu is hand-rolled dark glass matching the premium theme) */
+.pselect {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+.pselect__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--c-text);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.pselect__trigger:hover {
+  border-color: rgba(0, 242, 254, 0.5);
+}
+.pselect__trigger:focus-visible {
+  outline: 1px solid rgba(0, 242, 254, 0.5);
+  border-color: rgba(0, 242, 254, 0.45);
+}
+.pselect__chevron {
+  flex: none;
+  color: var(--c-gray);
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.pselect__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: transparent;
+}
+.pselect__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border);
+  background: rgba(13, 17, 23, 0.97);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-sans);
+}
+.pselect__opt {
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: var(--c-text-dim);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.pselect__opt:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--c-text);
+}
+.pselect__opt--sel {
+  color: var(--c-cyan);
+}
+.pselect__opt--sel:hover {
+  color: var(--c-cyan);
+}
+
 /* ---- Keyframes ---- */
 @keyframes badgePulse {
   0%,

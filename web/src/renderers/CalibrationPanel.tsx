@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { ALL_STL_FILES } from './stlMapping';
 
@@ -40,6 +40,97 @@ const stepBtnStyle: React.CSSProperties = {
 };
 
 const STEPS = [-50, -10, -1, 1, 10, 50] as const;
+
+// ─── PremiumSelect ───────────────────────────────────────────────────────────
+// Custom dropdown replacing the native <select>. The OS-native popup ignores
+// `color-scheme` on some browsers (white tray on light OS themes), so the menu
+// is hand-rolled dark glass matching the premium theme.
+
+interface PremiumSelectProps {
+  value: string;
+  options: string[];
+  placeholder: string;
+  onChange: (value: string | null) => void;
+}
+
+function PremiumSelect({ value, options, placeholder, onChange }: PremiumSelectProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside + Escape close. Document-level because .glass-card applies
+  // backdrop-filter, which turns the panel into the fixed overlay's containing
+  // block — the overlay alone cannot cover the whole viewport.
+  useEffect(() => {
+    if (!open) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="pselect">
+      <button
+        type="button"
+        className="pselect__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: value ? 'var(--c-text)' : 'var(--c-text-faint)',
+          }}
+        >
+          {value || placeholder}
+        </span>
+        <span className="pselect__chevron" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <>
+          {/* Transparent click-catcher behind the menu; the document mousedown
+              listener above covers clicks outside the panel. */}
+          <div className="pselect__overlay" onClick={() => setOpen(false)} />
+          <div className="pselect__menu" role="listbox">
+            {options.map((option) => (
+              <div
+                key={option}
+                role="option"
+                aria-selected={value === option}
+                className={'pselect__opt' + (value === option ? ' pselect__opt--sel' : '')}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+              >
+                {value === option && (
+                  <span style={{ color: 'var(--c-cyan)', marginRight: 6 }}>✓</span>
+                )}
+                {option}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -110,11 +201,6 @@ export default function CalibrationPanel({
     updateTranslation(x, y, v);
   }, [x, y, updateTranslation]);
 
-  const handleTargetChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    onTargetChange(val || null);
-  }, [onTargetChange]);
-
   if (!target) return (
     <div
       className="glass-card"
@@ -134,17 +220,12 @@ export default function CalibrationPanel({
         Calibration
       </div>
       <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
-        <select
+        <PremiumSelect
           value=""
-          onChange={handleTargetChange}
-          className="ctl-input"
-          style={{ width: '100%', boxSizing: 'border-box', colorScheme: 'dark' }}
-        >
-        <option value="">-- Select a piece --</option>
-        {ALL_STL_FILES.map((file) => (
-          <option key={file} value={file}>{file}</option>
-        ))}
-      </select>
+          options={ALL_STL_FILES}
+          placeholder="-- Select a piece --"
+          onChange={(v) => onTargetChange(v)}
+        />
       <span style={{ fontSize: 10, color: 'var(--c-text-faint)' }}>
         Pick a piece above to start calibrating
       </span>
@@ -172,17 +253,12 @@ export default function CalibrationPanel({
 
       {/* STL file selector */}
       <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
-        <select
+        <PremiumSelect
           value={target}
-          onChange={handleTargetChange}
-          className="ctl-input"
-          style={{ width: '100%', boxSizing: 'border-box', colorScheme: 'dark' }}
-        >
-        <option value="">-- Select --</option>
-        {ALL_STL_FILES.map((file) => (
-          <option key={file} value={file}>{file}</option>
-        ))}
-      </select>
+          options={ALL_STL_FILES}
+          placeholder="-- Select --"
+          onChange={(v) => onTargetChange(v)}
+        />
 
       {/* Translation inputs */}
       <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>Translation (mm) — drag gizmo or type/step</label>
