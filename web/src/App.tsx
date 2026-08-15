@@ -123,6 +123,10 @@ export default function App() {
   });
   // DEBUG accordion — presentation-only UI state (precedent: calibAnalyzerOpen).
   const [debugOpen, setDebugOpen] = useState(false);
+  // D5: presentational visibility ONLY — the "Análisis" pill button toggles
+  // the Analysis card inside the right contextual dock. No behavior change
+  // to runWorkspace/sample counts/etc.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   // ─── Calibration state ──────────────────────────────────────────────────
   const [calibrationMode, setCalibrationMode] = useState(false);
@@ -1191,6 +1195,28 @@ export default function App() {
           </div>
         </div>
 
+        {/* "Análisis" toggle (D5): full-width pill that opens/closes the
+            Analysis card inside the right dock. Presentational only — no
+            behavior change to the workspace analysis itself. */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+          <button
+            className="pill-btn"
+            onClick={() => setAnalysisOpen(v => !v)}
+            style={{
+              width: '100%',
+              ...(analysisOpen
+                ? {
+                    background: 'rgba(0, 242, 254, 0.16)',
+                    border: '1px solid rgba(0, 242, 254, 0.45)',
+                    color: 'var(--c-cyan)',
+                  }
+                : {}),
+            }}
+          >
+            Análisis
+          </button>
+        </div>
+
         {/* Calibration mode — visible only in high fidelity */}
         {fidelityMode === 'high' && (
           <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
@@ -1279,95 +1305,6 @@ export default function App() {
             <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
           </div>
         )}
-
-        {/* Run Analysis */}
-        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span className="section-label">Análisis de workspace</span>
-            {workspaceRunning && (
-              <button
-                onClick={cancelWorkspace}
-                style={{
-                  padding: '2px 10px',
-                  fontSize: 11,
-                  background: 'transparent',
-                  border: '1px solid var(--border)',
-                  borderRadius: 999,
-                  color: 'var(--c-cyan)',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>N muestras</div>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            {[1000, 5000, 10000, 50000].map((n) => (
-              <button
-                key={n}
-                onClick={() => setWorkspaceCount(n)}
-                style={{
-                  flex: 1,
-                  padding: '3px 0',
-                  fontSize: 11,
-                  background: workspaceCount === n ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid ' + (workspaceCount === n ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
-                  borderRadius: 6,
-                  color: workspaceCount === n ? 'var(--c-cyan)' : 'var(--c-gray)',
-                  cursor: 'pointer',
-                }}
-              >
-                {n / 1000}k
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>Modo</div>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            <button
-              onClick={() => setWorkspaceMode('drawing-plane')}
-              style={{
-                flex: 1,
-                padding: '3px 0',
-                fontSize: 11,
-                background: workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid ' + (workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
-                borderRadius: 6,
-                color: workspaceMode === 'drawing-plane' ? 'var(--c-cyan)' : 'var(--c-gray)',
-                cursor: 'pointer',
-              }}
-            >
-              Plano de dibujo
-            </button>
-            <button
-              onClick={() => setWorkspaceMode('full-5dof')}
-              style={{
-                flex: 1,
-                padding: '3px 0',
-                fontSize: 11,
-                background: workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid ' + (workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
-                borderRadius: 6,
-                color: workspaceMode === 'full-5dof' ? 'var(--c-cyan)' : 'var(--c-gray)',
-                cursor: 'pointer',
-              }}
-            >
-              5 DOF
-            </button>
-          </div>
-          {workspaceError && (
-            <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
-              {workspaceError}
-            </div>
-          )}
-          {workspaceStats && (
-            <div style={{ fontSize: 10, color: 'var(--c-gray)', marginTop: 6, fontFamily: 'monospace' }}>
-              válidos {workspaceStats.n_valid} · rechazados {workspaceStats.n_rejected} · reach{' '}
-              {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
-            </div>
-          )}
-        </div>
-
 
         {/* Reset — moved to the bottom pill bar (handleReset) */}
       </div>
@@ -1874,6 +1811,98 @@ export default function App() {
                       err: {ikError.toFixed(1)}mm
                     </span>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Analysis card — the whole "Análisis de workspace" block moved
+              from the sidebar into the dock, gated by the "Análisis" pill
+              button (analysisOpen, presentational only) */}
+          {analysisOpen && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span className="section-label">Análisis de workspace</span>
+                {workspaceRunning && (
+                  <button
+                    onClick={cancelWorkspace}
+                    style={{
+                      padding: '2px 10px',
+                      fontSize: 11,
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 999,
+                      color: 'var(--c-cyan)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>N muestras</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                {[1000, 5000, 10000, 50000].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setWorkspaceCount(n)}
+                    style={{
+                      flex: 1,
+                      padding: '3px 0',
+                      fontSize: 11,
+                      background: workspaceCount === n ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (workspaceCount === n ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: workspaceCount === n ? 'var(--c-cyan)' : 'var(--c-gray)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {n / 1000}k
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>Modo</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                <button
+                  onClick={() => setWorkspaceMode('drawing-plane')}
+                  style={{
+                    flex: 1,
+                    padding: '3px 0',
+                    fontSize: 11,
+                    background: workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: workspaceMode === 'drawing-plane' ? 'var(--c-cyan)' : 'var(--c-gray)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Plano de dibujo
+                </button>
+                <button
+                  onClick={() => setWorkspaceMode('full-5dof')}
+                  style={{
+                    flex: 1,
+                    padding: '3px 0',
+                    fontSize: 11,
+                    background: workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: workspaceMode === 'full-5dof' ? 'var(--c-cyan)' : 'var(--c-gray)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  5 DOF
+                </button>
+              </div>
+              {workspaceError && (
+                <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
+                  {workspaceError}
+                </div>
+              )}
+              {workspaceStats && (
+                <div style={{ fontSize: 10, color: 'var(--c-gray)', marginTop: 6, fontFamily: 'monospace' }}>
+                  válidos {workspaceStats.n_valid} · rechazados {workspaceStats.n_rejected} · reach{' '}
+                  {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
                 </div>
               )}
             </div>
