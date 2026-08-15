@@ -18,8 +18,8 @@ import { initWasm, fabriCreator, solveDrawingPlaneIk } from '../wasm';
 import type { RobotDef } from '../kinematics/types';
 import type { MotionCommandJS } from './commands';
 
-export const DRAW_PLANE_Z = 80;
-export const TRAVEL_PLANE_Z = 85;
+export const DRAW_PLANE_Z = 70;
+export const TRAVEL_PLANE_Z = 75;
 
 export interface DrawingArea {
   xMin: number;
