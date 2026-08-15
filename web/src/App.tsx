@@ -1798,7 +1798,8 @@ export default function App() {
 
           {/* Analysis card — the whole "Análisis de workspace" block moved
               from the sidebar into the dock, gated by the "Análisis" pill
-              button (analysisOpen, presentational only) */}
+              button (analysisOpen). Owns the run flow: the primary "Run
+              Analysis" pill (with progress) + "Cancelar" while running. */}
           {analysisOpen && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -1874,6 +1875,20 @@ export default function App() {
                   5 DOF
                 </button>
               </div>
+              <button
+                className="pill-btn"
+                onClick={() => { void runWorkspace(); }}
+                disabled={workspaceRunning}
+                style={{
+                  width: '100%',
+                  marginTop: 4,
+                  background: 'rgba(0, 242, 254, 0.16)',
+                  border: '1px solid rgba(0, 242, 254, 0.45)',
+                  color: 'var(--c-cyan)',
+                }}
+              >
+                {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
+              </button>
               {workspaceError && (
                 <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
                   {workspaceError}
@@ -2093,10 +2108,18 @@ export default function App() {
           </button>
           <button
             className="pill-btn"
-            onClick={() => { void runWorkspace(); }}
-            disabled={workspaceRunning}
+            onClick={() => setAnalysisOpen(v => !v)}
+            style={
+              analysisOpen
+                ? {
+                    background: 'rgba(0, 242, 254, 0.16)',
+                    border: '1px solid rgba(0, 242, 254, 0.45)',
+                    color: 'var(--c-cyan)',
+                  }
+                : undefined
+            }
           >
-            {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
+            Análisis
           </button>
           {robotMode === 'normal' ? (
             <button
