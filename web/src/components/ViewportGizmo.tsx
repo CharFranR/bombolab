@@ -13,7 +13,7 @@ import * as THREE from 'three';
 // window-level pointermove/pointerup listeners and publishes them here;
 // GizmoSync consumes them per-frame so motion stays smooth. All drag modes
 // manipulate the VIEW (camera / orbit target) — never the robot model.
-export type GizmoDragMode = 'pan' | 'panAxis';
+export type GizmoDragMode = 'pan' | 'panAxis' | 'orbit';
 
 export type GizmoDrag = {
   mode: GizmoDragMode;
@@ -52,15 +52,19 @@ const upVec = new THREE.Vector3();
 const panVec = new THREE.Vector3();
 const axisCam = new THREE.Vector3();
 const camInvQ = new THREE.Quaternion();
+const pivot = new THREE.Vector3(); // orbit rotation center (the orbit target)
 
 // ─── Drag manipulation constants ────────────────────────────────────────────
 // Press+release with less than CLICK_SLOP_PX of movement is a CLICK (keeps the
 // existing click-to-fly). Anything at/over the threshold is a DRAG (pan /
-// axis-constrained pan — orbit arrives with the rings).
+// axis-constrained pan / ring orbit).
 const CLICK_SLOP_PX = 4;
 // Feel factor: apply 80% of the geometrically exact world-per-pixel scale so
 // pans track the cursor slightly relaxed (AutoCAD-style, never 1:1 twitchy).
 const PAN_FEEL = 0.8;
+// Ring-drag orbit sensitivity: 0.006 rad/px ≈ 360° per ~500px of horizontal
+// drag — a comfortable wrist rotation for a corner HUD.
+const ORBIT_RAD_PER_PX = 0.006;
 
 type Flight = {
   elapsed: number;
@@ -101,7 +105,7 @@ export function GizmoSync() {
     // but R3F types state.controls as EventDispatcher | null → downcast to
     // the narrow surface we actually touch.
     const controls = state.controls as unknown as
-      | { enabled: boolean; target: THREE.Vector3 }
+      | { enabled: boolean; target: THREE.Vector3; update: () => void }
       | null;
     if (!controls) return;
 
@@ -181,6 +185,16 @@ export function GizmoSync() {
         const delta = dot * scale;
         camera.position.addScaledVector(axis, -delta);
         controls.target.addScaledVector(axis, -delta);
+      } else if (mode === 'orbit' && axis) {
+        // Ring drag: rotate the CAMERA around the ring's axis through the
+        // orbit target (the scene appears to spin around the colored axis);
+        // the target itself stays put. controls.update() re-derives the
+        // spherical state from the new position (r170) so nothing snaps back.
+        const angle = dx * ORBIT_RAD_PER_PX;
+        pivot.copy(controls.target);
+        camera.position.sub(pivot).applyAxisAngle(axis, angle).add(pivot);
+        camera.lookAt(pivot);
+        controls.update();
       }
     } else if (dragActiveRef.current) {
       dragActiveRef.current = false;
@@ -388,9 +402,9 @@ function GizmoScene() {
 
       {/* Rotation rings: one arc ring per axis, each in the plane perpendicular
           to its axis (default torus lies in XY = the Z-ring; X- and Y-rings are
-          rotated into the YZ / XZ planes). */}
+          rotated into the YZ / XZ planes). Dragging a ring orbits the view. */}
       {AXIS_DEFS.map((axis) => (
-        <RotationRing key={`ring-${axis.key}`} axis={axis} />
+        <RotationRing key={`ring-${axis.key}`} axis={axis} onDragStart={startDrag} />
       ))}
 
       {/* Guide circle: light dashed ring surrounding the whole assembly. */}
@@ -442,7 +456,14 @@ function NegativeAxisLine({ axis }: { axis: (typeof AXIS_DEFS)[number] }) {
 
 // ─── Rotation ring (arc torus in the plane perpendicular to its axis) ────────
 
-function RotationRing({ axis }: { axis: (typeof AXIS_DEFS)[number] }) {
+function RotationRing({ axis, onDragStart }: {
+  axis: (typeof AXIS_DEFS)[number];
+  onDragStart: DragStarter;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const canvas = useThree((s) => s.gl.domElement);
+  useCursor(hovered, 'grab', 'auto', canvas);
+
   // Default torus lies in the XY plane (ring around +Z); rotate the X-ring
   // into the YZ plane and the Y-ring into the XZ plane.
   const rotation: [number, number, number] =
@@ -452,8 +473,23 @@ function RotationRing({ axis }: { axis: (typeof AXIS_DEFS)[number] }) {
         ? [Math.PI / 2, 0, 0]
         : [0, 0, 0];
 
+  // The ring rotates the view around its WORLD axis (the cube's local axes are
+  // the world axes). Drag-only: releasing without movement does NOT fly.
+  const axisVec = new THREE.Vector3(...axis.dir);
+
   return (
-    <mesh rotation={rotation}>
+    <mesh
+      rotation={rotation}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation();
+        setHovered(false);
+      }}
+      onPointerDown={(e) => onDragStart(e, 'orbit', axisVec, null)}
+    >
       <torusGeometry args={[RING_RADIUS, RING_TUBE, 12, 64, RING_ARC]} />
       <meshBasicMaterial color={axis.color} transparent opacity={RING_OPACITY} />
     </mesh>
