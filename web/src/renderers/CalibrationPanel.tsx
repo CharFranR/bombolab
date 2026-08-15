@@ -50,10 +50,11 @@ interface PremiumSelectProps {
   value: string;
   options: string[];
   placeholder: string;
+  clearLabel?: string;
   onChange: (value: string | null) => void;
 }
 
-function PremiumSelect({ value, options, placeholder, onChange }: PremiumSelectProps) {
+function PremiumSelect({ value, options, placeholder, onChange, clearLabel }: PremiumSelectProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -108,6 +109,19 @@ function PremiumSelect({ value, options, placeholder, onChange }: PremiumSelectP
               listener above covers clicks outside the panel. */}
           <div className="pselect__overlay" onClick={() => setOpen(false)} />
           <div className="pselect__menu" role="listbox">
+            {clearLabel && (
+              <div
+                role="option"
+                aria-selected={!value}
+                className={'pselect__opt' + (!value ? ' pselect__opt--sel' : '')}
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
+              >
+                {clearLabel}
+              </div>
+            )}
             {options.map((option) => (
               <div
                 key={option}
@@ -257,6 +271,7 @@ export default function CalibrationPanel({
           value={target}
           options={ALL_STL_FILES}
           placeholder="-- Select --"
+          clearLabel="-- Select --"
           onChange={(v) => onTargetChange(v)}
         />
 
