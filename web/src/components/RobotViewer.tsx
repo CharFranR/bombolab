@@ -176,23 +176,24 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           gl.setClearColor(0x000000, 0);
         }}
       >
-        {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back),
-            hemisphere — plus a CHARACTER SPOTLIGHT replacing the subtle near-camera
-            highlight (user preview feedback: it must be EVIDENT, like a spotlight on
-            the main character). Strong white spot BEYOND the camera on the viewing
-            diagonal ([750,600,750] vs camera [500,400,500]) so the cone hits the
-            camera-facing faces — the original [280,560,280] sat inside the robot
-            footprint and backlit it (front dark, rear bright). decay 0 + distance
-            1400 (origin at ~1219) keep a legacy-style bright cone wrapping the whole
-            robot without washing the far grid. Intensity retuned 3.0→2.2 so the
-            front faces (key 1.5 + spot) don't blow out. Shared Canvas level →
-            benefits BOTH fidelity views. */}
+        {/* Studio lighting: key (right-front-top, castShadow), cyan fill (left-front),
+            rim (back), hemisphere — plus a CHARACTER SPOTLIGHT replacing the subtle
+            near-camera highlight (user preview feedback: it must be EVIDENT, like a
+            spotlight on the main character). Strong white spot on the ROBOT FRONT —
+            the side the end effector points toward, which reads as screen-LEFT in the
+            default camera view (world -x/+z; drawing plane at z=80). Position
+            [-750,600,750] mirrors the camera diagonal so the cone hits the
+            effector-facing faces; the earlier [750,600,750] still sat on the +x side
+            and left the front dark. decay 0 + distance 1400 (origin at ~1219) keep a
+            legacy-style bright cone wrapping the whole robot without washing the far
+            grid. Intensity 2.2 so the front (fill 0.9 + spot) doesn't blow out.
+            Shared Canvas level → benefits BOTH fidelity views. */}
         <ambientLight intensity={0.15} />
         <directionalLight position={[400, 600, 300]} intensity={1.5} castShadow />
         <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
         <spotLight
-          position={[750, 600, 750]}
+          position={[-750, 600, 750]}
           angle={0.6}
           penumbra={0.5}
           intensity={2.2}
