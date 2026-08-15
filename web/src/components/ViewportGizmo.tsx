@@ -118,8 +118,22 @@ const AXIS_DEFS = [
   { key: 'z', dir: [0, 0, 1], color: '#4488ff', hover: '#77aaff', label: 'Z' },
 ] as const;
 
-const FACE_REST = '#18202b';
+const FACE_REST = '#eceff3'; // premium opaque white (replaces dark glass)
 const FACE_HOVER = '#00f2fe'; // design cyan — matches the app accent
+// Subtle dark edge strokes so the white cube still reads its silhouette.
+const CUBE_EDGES = 'rgba(23, 32, 46, 0.4)';
+
+// ─── Surrounding geometry (premium CAD look) ────────────────────────────────
+// Negative semi-axes start at the cube center and reach past the rings;
+// the portion inside the opaque cube is hidden by depth. Dashed lines need
+// computeLineDistances() before they render (done via onUpdate).
+
+const NEG_AXIS_LENGTH = 1.4;
+const RING_RADIUS = 1.55; // rotation rings in the plane perpendicular to each axis
+const RING_TUBE = 0.022;
+const RING_ARC = 2.4; // radians ≈ 137° — arc rings, not full circles
+const RING_OPACITY = 0.7;
+const GUIDE_RADIUS = 1.95; // dashed guide circle around the whole assembly
 
 function GizmoScene() {
   const group = useRef<THREE.Group>(null!);
@@ -130,17 +144,13 @@ function GizmoScene() {
 
   // Fixed materials for the six cube faces (BoxGeometry group order:
   // +X, -X, +Y, -Y, +Z, -Z). MeshBasicMaterial = unlit flat CAD look.
+  // Opaque white — the premium Blender-style view cube; hover re-tints the
+  // hovered face cyan (behavior preserved from the dark-glass iteration).
   const faceMaterials = useMemo(
     () =>
       Array.from(
         { length: 6 },
-        () =>
-          new THREE.MeshBasicMaterial({
-            color: FACE_REST,
-            transparent: true,
-            opacity: 0.9,
-            depthWrite: false,
-          }),
+        () => new THREE.MeshBasicMaterial({ color: FACE_REST }),
       ),
     [],
   );
@@ -172,7 +182,7 @@ function GizmoScene() {
 
   return (
     <group ref={group}>
-      {/* Orientation cube: dark glass faces + crisp border edges. The local
+      {/* Orientation cube: opaque white faces + subtle dark edges. The local
           face normal is axis-aligned and the group rotation never touches it,
           so the clicked normal IS the world direction to fly toward. */}
       <mesh
@@ -186,8 +196,24 @@ function GizmoScene() {
         }}
       >
         <boxGeometry args={[1, 1, 1]} />
-        <Edges color="rgba(255,255,255,0.12)" lineWidth={1} />
+        <Edges color={CUBE_EDGES} lineWidth={1} />
       </mesh>
+
+      {/* Negative semi-axes: dashed lines from the cube center out past the
+          rings, tinted like their positive counterparts (premium CAD look). */}
+      {AXIS_DEFS.map((axis) => (
+        <NegativeAxisLine key={`neg-${axis.key}`} axis={axis} />
+      ))}
+
+      {/* Rotation rings: one arc ring per axis, each in the plane perpendicular
+          to its axis (default torus lies in XY = the Z-ring; X- and Y-rings are
+          rotated into the YZ / XZ planes). */}
+      {AXIS_DEFS.map((axis) => (
+        <RotationRing key={`ring-${axis.key}`} axis={axis} />
+      ))}
+
+      {/* Guide circle: light dashed ring surrounding the whole assembly. */}
+      <GuideCircle />
 
       {/* Cartesian axes with arrowheads + X/Y/Z labels */}
       {AXIS_DEFS.map((axis) => (
@@ -195,6 +221,94 @@ function GizmoScene() {
       ))}
     </group>
   );
+}
+
+// ─── Negative semi-axis (dashed) ────────────────────────────────────────────
+// Modeled along local -Y like the positive axes, rotated onto the target axis
+// with the same mapping (X: +Y→+X is -90° about Z; Z: +Y→+Z is +90° about X).
+
+function NegativeAxisLine({ axis }: { axis: (typeof AXIS_DEFS)[number] }) {
+  const line = useMemo(() => {
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, -NEG_AXIS_LENGTH, 0),
+    ]);
+    const material = new THREE.LineDashedMaterial({
+      color: axis.color,
+      dashSize: 0.06,
+      gapSize: 0.05,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const l = new THREE.Line(geometry, material);
+    l.computeLineDistances(); // REQUIRED for dashes to render
+    return l;
+  }, [axis]);
+
+  const rotation: [number, number, number] =
+    axis.key === 'x'
+      ? [0, 0, -Math.PI / 2]
+      : axis.key === 'z'
+        ? [Math.PI / 2, 0, 0]
+        : [0, 0, 0];
+
+  return (
+    <group rotation={rotation}>
+      <primitive object={line} />
+    </group>
+  );
+}
+
+// ─── Rotation ring (arc torus in the plane perpendicular to its axis) ────────
+
+function RotationRing({ axis }: { axis: (typeof AXIS_DEFS)[number] }) {
+  // Default torus lies in the XY plane (ring around +Z); rotate the X-ring
+  // into the YZ plane and the Y-ring into the XZ plane.
+  const rotation: [number, number, number] =
+    axis.key === 'x'
+      ? [0, Math.PI / 2, 0]
+      : axis.key === 'y'
+        ? [Math.PI / 2, 0, 0]
+        : [0, 0, 0];
+
+  return (
+    <mesh rotation={rotation}>
+      <torusGeometry args={[RING_RADIUS, RING_TUBE, 12, 64, RING_ARC]} />
+      <meshBasicMaterial color={axis.color} transparent opacity={RING_OPACITY} />
+    </mesh>
+  );
+}
+
+// ─── Guide circle: light dashed ring around the whole assembly ───────────────
+
+function GuideCircle() {
+  const line = useMemo(() => {
+    const points: THREE.Vector3[] = [];
+    const segments = 128;
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * Math.PI * 2;
+      points.push(
+        new THREE.Vector3(
+          Math.cos(t) * GUIDE_RADIUS,
+          Math.sin(t) * GUIDE_RADIUS,
+          0,
+        ),
+      );
+    }
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineDashedMaterial({
+      color: '#ffffff',
+      dashSize: 0.12,
+      gapSize: 0.09,
+      transparent: true,
+      opacity: 0.35,
+    });
+    const l = new THREE.Line(geometry, material);
+    l.computeLineDistances(); // REQUIRED for dashes to render
+    return l;
+  }, []);
+
+  return <primitive object={line} />;
 }
 
 function Axis({ axis, cubeRef }: {
@@ -288,8 +402,8 @@ export default function ViewportGizmo() {
         bottom: 24,
         right: 24,
         zIndex: 16,
-        width: 130,
-        height: 130,
+        width: 140,
+        height: 140,
         borderRadius: 12,
         overflow: 'hidden',
         background: 'rgba(13, 17, 23, 0.65)',
@@ -301,7 +415,9 @@ export default function ViewportGizmo() {
     >
       <Canvas
         orthographic
-        camera={{ position: [0, 0, 7], zoom: 40, near: 0.1, far: 100 }}
+        // zoom 30 @ 140px → visible half-height = 70/30 ≈ 2.33 units, which
+        // frames the guide circle (r 1.95) + rings (r 1.55) with margin.
+        camera={{ position: [0, 0, 7], zoom: 30, near: 0.1, far: 100 }}
         gl={{ antialias: true, alpha: true }}
         dpr={[1, 2]}
         onCreated={({ gl }) => {
