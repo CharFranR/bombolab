@@ -1927,6 +1927,27 @@ export default function App() {
                   <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
               </div>
+              {playerId !== null && playerState !== 'idle' && (
+                <div
+                  style={{
+                    height: 6,
+                    borderRadius: 999,
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid var(--border)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${motionPlayerProgress(playerId) * 100}%`,
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg, var(--c-cyan), var(--c-cobalt))',
+                      transition: 'width 0.15s linear',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
