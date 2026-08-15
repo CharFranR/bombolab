@@ -1138,8 +1138,8 @@ export default function App() {
       {/* Sidebar — floating glass column (D9): position clears the 44px fixed
           top bar (top 56) and the centered pill bar (bottom 92). CAD
           contextual-inspector layout: JointControls, End-Effector (moved from
-          the right column), Fidelity, "Análisis" toggle, then the persistent
-          toggles. The whole panel scrolls (overflowY auto) — blocks flow in
+          the right column), Fidelity, then the persistent toggles. The whole
+          panel scrolls (overflowY auto) — blocks flow in
           order, JointControls keeps its own styling. */}
       <div
         className="glass-card"
@@ -1211,28 +1211,6 @@ export default function App() {
               High
             </button>
           </div>
-        </div>
-
-        {/* "Análisis" toggle (D5): full-width pill that opens/closes the
-            Analysis card inside the right dock. Presentational only — no
-            behavior change to the workspace analysis itself. */}
-        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
-          <button
-            className="pill-btn"
-            onClick={() => setAnalysisOpen(v => !v)}
-            style={{
-              width: '100%',
-              ...(analysisOpen
-                ? {
-                    background: 'rgba(0, 242, 254, 0.16)',
-                    border: '1px solid rgba(0, 242, 254, 0.45)',
-                    color: 'var(--c-cyan)',
-                  }
-                : {}),
-            }}
-          >
-            Análisis
-          </button>
         </div>
 
         {/* Calibration mode — visible only in high fidelity */}
@@ -1957,7 +1935,7 @@ export default function App() {
           robot={robot}
           rawFrames={rawFrames}
           gripper={gripper}
-          workspacePoints={workspacePoints ?? undefined}
+          workspacePoints={analysisOpen ? (workspacePoints ?? undefined) : undefined}
           tracePath={tracePath}
           traceProgressRef={traceProgressRef}
           ikTarget={ikTarget}
@@ -2119,7 +2097,9 @@ export default function App() {
                 : undefined
             }
           >
-            Análisis
+            {/* Toggle label: "Análisis" → "Salir de Análisis" while the card
+                is open; the workspace points render only while analysisOpen */}
+            {analysisOpen ? 'Salir de Análisis' : 'Análisis'}
           </button>
           {robotMode === 'normal' ? (
             <button
