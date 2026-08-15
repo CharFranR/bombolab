@@ -176,25 +176,24 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           gl.setClearColor(0x000000, 0);
         }}
       >
-        {/* Studio lighting: key (right-front-top, castShadow), cyan fill (left-front),
-            rim (back), hemisphere — plus a CHARACTER SPOTLIGHT used as an OVERHEAD
-            TOP-WASH (position [0,900,0], vertical cone on the robot). User feedback:
-            a side-positioned spot kept shading one face and made the robot look
-            asymmetric. A vertical symmetric cone illuminates every side face equally
-            (brightest on top), so no single face reads dark; ambient + hemisphere are
-            lifted to guarantee the sides never fall into darkness. decay 0 + distance
-            1100 (origin at 900) keep a legacy-style bright cone wrapping the whole
-            robot without washing the far grid. Shared Canvas level → benefits BOTH
-            fidelity views. */}
+        {/* Studio lighting, HOMOGENEOUS by design (user feedback: one robot face
+            always read dark). The original asymmetric key (1.5 + castShadow) cast a
+            body shadow that blacked one face — ambient can't fix a blocked face.
+            Now: the CHARACTER SPOTLIGHT is the main light, an OVERHEAD symmetric
+            cone ([0,900,0], angle 0.85, penumbra 1.0, decay 0) that lights every
+            side face equally; the three directionals are balanced to the same
+            intensity (0.8, no castShadow) so they only add gentle form without any
+            light/dark axis; ambient 0.55 + hemisphere 0.5 guarantee no face ever
+            drops dark. Shared Canvas level → benefits BOTH fidelity views. */}
         <ambientLight intensity={0.55} />
-        <directionalLight position={[400, 600, 300]} intensity={1.5} castShadow />
-        <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
-        <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
+        <directionalLight position={[400, 600, 300]} intensity={0.8} />
+        <directionalLight position={[-350, 200, 250]} intensity={0.8} color="#00f2fe" />
+        <directionalLight position={[0, 100, -500]} intensity={0.8} color="#6688ff" />
         <spotLight
           position={[0, 900, 0]}
           angle={0.85}
           penumbra={1.0}
-          intensity={1.6}
+          intensity={1.8}
           decay={0}
           distance={1100}
           color="#ffffff"
