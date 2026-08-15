@@ -304,16 +304,11 @@ export default function App() {
     }
   }, [ikTarget, ikMode, drawingMode, robotMode]);
 
-  // Scroll wheel → ajustar Z del target IK
-  useEffect(() => {
-    if (!ikMode || !ikTarget) return;
-    const onWheel = (e: WheelEvent) => {
-      const step = e.deltaY > 0 ? -5 : 5;
-      setIkTarget(prev => prev ? [prev[0], prev[1], prev[2] + step] : null);
-    };
-    window.addEventListener('wheel', onWheel, { passive: true });
-    return () => window.removeEventListener('wheel', onWheel);
-  }, [ikMode, ikTarget]);
+  // NOTE: scroll-wheel Z adjustment of the IK target was REMOVED — the global
+  // window wheel listener hijacked OrbitControls zoom: every zoom gesture
+  // changed ikTarget.z by ±5 and, via the IK-solve effect, moved the robot
+  // joints. Zoom must only zoom the camera. (If the Z adjust is wanted again,
+  // it belongs on the IK card as an explicit control, not on the wheel.)
 
   // Deactivate calibration mode when switching to low fidelity
   useEffect(() => {
