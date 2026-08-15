@@ -177,31 +177,29 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
         }}
       >
         {/* Studio lighting: key (right-front-top, castShadow), cyan fill (left-front),
-            rim (back), hemisphere — plus a CHARACTER SPOTLIGHT replacing the subtle
-            near-camera highlight (user preview feedback: it must be EVIDENT, like a
-            spotlight on the main character). Strong white spot on the ROBOT FRONT —
-            the side the end effector points toward, which reads as screen-LEFT in the
-            default camera view (world -x/+z; drawing plane at z=80). Position
-            [-750,600,750] mirrors the camera diagonal so the cone hits the
-            effector-facing faces; the earlier [750,600,750] still sat on the +x side
-            and left the front dark. decay 0 + distance 1400 (origin at ~1219) keep a
-            legacy-style bright cone wrapping the whole robot without washing the far
-            grid. Intensity 2.2 so the front (fill 0.9 + spot) doesn't blow out.
-            Shared Canvas level → benefits BOTH fidelity views. */}
-        <ambientLight intensity={0.15} />
+            rim (back), hemisphere — plus a CHARACTER SPOTLIGHT used as an OVERHEAD
+            TOP-WASH (position [0,900,0], vertical cone on the robot). User feedback:
+            a side-positioned spot kept shading one face and made the robot look
+            asymmetric. A vertical symmetric cone illuminates every side face equally
+            (brightest on top), so no single face reads dark; ambient + hemisphere are
+            lifted to guarantee the sides never fall into darkness. decay 0 + distance
+            1100 (origin at 900) keep a legacy-style bright cone wrapping the whole
+            robot without washing the far grid. Shared Canvas level → benefits BOTH
+            fidelity views. */}
+        <ambientLight intensity={0.3} />
         <directionalLight position={[400, 600, 300]} intensity={1.5} castShadow />
         <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
         <spotLight
-          position={[-750, 600, 750]}
-          angle={0.6}
-          penumbra={0.5}
-          intensity={2.2}
+          position={[0, 900, 0]}
+          angle={0.85}
+          penumbra={1.0}
+          intensity={1.6}
           decay={0}
-          distance={1400}
+          distance={1100}
           color="#ffffff"
         />
-        <hemisphereLight args={['#8888ff', '#444422', 0.15]} />
+        <hemisphereLight args={['#8888ff', '#444422', 0.35]} />
 
         {/* Visible floor light pool under the robot (y just above the grid plane,
             rotated flat, centered on the robot's origin). Unlit decal → always reads
