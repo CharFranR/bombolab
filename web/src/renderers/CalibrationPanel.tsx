@@ -120,7 +120,7 @@ export default function CalibrationPanel({
       className="glass-card"
       style={{
         position: 'absolute',
-        top: 16,
+        top: 56,
         right: 16,
         zIndex: 16,
         padding: 12,
@@ -156,7 +156,7 @@ export default function CalibrationPanel({
       className="glass-card"
       style={{
         position: 'absolute',
-        top: 16,
+        top: 56,
         right: 16,
         zIndex: 16,
         padding: 12,
