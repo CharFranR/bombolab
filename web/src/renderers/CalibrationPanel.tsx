@@ -138,7 +138,7 @@ export default function CalibrationPanel({
           value=""
           onChange={handleTargetChange}
           className="ctl-input"
-          style={{ width: '100%', boxSizing: 'border-box' }}
+          style={{ width: '100%', boxSizing: 'border-box', colorScheme: 'dark' }}
         >
         <option value="">-- Select a piece --</option>
         {ALL_STL_FILES.map((file) => (
@@ -176,7 +176,7 @@ export default function CalibrationPanel({
           value={target}
           onChange={handleTargetChange}
           className="ctl-input"
-          style={{ width: '100%', boxSizing: 'border-box' }}
+          style={{ width: '100%', boxSizing: 'border-box', colorScheme: 'dark' }}
         >
         <option value="">-- Select --</option>
         {ALL_STL_FILES.map((file) => (
