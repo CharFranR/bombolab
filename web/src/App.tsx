@@ -61,6 +61,12 @@ export default function App() {
   // Robot operating mode: the enum has more variants (Teaching, Calibration,
   // EmergencyStop) but only Normal and Drawing are implemented (slice 1).
   const [robotMode, setRobotMode] = useState<'normal' | 'drawing'>('normal');
+  // Smooth home-return animation: when a trajectory completes, the arm glides
+  // back to home over HOME_RETURN_DURATION instead of teleporting (the user
+  // saw the abrupt jump as a regression vs. the smooth gripper descent that
+  // starts a drawing).
+  const [returningHome, setReturningHome] = useState(false);
+  const HOME_RETURN_DURATION = 1.5; // seconds — controlled glide, not a snap
   const [transitioning, setTransitioning] = useState(false);
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
@@ -469,6 +475,9 @@ export default function App() {
   // gates what it is fed.
   const startTrajectory = useCallback(async (cmds: MotionCommandJS[], key: string) => {
     if (transitioning || !robot || robotMode !== 'drawing') return false;
+    // A new trajectory cancels any in-flight smooth home return — the two
+    // animations must never fight over the robot pose.
+    setReturningHome(false);
     // Replace any running/completed trajectory — the demo buttons must
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
@@ -756,9 +765,8 @@ export default function App() {
   // (playerId === cipraDrawPlayerIdRef). A demo/file/refit playback finishing
   // must not complete a CIPRA job that is not actually playing it.
   // The robot also returns to its home pose (once per player id): after a
-  // drawing finishes it must not stay parked at the last stroke. When
-  // connected, sendQRef streams the home pose through the servo interpolator
-  // so the physical arm parks home too.
+  // drawing finishes it must not stay parked at the last stroke. The return
+  // is animated smoothly (returningHome) instead of teleporting.
   useEffect(() => {
     if (playerState === 'completed') finalizeTrace();
     if (
@@ -767,15 +775,44 @@ export default function App() {
       homeReturnedPlayerRef.current !== playerId
     ) {
       homeReturnedPlayerRef.current = playerId;
-      const home = fabriCreator();
-      setRobot(home);
-      sendQRef.current(home.segments, gripper);
+      setReturningHome(true);
     }
     if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
       cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
       cipraDrawPlayerIdRef.current = null;
     }
   }, [cipraJobs, playerState, playerId, finalizeTrace, gripper]);
+
+  // Smooth home return: interpolate the joints from the current pose to the
+  // home pose with a smoothstep over HOME_RETURN_DURATION — same feel as the
+  // gripper descent that starts a drawing. Each frame's pose flows through
+  // the robot-change effect (sendQ), so a connected arm glides too; a new
+  // trajectory cancels the animation in startTrajectory.
+  useEffect(() => {
+    if (!returningHome || !robot) return;
+    const startQ = robot.segments.map((s) => s.q);
+    const homeQ = fabriCreator().segments.map((s) => s.q);
+    let start: number | null = null;
+    let raf = 0;
+    const step = (now: number) => {
+      if (start === null) start = now;
+      const t = Math.min((now - start) / 1000 / HOME_RETURN_DURATION, 1);
+      const s = t * t * (3 - 2 * t); // smoothstep: ease in + ease out
+      const qs = startQ.map((q, i) => q + (homeQ[i] - q) * s);
+      setRobot((prev) =>
+        prev
+          ? { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: qs[i] })) }
+          : prev,
+      );
+      if (t < 1) raf = requestAnimationFrame(step);
+      else setReturningHome(false);
+    };
+    raf = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(raf);
+      setReturningHome(false);
+    };
+  }, [returningHome]);
 
   const handleClearDrawingBlock = useCallback(() => {
     if (manifestModeRef.current) {
