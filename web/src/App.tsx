@@ -1280,134 +1280,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Calibración de servos (deadband/backlash) — manual */}
-        {calibRunning && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 11, color: 'var(--c-cyan)', marginBottom: 6 }}>{calibStatus}</div>
-              <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
-                {SERVO_NAMES.map((n, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCalibJoint(i)}
-                    style={{
-                      flex: 1,
-                      minWidth: 60,
-                      padding: '4px 2px',
-                      fontSize: 10,
-                      background: calibJoint === i ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid ' + (calibJoint === i ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
-                      borderRadius: 6,
-                      color: calibJoint === i ? 'var(--c-cyan)' : 'var(--c-gray)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-                <button
-                  onClick={() => calibStep(-5)}
-                  style={stepBtn}
-                >
-                  −5°
-                </button>
-                <button onClick={() => calibStep(-1)} style={stepBtn}>−1°</button>
-                <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--c-text)', minWidth: 40, textAlign: 'center' }}>
-                  {calibPose[calibJoint]}°
-                </span>
-                <button onClick={() => calibStep(1)} style={stepBtn}>+1°</button>
-                <button onClick={() => calibStep(5)} style={stepBtn}>+5°</button>
-              </div>
-              {calibLastMove && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                  <button
-                    onClick={() => calibRecord(true)}
-                    style={{ ...stepBtn, background: '#464', flex: 1, padding: 8 }}
-                  >
-                     Se movió
-                  </button>
-                  <button
-                    onClick={() => calibRecord(false)}
-                    style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88', flex: 1, padding: 8 }}
-                  >
-                     No se movió
-                  </button>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  onClick={downloadCalibLog}
-                  disabled={calibLog.length === 0}
-                  style={{ ...stepBtn, flex: 1 }}
-                >
-                  Descargar CSV ({calibLog.length})
-                </button>
-                <button
-                  onClick={() => setCalibAnalyzerOpen(!calibAnalyzerOpen)}
-                  style={{
-                    ...stepBtn,
-                    flex: 1,
-                    background: calibAnalyzerOpen ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                    border: calibAnalyzerOpen ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
-                    color: calibAnalyzerOpen ? 'var(--c-cyan)' : 'var(--c-gray)',
-                  }}
-                >
-                  {calibAnalyzerOpen ? 'Ocultar análisis' : 'Analizar'}
-                </button>
-                <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
-                <button onClick={exitCalibration} style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88' }}>Salir</button>
-              </div>
-              {calibAnalyzerOpen && <div className="anim-in"><ServoCalibAnalyzer log={calibLog} /></div>}
-            </div>
-          )}
-        {ikMode && robotMode !== 'drawing' && (
-          <>
-            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
-              {[0, 1, 2].map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setDrawingMode(mode)}
-                  style={{
-                    flex: 1,
-                    padding: '3px 0',
-                    fontSize: 11,
-                    background: drawingMode === mode ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid ' + (drawingMode === mode ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
-                    borderRadius: 6,
-                    color: drawingMode === mode ? 'var(--c-cyan)' : 'var(--c-gray)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {mode === 0 ? 'Off' : `Modo ${mode}`}
-                </button>
-              ))}
-
-            </div>
-            <div style={{ padding: '0 16px 4px', fontSize: 10, color: 'var(--c-text-faint)' }}>
-              Rueda mouse: sube/baja Z
-            </div>
-          </>
-        )}
-
-        {/* IK target readout — the IK Mode toggle itself now lives in the
-            bottom pill bar (same inline toggle logic, moved) */}
-        {ikMode && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
-            {ikTarget && (
-              <div style={{ fontSize: 11, color: 'var(--c-gray)', marginTop: 4 }}>
-                Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
-                {ikError !== null && (
-                  <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
-                    err: {ikError.toFixed(1)}mm
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Run Analysis */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -1500,27 +1372,34 @@ export default function App() {
         {/* Reset — moved to the bottom pill bar (handleReset) */}
       </div>
 
-        {/* Modo dibujo — floating glass card (D2): drawing options moved out
-            of the sidebar so it does not saturate in drawing mode. Same
-            wiring/handlers/strings; the sidebar keeps the Dibujo selector
-            only in standalone IK mode (robotMode !== 'drawing'). */}
-        {robotMode === 'drawing' && ikMode && (
-          <div
-            className="glass-card anim-in"
-            style={{
-              position: 'fixed',
-              top: 64,
-              right: 16,
-              width: 320,
-              maxHeight: 'calc(100vh - 160px)',
-              overflowY: 'auto',
-              zIndex: 15,
-              padding: '12px 16px',
-            }}
-          >
-            <div className="card-title">
-              Drawing Mode
-            </div>
+        {/* Right contextual dock (D5): fixed container that stacks ONLY the
+            active mode cards (drawing / calibration / IK / analysis /
+            playback). Empty when no mode is active — clean viewport. The
+            dock positions the cards; each card keeps its own glass chrome.
+            Card order below is the fixed stacking order. */}
+        <div style={{
+          position: 'fixed',
+          right: 16,
+          top: 64,
+          width: 320,
+          maxHeight: 'calc(100vh - 160px)',
+          overflowY: 'auto',
+          zIndex: 15,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          {/* Drawing card — relocated from the D2 floating card into the dock
+              (same gate, content byte-identical; its own fixed positioning
+              dropped, the dock positions it) */}
+          {robotMode === 'drawing' && ikMode && (
+            <div
+              className="glass-card anim-in"
+              style={{ padding: '12px 16px' }}
+            >
+              <div className="card-title">
+                Drawing Mode
+              </div>
             <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
               {[0, 1, 2].map(mode => (
@@ -1873,7 +1752,133 @@ export default function App() {
               </div>
             </div>
           </div>
-        )}
+          )}
+
+          {/* Calibration card — servo calibration UI moved from the sidebar
+              into the dock (same gate calibRunning; content byte-identical) */}
+          {calibRunning && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div style={{ fontSize: 11, color: 'var(--c-cyan)', marginBottom: 6 }}>{calibStatus}</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+                {SERVO_NAMES.map((n, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCalibJoint(i)}
+                    style={{
+                      flex: 1,
+                      minWidth: 60,
+                      padding: '4px 2px',
+                      fontSize: 10,
+                      background: calibJoint === i ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (calibJoint === i ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: calibJoint === i ? 'var(--c-cyan)' : 'var(--c-gray)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                <button
+                  onClick={() => calibStep(-5)}
+                  style={stepBtn}
+                >
+                  −5°
+                </button>
+                <button onClick={() => calibStep(-1)} style={stepBtn}>−1°</button>
+                <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--c-text)', minWidth: 40, textAlign: 'center' }}>
+                  {calibPose[calibJoint]}°
+                </span>
+                <button onClick={() => calibStep(1)} style={stepBtn}>+1°</button>
+                <button onClick={() => calibStep(5)} style={stepBtn}>+5°</button>
+              </div>
+              {calibLastMove && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <button
+                    onClick={() => calibRecord(true)}
+                    style={{ ...stepBtn, background: '#464', flex: 1, padding: 8 }}
+                  >
+                     Se movió
+                  </button>
+                  <button
+                    onClick={() => calibRecord(false)}
+                    style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88', flex: 1, padding: 8 }}
+                  >
+                     No se movió
+                  </button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={downloadCalibLog}
+                  disabled={calibLog.length === 0}
+                  style={{ ...stepBtn, flex: 1 }}
+                >
+                  Descargar CSV ({calibLog.length})
+                </button>
+                <button
+                  onClick={() => setCalibAnalyzerOpen(!calibAnalyzerOpen)}
+                  style={{
+                    ...stepBtn,
+                    flex: 1,
+                    background: calibAnalyzerOpen ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: calibAnalyzerOpen ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
+                    color: calibAnalyzerOpen ? 'var(--c-cyan)' : 'var(--c-gray)',
+                  }}
+                >
+                  {calibAnalyzerOpen ? 'Ocultar análisis' : 'Analizar'}
+                </button>
+                <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
+                <button onClick={exitCalibration} style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88' }}>Salir</button>
+              </div>
+              {calibAnalyzerOpen && <div className="anim-in"><ServoCalibAnalyzer log={calibLog} /></div>}
+            </div>
+          )}
+
+          {/* IK card — standalone IK mode (never while the drawing card is
+              up, so it never duplicates the drawing card's selector): Dibujo
+              selector + hint + IK target readout moved from the sidebar */}
+          {ikMode && robotMode !== 'drawing' && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
+                {[0, 1, 2].map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setDrawingMode(mode)}
+                    style={{
+                      flex: 1,
+                      padding: '3px 0',
+                      fontSize: 11,
+                      background: drawingMode === mode ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (drawingMode === mode ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: drawingMode === mode ? 'var(--c-cyan)' : 'var(--c-gray)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {mode === 0 ? 'Off' : `Modo ${mode}`}
+                  </button>
+                ))}
+              </div>
+              <div style={{ padding: '0 16px 4px', fontSize: 10, color: 'var(--c-text-faint)' }}>
+                Rueda mouse: sube/baja Z
+              </div>
+              {ikTarget && (
+                <div style={{ fontSize: 11, color: 'var(--c-gray)', marginTop: 4 }}>
+                  Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
+                  {ikError !== null && (
+                    <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
+                      err: {ikError.toFixed(1)}mm
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
 
       {/* 3D Viewport */}
