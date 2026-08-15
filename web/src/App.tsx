@@ -1181,14 +1181,32 @@ export default function App() {
             <button
               onClick={() => setFidelityMode('low')}
               className={fidelityMode === 'low' ? 'segmented__opt--active' : undefined}
-              style={segmentOptStyle}
+              style={{
+                ...segmentOptStyle,
+                ...(fidelityMode === 'low'
+                  ? {
+                      background: 'rgba(0, 242, 254, 0.16)',
+                      borderColor: 'rgba(0, 242, 254, 0.45)',
+                      color: 'var(--c-cyan)',
+                    }
+                  : {}),
+              }}
             >
               Low
             </button>
             <button
               onClick={() => setFidelityMode('high')}
               className={fidelityMode === 'high' ? 'segmented__opt--active' : undefined}
-              style={segmentOptStyle}
+              style={{
+                ...segmentOptStyle,
+                ...(fidelityMode === 'high'
+                  ? {
+                      background: 'rgba(0, 242, 254, 0.16)',
+                      borderColor: 'rgba(0, 242, 254, 0.45)',
+                      color: 'var(--c-cyan)',
+                    }
+                  : {}),
+              }}
             >
               High
             </button>
