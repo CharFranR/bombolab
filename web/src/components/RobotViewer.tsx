@@ -9,6 +9,7 @@ import type { WorkspacePoints } from '../workspace/colors';
 import { framePose, mulMat4 } from '../renderers/types';
 import SimpleRobotScene from '../renderers/SimpleRobotScene';
 import StlRobotScene from '../renderers/StlRobotScene';
+import ViewportGizmo from './ViewportGizmo';
 
 // ─── Error boundary for STL load failures ────────────────────────────────────
 
@@ -166,7 +167,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
   }, []);
 
   return (
-    <div style={{ flex: 1, height: '100%' }}>
+    <div style={{ flex: 1, height: '100%', position: 'relative' }}>
       <Canvas
         shadows
         camera={{ position: [500, 400, 500], fov: 35, near: 1, far: 2000 }}
@@ -244,6 +245,11 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           enabled={!ikDragging}
         />
       </Canvas>
+
+      {/* 3D navigation gizmo: bottom-right HUD overlay (its own small canvas).
+          Orientation sync (GizmoSync) lands in Stage 2 — the widget is a static
+          cube until the main camera publishes its quaternion. */}
+      <ViewportGizmo />
     </div>
   );
 }
