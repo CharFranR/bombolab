@@ -708,6 +708,11 @@ export default function App() {
   // COMPLETE only fires when the completed playback IS the one this job
   // started. Cleared on new draw start, FAIL and discard.
   const cipraDrawPlayerIdRef = useRef<number | null>(null);
+  // Playback id that already returned the robot home on completion — the
+  // completion effect re-runs on unrelated state changes, so this guard makes
+  // the home return fire exactly once per trajectory (re-armed by the next
+  // start, which always binds a fresh player id).
+  const homeReturnedPlayerRef = useRef<number | null>(null);
   // Latest queue state readable from the WS client callbacks (they are mounted
   // once with an empty closure); the queue-full gate needs current state.
   const cipraJobsRef = useRef(cipraJobs);
@@ -750,13 +755,27 @@ export default function App() {
   // Review fix #2: only when the finished playback IS the one the job started
   // (playerId === cipraDrawPlayerIdRef). A demo/file/refit playback finishing
   // must not complete a CIPRA job that is not actually playing it.
+  // The robot also returns to its home pose (once per player id): after a
+  // drawing finishes it must not stay parked at the last stroke. When
+  // connected, sendQRef streams the home pose through the servo interpolator
+  // so the physical arm parks home too.
   useEffect(() => {
     if (playerState === 'completed') finalizeTrace();
+    if (
+      playerState === 'completed' &&
+      playerId !== null &&
+      homeReturnedPlayerRef.current !== playerId
+    ) {
+      homeReturnedPlayerRef.current = playerId;
+      const home = fabriCreator();
+      setRobot(home);
+      sendQRef.current(home.segments, gripper);
+    }
     if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
       cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
       cipraDrawPlayerIdRef.current = null;
     }
-  }, [cipraJobs, playerState, playerId, finalizeTrace]);
+  }, [cipraJobs, playerState, playerId, finalizeTrace, gripper]);
 
   const handleClearDrawingBlock = useCallback(() => {
     if (manifestModeRef.current) {
