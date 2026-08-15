@@ -184,9 +184,12 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
             side face equally; the three directionals are balanced to the same
             intensity (0.8, no castShadow) so they only add gentle form without any
             light/dark axis; ambient 0.55 + hemisphere 0.5 guarantee no face ever
-            drops dark. Shared Canvas level → benefits BOTH fidelity views. */}
+            drops dark. WARM TONE on the spot + key (#fff1dc/#fff4e6) against the
+            cool cyan/blue fills — a studio warm/cool split that makes the lighting
+            read clearly on the robot. Shared Canvas level → benefits BOTH fidelity
+            views. */}
         <ambientLight intensity={0.55} />
-        <directionalLight position={[400, 600, 300]} intensity={0.8} />
+        <directionalLight position={[400, 600, 300]} intensity={0.8} color="#fff4e6" />
         <directionalLight position={[-350, 200, 250]} intensity={0.8} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={0.8} color="#6688ff" />
         <spotLight
@@ -196,7 +199,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           intensity={1.8}
           decay={0}
           distance={1100}
-          color="#ffffff"
+          color="#fff1dc"
         />
         <hemisphereLight args={['#8888ff', '#444422', 0.5]} />
 
