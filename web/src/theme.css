@@ -493,6 +493,35 @@
   color: var(--c-cyan);
 }
 
+/* ---- Premium scrollbars (I1) ---- */
+/* Uniform dark glass scrollbars on every scrollable surface (dropdown menu,
+   sidebar, right dock, panels...): transparent track + subtle glass thumb,
+   cyan on hover. Firefox uses scrollbar-color; Chromium/Edge the webkit rules. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 254, 0.45);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ---- Keyframes ---- */
 @keyframes badgePulse {
   0%,
