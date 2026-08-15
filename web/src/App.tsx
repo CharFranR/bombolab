@@ -525,7 +525,13 @@ export default function App() {
     const fk = forwardKinematics(robot.segments, robot.baseTransform);
     const tip = fk.ee;
     const start: [number, number, number] = [tip[3], tip[7], tip[11]];
-    setTracePath(drawingPath(cmds).map(robotToThree));
+    // Trace shows where the PEN TIP draws, not the TCP: the marker is not
+    // modeled in the scene, so the path is rendered shifted DOWN by the pen
+    // length (= the drawing plane height) — the drawing lands ON the floor
+    // (z=0) while the gripper hovers at DRAW_PLANE_Z.
+    setTracePath(
+      drawingPath(cmds, DRAW_PLANE_Z).map((p) => robotToThree([p[0], p[1], p[2] - DRAW_PLANE_Z])),
+    );
     traceProgressRef.current = 0;
     setActiveDemo(key);
     const samples = planTimeline(cmds, {
