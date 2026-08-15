@@ -1606,38 +1606,6 @@ export default function App() {
               )}
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                 <button
-                  onClick={handlePlaybackControl}
-                  disabled={playerId === null}
-                  style={{
-                    padding: '8px 12px',
-                    background: playerState === 'running' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-                    border: playerState === 'running' ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
-                    borderRadius: 6,
-                    color: playerState === 'running' ? 'var(--c-cyan)' : 'var(--c-gray)',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {playerState === 'running' ? 'Pausa' : playerState === 'paused' ? 'Reanudar' : 'Replay'}
-                </button>
-                <button
-                  onClick={handleStopDemo}
-                  disabled={playerId === null}
-                  style={{
-                    padding: '8px 12px',
-                    background: 'rgba(190, 60, 60, 0.18)',
-                    border: '1px solid rgba(210, 80, 80, 0.45)',
-                    borderRadius: 6,
-                    color: '#e88',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Stop
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                <button
                   onClick={handleExportTrace}
                   disabled={traceResult === null || traceResult.samples.length === 0}
                   style={{
@@ -1681,12 +1649,6 @@ export default function App() {
                 )}
               </div>
               <PlanExecPanel trace={traceResult} plan={tracePlan} />
-              <div style={{ fontSize: 11, color: 'var(--c-gray)', marginBottom: 6 }}>
-                Trayectoria: <b style={{ color: 'var(--c-text)' }}>{playerState}</b>
-                {playerId !== null && playerState !== 'idle' && (
-                  <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
-                )}
-              </div>
             </div>
           </div>
           )}
@@ -1905,6 +1867,52 @@ export default function App() {
                   {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Playback card — play/pause/stop + trajectory status moved from
+              the drawing card into the dock; only rendered while a player
+              exists (playerId !== null) */}
+          {playerId !== null && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
+                  onClick={handlePlaybackControl}
+                  disabled={playerId === null}
+                  style={{
+                    padding: '8px 12px',
+                    background: playerState === 'running' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: playerState === 'running' ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: playerState === 'running' ? 'var(--c-cyan)' : 'var(--c-gray)',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {playerState === 'running' ? 'Pausa' : playerState === 'paused' ? 'Reanudar' : 'Replay'}
+                </button>
+                <button
+                  onClick={handleStopDemo}
+                  disabled={playerId === null}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(190, 60, 60, 0.18)',
+                    border: '1px solid rgba(210, 80, 80, 0.45)',
+                    borderRadius: 6,
+                    color: '#e88',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Stop
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--c-gray)', marginBottom: 6 }}>
+                Trayectoria: <b style={{ color: 'var(--c-text)' }}>{playerState}</b>
+                {playerId !== null && playerState !== 'idle' && (
+                  <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
+                )}
+              </div>
             </div>
           )}
         </div>
