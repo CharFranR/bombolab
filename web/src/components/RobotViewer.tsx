@@ -188,20 +188,20 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
             cool cyan/blue fills — a studio warm/cool split that makes the lighting
             read clearly on the robot. Shared Canvas level → benefits BOTH fidelity
             views. */}
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[400, 600, 300]} intensity={0.8} color="#fff4e6" />
-        <directionalLight position={[-350, 200, 250]} intensity={0.8} color="#00f2fe" />
-        <directionalLight position={[0, 100, -500]} intensity={0.8} color="#6688ff" />
+        <ambientLight intensity={0.65} />
+        <directionalLight position={[400, 600, 300]} intensity={1.1} color="#fff4e6" />
+        <directionalLight position={[-350, 200, 250]} intensity={1.1} color="#00f2fe" />
+        <directionalLight position={[0, 100, -500]} intensity={1.1} color="#6688ff" />
         <spotLight
           position={[0, 900, 0]}
           angle={0.85}
           penumbra={1.0}
-          intensity={1.8}
+          intensity={2.4}
           decay={0}
           distance={1100}
           color="#fff1dc"
         />
-        <hemisphereLight args={['#8888ff', '#444422', 0.5]} />
+        <hemisphereLight args={['#8888ff', '#444422', 0.6]} />
 
         {/* Visible floor light pool under the robot (y just above the grid plane,
             rotated flat, centered on the robot's origin). Unlit decal → always reads
