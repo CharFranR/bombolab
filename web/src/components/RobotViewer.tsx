@@ -179,23 +179,25 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
         {/* Studio lighting: key (top-left, castShadow), cyan fill (right), rim (back),
             hemisphere — plus a CHARACTER SPOTLIGHT replacing the subtle near-camera
             highlight (user preview feedback: it must be EVIDENT, like a spotlight on
-            the main character). Strong white spot from the camera diagonal, overhead,
-            aimed at the robot base (default spotlight target = world origin where both
-            fidelity robots stand); decay 0 + distance clamp give a legacy-style bright
-            cone wrapping the whole robot without washing the far grid. Key retuned
-            1.8→1.5 (values only) to compensate the added spot heat on the camera-side
-            faces. Shared Canvas level → benefits BOTH fidelity views. */}
+            the main character). Strong white spot BEYOND the camera on the viewing
+            diagonal ([750,600,750] vs camera [500,400,500]) so the cone hits the
+            camera-facing faces — the original [280,560,280] sat inside the robot
+            footprint and backlit it (front dark, rear bright). decay 0 + distance
+            1400 (origin at ~1219) keep a legacy-style bright cone wrapping the whole
+            robot without washing the far grid. Intensity retuned 3.0→2.2 so the
+            front faces (key 1.5 + spot) don't blow out. Shared Canvas level →
+            benefits BOTH fidelity views. */}
         <ambientLight intensity={0.15} />
         <directionalLight position={[400, 600, 300]} intensity={1.5} castShadow />
         <directionalLight position={[-350, 200, 250]} intensity={0.9} color="#00f2fe" />
         <directionalLight position={[0, 100, -500]} intensity={1.4} color="#6688ff" />
         <spotLight
-          position={[280, 560, 280]}
+          position={[750, 600, 750]}
           angle={0.6}
           penumbra={0.5}
-          intensity={3.0}
+          intensity={2.2}
           decay={0}
-          distance={800}
+          distance={1400}
           color="#ffffff"
         />
         <hemisphereLight args={['#8888ff', '#444422', 0.15]} />
