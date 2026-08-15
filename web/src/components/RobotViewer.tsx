@@ -9,7 +9,6 @@ import type { WorkspacePoints } from '../workspace/colors';
 import { framePose, mulMat4 } from '../renderers/types';
 import SimpleRobotScene from '../renderers/SimpleRobotScene';
 import StlRobotScene from '../renderers/StlRobotScene';
-import ViewportGizmo, { GizmoSync } from './ViewportGizmo';
 
 // ─── Error boundary for STL load failures ────────────────────────────────────
 
@@ -167,7 +166,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
   }, []);
 
   return (
-    <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+    <div style={{ flex: 1, height: '100%' }}>
       <Canvas
         shadows
         camera={{ position: [500, 400, 500], fov: 35, near: 1, far: 2000 }}
@@ -244,15 +243,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           target={[0, 200, 0]}
           enabled={!ikDragging}
         />
-
-        {/* Publishes camera.quaternion → gizmoLink each frame so the HUD gizmo
-            mirrors the main view. Null-renderer: no geometry, no DOM. */}
-        <GizmoSync />
       </Canvas>
-
-      {/* 3D navigation gizmo: bottom-right HUD overlay (its own small canvas).
-          GizmoSync (above) keeps its orientation mirrored to the main camera. */}
-      <ViewportGizmo />
     </div>
   );
 }
