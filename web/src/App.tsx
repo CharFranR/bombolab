@@ -1967,7 +1967,7 @@ export default function App() {
             className="glass-card anim-in"
             style={{
               position: 'absolute',
-              top: 16,
+              top: 56,
               right: 16,
               zIndex: 20,
               width: 280,
