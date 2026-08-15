@@ -242,6 +242,13 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           maxDistance={1200}
           target={[0, 200, 0]}
           enabled={!ikDragging}
+          // Navigation across the workspace: pan with right-drag (or two
+          // fingers on touch) along the FLOOR plane, not the screen — the
+          // camera glides over the drawing area. screenSpacePanning=false
+          // keeps the pan on the ground plane so drawings stay in view.
+          enablePan
+          screenSpacePanning={false}
+          panSpeed={1}
         />
       </Canvas>
     </div>
