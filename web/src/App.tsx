@@ -64,9 +64,45 @@ export default function App() {
   // Smooth home-return animation: when a trajectory completes, the arm glides
   // back to home over HOME_RETURN_DURATION instead of teleporting (the user
   // saw the abrupt jump as a regression vs. the smooth gripper descent that
-  // starts a drawing).
-  const [returningHome, setReturningHome] = useState(false);
+  // starts a drawing). Implemented as an IMPERATIVE rAF loop started from the
+  // completion effect (startHomeReturn), NOT as a state/effect dance — state
+  // effects are vulnerable to StrictMode/HMR double-mounting which cancelled
+  // the animation before its first frame (the arm never returned home).
   const HOME_RETURN_DURATION = 1.5; // seconds — controlled glide, not a snap
+  const robotRef = useRef(robot);
+  robotRef.current = robot;
+  const cancelHomeReturnRef = useRef<() => void>(() => {});
+  const startHomeReturn = useCallback(() => {
+    cancelHomeReturnRef.current();
+    const cur = robotRef.current;
+    if (!cur) return;
+    const startQ = cur.segments.map((s) => s.q);
+    const home = fabriCreator();
+    const homeQ = home.segments.map((s) => s.q);
+    // Where the home tool pose sits — the IK sphere is re-parked there when
+    // the glide lands so the gripper visibly holds it again.
+    const fk = forwardKinematics(home.segments, home.baseTransform);
+    const homeTip: [number, number, number] = [fk.ee[3], fk.ee[7], fk.ee[11]];
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (now: number) => {
+      const t = Math.min((now - t0) / 1000 / HOME_RETURN_DURATION, 1);
+      const s = t * t * (3 - 2 * t); // smoothstep: ease in + ease out
+      const qs = startQ.map((q, i) => q + (homeQ[i] - q) * s);
+      setRobot((prev) =>
+        prev
+          ? { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: qs[i] })) }
+          : prev,
+      );
+      if (t < 1) {
+        raf = requestAnimationFrame(step);
+      } else {
+        setIkTarget(homeTip); // park the sphere at home, held by the gripper
+      }
+    };
+    raf = requestAnimationFrame(step);
+    cancelHomeReturnRef.current = () => cancelAnimationFrame(raf);
+  }, []);
   const [transitioning, setTransitioning] = useState(false);
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
@@ -391,6 +427,7 @@ export default function App() {
     setRobotMode('normal');
     setIkMode(false);
     setIkTarget(null);
+    cancelHomeReturnRef.current(); // no home glide after leaving drawing mode
     setGripper(gripperBeforeModeRef.current); // restaurar pinza
   }, [playerId]);
 
@@ -472,7 +509,7 @@ export default function App() {
     if (transitioning || !robot || robotMode !== 'drawing') return false;
     // A new trajectory cancels any in-flight smooth home return — the two
     // animations must never fight over the robot pose.
-    setReturningHome(false);
+    cancelHomeReturnRef.current();
     // Replace any running/completed trajectory — the demo buttons must
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
@@ -767,7 +804,9 @@ export default function App() {
   // must not complete a CIPRA job that is not actually playing it.
   // The robot also returns to its home pose (once per player id): after a
   // drawing finishes it must not stay parked at the last stroke. The return
-  // is animated smoothly (returningHome) instead of teleporting.
+  // is an imperative rAF glide (startHomeReturn), and the IK sphere is
+  // dropped from the last stroke BEFORE it — otherwise it would float loose
+  // while the arm glides home (startHomeReturn re-parks it at the home pose).
   useEffect(() => {
     if (playerState === 'completed') finalizeTrace();
     if (
@@ -776,44 +815,14 @@ export default function App() {
       homeReturnedPlayerRef.current !== playerId
     ) {
       homeReturnedPlayerRef.current = playerId;
-      setReturningHome(true);
+      setIkTarget(null);
+      startHomeReturn();
     }
     if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
       cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
       cipraDrawPlayerIdRef.current = null;
     }
-  }, [cipraJobs, playerState, playerId, finalizeTrace, gripper]);
-
-  // Smooth home return: interpolate the joints from the current pose to the
-  // home pose with a smoothstep over HOME_RETURN_DURATION — same feel as the
-  // gripper descent that starts a drawing. Each frame's pose flows through
-  // the robot-change effect (sendQ), so a connected arm glides too; a new
-  // trajectory cancels the animation in startTrajectory.
-  useEffect(() => {
-    if (!returningHome || !robot) return;
-    const startQ = robot.segments.map((s) => s.q);
-    const homeQ = fabriCreator().segments.map((s) => s.q);
-    let start: number | null = null;
-    let raf = 0;
-    const step = (now: number) => {
-      if (start === null) start = now;
-      const t = Math.min((now - start) / 1000 / HOME_RETURN_DURATION, 1);
-      const s = t * t * (3 - 2 * t); // smoothstep: ease in + ease out
-      const qs = startQ.map((q, i) => q + (homeQ[i] - q) * s);
-      setRobot((prev) =>
-        prev
-          ? { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: qs[i] })) }
-          : prev,
-      );
-      if (t < 1) raf = requestAnimationFrame(step);
-      else setReturningHome(false);
-    };
-    raf = requestAnimationFrame(step);
-    return () => {
-      cancelAnimationFrame(raf);
-      setReturningHome(false);
-    };
-  }, [returningHome]);
+  }, [cipraJobs, playerState, playerId, finalizeTrace, gripper, startHomeReturn]);
 
   const handleClearDrawingBlock = useCallback(() => {
     if (manifestModeRef.current) {
