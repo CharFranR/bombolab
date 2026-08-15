@@ -628,16 +628,16 @@ export default function App() {
   const handleStartDemo = useCallback(() => {
     void (async () => {
       const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
-      await startTrajectory(squareCommands(200, 0, 80, half), 'square');
+      await startTrajectory(squareCommands(200, 0, DRAW_PLANE_Z, half), 'square');
     })();
   }, [startTrajectory, demoSizeCm]);
 
   const handleStartDiagnostic = useCallback(() => {
-    void startTrajectory(diagnosticLinesCommands(), 'lines');
+    void startTrajectory(diagnosticLinesCommands(DRAW_PLANE_Z), 'lines');
   }, [startTrajectory]);
 
   const handleStartArc = useCallback(() => {
-    void startTrajectory(arcCommands(), 'arc');
+    void startTrajectory(arcCommands(180, -70, 140, DRAW_PLANE_Z), 'arc');
   }, [startTrajectory]);
 
   const handleGcodeFile = useCallback((file: File) => {
