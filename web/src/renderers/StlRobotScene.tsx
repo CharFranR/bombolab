@@ -307,23 +307,32 @@ export default function StlRobotScene({
         fadeDistance={780}
         fadeStrength={1.1}
       />
-      {entries.map((entry, i) => {
-        const isTarget = targetEntry && targetEntry.index === i;
-        const el = <primitive key={i} object={entry.mesh} />;
-        if (isTarget) {
-          return (
-            <TransformControls
-              key={i}
-              object={entry.mesh}
-              mode={gizmoMode ?? 'translate'}
-              onObjectChange={handleObjectChange}
-            >
-              {el}
-            </TransformControls>
-          );
-        }
-        return el;
-      })}
+      {/* STL parts sit in a group dropped so the base rests ON the floor:
+          the STL files are authored from the top of the base (Base.stl lowest
+          vertex = +36.36mm), so the whole robot hovered 36mm above the floor
+          while the drawing trace (y=0) read as BELOW the base. Grid, trace
+          and IK sphere stay at scene level — only the robot drops. The offset
+          scales with the calibration scale (geometry scales about the joint
+          origin). */}
+      <group position={[0, -36.36 * (stlScaleRef?.current ?? 1), 0]}>
+        {entries.map((entry, i) => {
+          const isTarget = targetEntry && targetEntry.index === i;
+          const el = <primitive key={i} object={entry.mesh} />;
+          if (isTarget) {
+            return (
+              <TransformControls
+                key={i}
+                object={entry.mesh}
+                mode={gizmoMode ?? 'translate'}
+                onObjectChange={handleObjectChange}
+              >
+                {el}
+              </TransformControls>
+            );
+          }
+          return el;
+        })}
+      </group>
       <DebugAxes
         framesRef={framesRef}
         stlMeta={STL_META}
