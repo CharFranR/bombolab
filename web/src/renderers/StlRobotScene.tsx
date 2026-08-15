@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useCallback } from 'react';
+import { useMemo, useRef, useCallback } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import { Grid, TransformControls } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
 import { ALL_STL_FILES, STL_META } from './stlMapping';
-import { buildTraceTube } from './trace';
 import DebugAxes from './debugAxes';
 import IkTarget from '../components/IkTarget';
 import CandidatesOverlay from '../calibration/CandidatesOverlay';
@@ -107,24 +106,17 @@ export default function StlRobotScene({
     [workspacePoints],
   );
 
-  // Trace as a SOLID tube (buildTraceTube): progressive reveal via
-  // geometry.setDrawRange works natively on BufferGeometry. The previous drei
-  // Line (Line2 + LineMaterial) ignored drawRange — the full stroke appeared
-  // at once and rendered as dots. The tube is rebuilt per path change; the
-  // old geometry is disposed when replaced. Reads traceProgressRef (a ref the
-  // app updates in its rAF loop) so this scene is NOT re-rendered by React on
-  // every frame delta — only setDrawRange changes, GPU-side.
-  const traceTubeRef = useRef<THREE.TubeGeometry | null>(null);
-  const traceTube = useMemo(() => buildTraceTube(tracePath ?? []), [tracePath]);
-  traceTubeRef.current = traceTube;
-  useEffect(
-    () => () => {
-      if (traceTube) traceTube.dispose();
-    },
-    [traceTube],
+  // Full trace geometry mounted once; the line is revealed progressively
+  // with geometry.setDrawRange in useFrame. Reads traceProgressRef (a ref
+  // the app updates in its rAF loop) so this scene is NOT re-rendered by
+  // React on every frame delta — only setDrawRange changes, GPU-side.
+  const traceGeoRef = useRef<THREE.BufferGeometry>(null);
+  const traceArray = useMemo(
+    () => (tracePath && tracePath.length > 0 ? new Float32Array(tracePath.flat()) : null),
+    [tracePath],
   );
   useFrame(() => {
-    const g = traceTubeRef.current;
+    const g = traceGeoRef.current;
     if (!g) return;
     const attr = g.getAttribute('position');
     if (!attr) return;
@@ -307,32 +299,23 @@ export default function StlRobotScene({
         fadeDistance={780}
         fadeStrength={1.1}
       />
-      {/* STL parts sit in a group dropped so the base rests ON the floor:
-          the STL files are authored from the top of the base (Base.stl lowest
-          vertex = +36.36mm), so the whole robot hovered 36mm above the floor
-          while the drawing trace (y=0) read as BELOW the base. Grid, trace
-          and IK sphere stay at scene level — only the robot drops. The offset
-          scales with the calibration scale (geometry scales about the joint
-          origin). */}
-      <group position={[0, -36.36 * (stlScaleRef?.current ?? 1), 0]}>
-        {entries.map((entry, i) => {
-          const isTarget = targetEntry && targetEntry.index === i;
-          const el = <primitive key={i} object={entry.mesh} />;
-          if (isTarget) {
-            return (
-              <TransformControls
-                key={i}
-                object={entry.mesh}
-                mode={gizmoMode ?? 'translate'}
-                onObjectChange={handleObjectChange}
-              >
-                {el}
-              </TransformControls>
-            );
-          }
-          return el;
-        })}
-      </group>
+      {entries.map((entry, i) => {
+        const isTarget = targetEntry && targetEntry.index === i;
+        const el = <primitive key={i} object={entry.mesh} />;
+        if (isTarget) {
+          return (
+            <TransformControls
+              key={i}
+              object={entry.mesh}
+              mode={gizmoMode ?? 'translate'}
+              onObjectChange={handleObjectChange}
+            >
+              {el}
+            </TransformControls>
+          );
+        }
+        return el;
+      })}
       <DebugAxes
         framesRef={framesRef}
         stlMeta={STL_META}
@@ -371,13 +354,20 @@ export default function StlRobotScene({
           <pointsMaterial size={5} vertexColors transparent opacity={0.5} depthWrite={false} />
         </points>
       )}
-      {/* Progressive trace of the drawing path (three.js coords, on the floor).
-          Solid tube — drawRange reveal works natively, stroke stays continuous. */}
-      {traceTube && (
-        <mesh>
-          <primitive object={traceTube} attach="geometry" />
-          <meshBasicMaterial color="#ff8866" />
-        </mesh>
+      {/* Progressive trace of the drawing path (three.js coords, z = plane).
+          Full geometry mounts once; setDrawRange in useFrame reveals it. */}
+      {tracePath && tracePath.length > 1 && traceArray && (
+        <line>
+          <bufferGeometry ref={traceGeoRef}>
+            <bufferAttribute
+              attach="attributes-position"
+              count={tracePath.length}
+              array={traceArray}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff8866" linewidth={2} />
+        </line>
       )}
       {/* IK target */}
       {ikTarget && onIkTargetChange && (

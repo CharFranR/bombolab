@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RobotRendererProps } from './types';
-import { buildTraceTube } from './trace';
 import IkTarget from '../components/IkTarget';
 
 // ─── Colores ───────────────────────────────────────────────────────────────
@@ -172,23 +171,17 @@ export default function SimpleRobotScene({
     [workspacePoints],
   );
 
-  // Trace as a SOLID tube (buildTraceTube): progressive reveal via
-  // geometry.setDrawRange works natively on BufferGeometry. The previous drei
-  // Line (Line2 + LineMaterial) ignored drawRange — the full stroke appeared
-  // at once and rendered as dots. Rebuilt per path change; old geometry is
-  // disposed. Reads traceProgressRef (a ref the app updates in its rAF loop)
-  // so this scene is NOT re-rendered by React on every frame delta.
-  const traceTubeRef = useRef<THREE.TubeGeometry | null>(null);
-  const traceTube = useMemo(() => buildTraceTube(tracePath ?? []), [tracePath]);
-  traceTubeRef.current = traceTube;
-  useEffect(
-    () => () => {
-      if (traceTube) traceTube.dispose();
-    },
-    [traceTube],
+  // Full trace geometry mounted once; the line is revealed progressively
+  // with geometry.setDrawRange in useFrame. Reads traceProgressRef (a ref
+  // the app updates in its rAF loop) so this scene is NOT re-rendered by
+  // React on every frame delta — only setDrawRange changes, GPU-side.
+  const traceGeoRef = useRef<THREE.BufferGeometry>(null);
+  const traceArray = useMemo(
+    () => (tracePath && tracePath.length > 0 ? new Float32Array(tracePath.flat()) : null),
+    [tracePath],
   );
   useFrame(() => {
-    const g = traceTubeRef.current;
+    const g = traceGeoRef.current;
     if (!g) return;
     const attr = g.getAttribute('position');
     if (!attr) return;
@@ -300,13 +293,20 @@ export default function SimpleRobotScene({
         </points>
       )}
 
-      {/* Progressive trace of the drawing path (three.js coords, on the floor).
-          Solid tube — drawRange reveal works natively, stroke stays continuous. */}
-      {traceTube && (
-        <mesh>
-          <primitive object={traceTube} attach="geometry" />
-          <meshBasicMaterial color="#ff8866" />
-        </mesh>
+      {/* Progressive trace of the drawing path (three.js coords, z = plane).
+          Full geometry mounts once; setDrawRange in useFrame reveals it. */}
+      {tracePath && tracePath.length > 1 && traceArray && (
+        <line>
+          <bufferGeometry ref={traceGeoRef}>
+            <bufferAttribute
+              attach="attributes-position"
+              count={tracePath.length}
+              array={traceArray}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff8866" linewidth={2} />
+        </line>
       )}
     </group>
   );

@@ -61,48 +61,6 @@ export default function App() {
   // Robot operating mode: the enum has more variants (Teaching, Calibration,
   // EmergencyStop) but only Normal and Drawing are implemented (slice 1).
   const [robotMode, setRobotMode] = useState<'normal' | 'drawing'>('normal');
-  // Smooth home-return animation: when a trajectory completes, the arm glides
-  // back to home over HOME_RETURN_DURATION instead of teleporting (the user
-  // saw the abrupt jump as a regression vs. the smooth gripper descent that
-  // starts a drawing). Implemented as an IMPERATIVE rAF loop started from the
-  // completion effect (startHomeReturn), NOT as a state/effect dance — state
-  // effects are vulnerable to StrictMode/HMR double-mounting which cancelled
-  // the animation before its first frame (the arm never returned home).
-  const HOME_RETURN_DURATION = 1.5; // seconds — controlled glide, not a snap
-  const robotRef = useRef(robot);
-  robotRef.current = robot;
-  const cancelHomeReturnRef = useRef<() => void>(() => {});
-  const startHomeReturn = useCallback(() => {
-    cancelHomeReturnRef.current();
-    const cur = robotRef.current;
-    if (!cur) return;
-    const startQ = cur.segments.map((s) => s.q);
-    const home = fabriCreator();
-    const homeQ = home.segments.map((s) => s.q);
-    // Where the home tool pose sits — the IK sphere is re-parked there when
-    // the glide lands so the gripper visibly holds it again.
-    const fk = forwardKinematics(home.segments, home.baseTransform);
-    const homeTip: [number, number, number] = [fk.ee[3], fk.ee[7], fk.ee[11]];
-    const t0 = performance.now();
-    let raf = 0;
-    const step = (now: number) => {
-      const t = Math.min((now - t0) / 1000 / HOME_RETURN_DURATION, 1);
-      const s = t * t * (3 - 2 * t); // smoothstep: ease in + ease out
-      const qs = startQ.map((q, i) => q + (homeQ[i] - q) * s);
-      setRobot((prev) =>
-        prev
-          ? { ...prev, segments: prev.segments.map((seg, i) => ({ ...seg, q: qs[i] })) }
-          : prev,
-      );
-      if (t < 1) {
-        raf = requestAnimationFrame(step);
-      } else {
-        setIkTarget(homeTip); // park the sphere at home, held by the gripper
-      }
-    };
-    raf = requestAnimationFrame(step);
-    cancelHomeReturnRef.current = () => cancelAnimationFrame(raf);
-  }, []);
   const [transitioning, setTransitioning] = useState(false);
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
@@ -427,7 +385,6 @@ export default function App() {
     setRobotMode('normal');
     setIkMode(false);
     setIkTarget(null);
-    cancelHomeReturnRef.current(); // no home glide after leaving drawing mode
     setGripper(gripperBeforeModeRef.current); // restaurar pinza
   }, [playerId]);
 
@@ -507,9 +464,6 @@ export default function App() {
   // gates what it is fed.
   const startTrajectory = useCallback(async (cmds: MotionCommandJS[], key: string) => {
     if (transitioning || !robot || robotMode !== 'drawing') return false;
-    // A new trajectory cancels any in-flight smooth home return — the two
-    // animations must never fight over the robot pose.
-    cancelHomeReturnRef.current();
     // Replace any running/completed trajectory — the demo buttons must
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
@@ -566,13 +520,7 @@ export default function App() {
     const fk = forwardKinematics(robot.segments, robot.baseTransform);
     const tip = fk.ee;
     const start: [number, number, number] = [tip[3], tip[7], tip[11]];
-    // Trace shows where the PEN TIP draws, not the TCP: the marker is not
-    // modeled in the scene, so the path is rendered shifted DOWN by the pen
-    // length (= the drawing plane height) — the drawing lands ON the floor
-    // (z=0) while the gripper hovers at DRAW_PLANE_Z.
-    setTracePath(
-      drawingPath(cmds, DRAW_PLANE_Z).map((p) => robotToThree([p[0], p[1], p[2] - DRAW_PLANE_Z])),
-    );
+    setTracePath(drawingPath(cmds).map(robotToThree));
     traceProgressRef.current = 0;
     setActiveDemo(key);
     const samples = planTimeline(cmds, {
@@ -663,12 +611,6 @@ export default function App() {
       loadGcodeText(text, name, {
         safeDrawingArea: () => safeDrawingArea(DRAW_PLANE_Z),
         parseGcode,
-        // MUST match the drawing plane: loadGcodeText defaults to 80/85, which
-        // made gcode/CIPRA commands parse at z=80 — the trace filter (now at
-        // DRAW_PLANE_Z=70) then produced an EMPTY trace and the drawing
-        // floated above the floor again.
-        planeZ: DRAW_PLANE_Z,
-        travelZ: TRAVEL_PLANE_Z,
         startTrajectory,
         setValidating,
         setGcodeError,
@@ -681,16 +623,16 @@ export default function App() {
   const handleStartDemo = useCallback(() => {
     void (async () => {
       const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
-      await startTrajectory(squareCommands(200, 0, DRAW_PLANE_Z, half), 'square');
+      await startTrajectory(squareCommands(200, 0, 80, half), 'square');
     })();
   }, [startTrajectory, demoSizeCm]);
 
   const handleStartDiagnostic = useCallback(() => {
-    void startTrajectory(diagnosticLinesCommands(DRAW_PLANE_Z), 'lines');
+    void startTrajectory(diagnosticLinesCommands(), 'lines');
   }, [startTrajectory]);
 
   const handleStartArc = useCallback(() => {
-    void startTrajectory(arcCommands(180, -70, 140, DRAW_PLANE_Z), 'arc');
+    void startTrajectory(arcCommands(), 'arc');
   }, [startTrajectory]);
 
   const handleGcodeFile = useCallback((file: File) => {
@@ -755,11 +697,6 @@ export default function App() {
   // COMPLETE only fires when the completed playback IS the one this job
   // started. Cleared on new draw start, FAIL and discard.
   const cipraDrawPlayerIdRef = useRef<number | null>(null);
-  // Playback id that already returned the robot home on completion — the
-  // completion effect re-runs on unrelated state changes, so this guard makes
-  // the home return fire exactly once per trajectory (re-armed by the next
-  // start, which always binds a fresh player id).
-  const homeReturnedPlayerRef = useRef<number | null>(null);
   // Latest queue state readable from the WS client callbacks (they are mounted
   // once with an empty closure); the queue-full gate needs current state.
   const cipraJobsRef = useRef(cipraJobs);
@@ -802,27 +739,13 @@ export default function App() {
   // Review fix #2: only when the finished playback IS the one the job started
   // (playerId === cipraDrawPlayerIdRef). A demo/file/refit playback finishing
   // must not complete a CIPRA job that is not actually playing it.
-  // The robot also returns to its home pose (once per player id): after a
-  // drawing finishes it must not stay parked at the last stroke. The return
-  // is an imperative rAF glide (startHomeReturn), and the IK sphere is
-  // dropped from the last stroke BEFORE it — otherwise it would float loose
-  // while the arm glides home (startHomeReturn re-parks it at the home pose).
   useEffect(() => {
     if (playerState === 'completed') finalizeTrace();
-    if (
-      playerState === 'completed' &&
-      playerId !== null &&
-      homeReturnedPlayerRef.current !== playerId
-    ) {
-      homeReturnedPlayerRef.current = playerId;
-      setIkTarget(null);
-      startHomeReturn();
-    }
     if (shouldCompleteCipraDraw(cipraJobs, playerState, playerId, cipraDrawPlayerIdRef.current)) {
       cipraDispatch({ type: 'COMPLETE', id: cipraJobs.drawingId as string });
       cipraDrawPlayerIdRef.current = null;
     }
-  }, [cipraJobs, playerState, playerId, finalizeTrace, gripper, startHomeReturn]);
+  }, [cipraJobs, playerState, playerId, finalizeTrace]);
 
   const handleClearDrawingBlock = useCallback(() => {
     if (manifestModeRef.current) {
