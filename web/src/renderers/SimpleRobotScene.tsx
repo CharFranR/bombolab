@@ -1,8 +1,9 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Grid, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RobotRendererProps } from './types';
+import { buildTraceTube } from './trace';
 import IkTarget from '../components/IkTarget';
 
 // ─── Colores ───────────────────────────────────────────────────────────────
@@ -171,16 +172,23 @@ export default function SimpleRobotScene({
     [workspacePoints],
   );
 
-  // Full trace line mounted once — drei Line (Line2 + LineMaterial): pixel
-  // width + antialiasing, because core three.js 1px lines are effectively
-  // invisible at floor level (sub-pixel over the bright pool/grid). Revealed
-  // progressively with geometry.setDrawRange in useFrame. Reads
-  // traceProgressRef (a ref the app updates in its rAF loop) so this scene is
-  // NOT re-rendered by React on every frame delta — only setDrawRange
-  // changes, GPU-side.
-  const traceLineRef = useRef<any>(null);
+  // Trace as a SOLID tube (buildTraceTube): progressive reveal via
+  // geometry.setDrawRange works natively on BufferGeometry. The previous drei
+  // Line (Line2 + LineMaterial) ignored drawRange — the full stroke appeared
+  // at once and rendered as dots. Rebuilt per path change; old geometry is
+  // disposed. Reads traceProgressRef (a ref the app updates in its rAF loop)
+  // so this scene is NOT re-rendered by React on every frame delta.
+  const traceTubeRef = useRef<THREE.TubeGeometry | null>(null);
+  const traceTube = useMemo(() => buildTraceTube(tracePath ?? []), [tracePath]);
+  traceTubeRef.current = traceTube;
+  useEffect(
+    () => () => {
+      if (traceTube) traceTube.dispose();
+    },
+    [traceTube],
+  );
   useFrame(() => {
-    const g = traceLineRef.current?.geometry as THREE.BufferGeometry | undefined;
+    const g = traceTubeRef.current;
     if (!g) return;
     const attr = g.getAttribute('position');
     if (!attr) return;
@@ -293,14 +301,12 @@ export default function SimpleRobotScene({
       )}
 
       {/* Progressive trace of the drawing path (three.js coords, on the floor).
-          drei Line: pixel-width, antialiased stroke that reads on the pool. */}
-      {tracePath && tracePath.length > 1 && (
-        <Line
-          ref={traceLineRef}
-          points={tracePath as [number, number, number][]}
-          color="#ff8866"
-          lineWidth={3}
-        />
+          Solid tube — drawRange reveal works natively, stroke stays continuous. */}
+      {traceTube && (
+        <mesh>
+          <primitive object={traceTube} attach="geometry" />
+          <meshBasicMaterial color="#ff8866" />
+        </mesh>
       )}
     </group>
   );
