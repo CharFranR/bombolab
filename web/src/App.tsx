@@ -1114,19 +1114,18 @@ export default function App() {
     [robot],
   );
 
-  // EE-1: base style for the Fidelity segmented options (`.segmented` container
-  // + `.segmented__opt--active` class in theme.css for the active option).
+  // EE-1: base style for the Fidelity segmented options — geometry and
+  // typography only; the look lives in theme.css (`.segmented__opt` base +
+  // `.segmented__opt--active` violet capsule). No background key here so the
+  // active class can own the surface.
   const segmentOptStyle: React.CSSProperties = {
     padding: '4px 14px',
     border: '1px solid transparent',
     borderRadius: 999,
-    background: 'transparent',
-    color: 'var(--c-gray)',
     fontSize: 12,
     fontWeight: 600,
     fontFamily: 'var(--font-sans)',
     cursor: 'pointer',
-    transition: 'color 0.2s ease, background 0.2s ease, border-color 0.2s ease',
   };
 
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
@@ -1178,33 +1177,15 @@ export default function App() {
           <div className="segmented">
             <button
               onClick={() => setFidelityMode('low')}
-              className={fidelityMode === 'low' ? 'segmented__opt--active' : undefined}
-              style={{
-                ...segmentOptStyle,
-                ...(fidelityMode === 'low'
-                  ? {
-                      background: 'rgba(0, 242, 254, 0.16)',
-                      borderColor: 'rgba(0, 242, 254, 0.45)',
-                      color: 'var(--c-cyan)',
-                    }
-                  : {}),
-              }}
+              className={'segmented__opt' + (fidelityMode === 'low' ? ' segmented__opt--active' : '')}
+              style={segmentOptStyle}
             >
               Low
             </button>
             <button
               onClick={() => setFidelityMode('high')}
-              className={fidelityMode === 'high' ? 'segmented__opt--active' : undefined}
-              style={{
-                ...segmentOptStyle,
-                ...(fidelityMode === 'high'
-                  ? {
-                      background: 'rgba(0, 242, 254, 0.16)',
-                      borderColor: 'rgba(0, 242, 254, 0.45)',
-                      color: 'var(--c-cyan)',
-                    }
-                  : {}),
-              }}
+              className={'segmented__opt' + (fidelityMode === 'high' ? ' segmented__opt--active' : '')}
+              style={segmentOptStyle}
             >
               High
             </button>
@@ -2045,22 +2026,21 @@ export default function App() {
         {/* Bottom pill bar (PB-1): dark pills hosting the pre-existing action
             handlers, moved from the sidebar buttons — wiring unchanged.
             Config UIs (Run Analysis selectors, servo calib, demo/gcode
-            blocks) stay in the left column. */}
-        <div style={{
-          position: 'absolute',
-          bottom: 16,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 15,
-          display: 'flex',
-          gap: 8,
-          padding: '8px 10px',
-          borderRadius: 999,
-          background: 'rgba(13, 17, 23, 0.65)',
-          border: '1px solid var(--border)',
-          boxShadow: 'var(--glass-shadow)',
-          backdropFilter: 'blur(var(--glass-blur))',
-        }}>
+            blocks) stay in the left column. Surface = `.pill-bar` liquid
+            glass capsule (theme.css); positioning stays inline. */}
+        <div
+          className="pill-bar"
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 15,
+            display: 'flex',
+            gap: 8,
+            padding: '8px 10px',
+          }}
+        >
           {connected ? (
             <button className="pill-btn" onClick={handleDisconnect}>
               Desconectar
@@ -2104,17 +2084,8 @@ export default function App() {
             Reset Home
           </button>
           <button
-            className="pill-btn"
+            className={'pill-btn' + (analysisOpen ? ' pill-btn--active' : '')}
             onClick={() => setAnalysisOpen(v => !v)}
-            style={
-              analysisOpen
-                ? {
-                    background: 'rgba(0, 242, 254, 0.16)',
-                    border: '1px solid rgba(0, 242, 254, 0.45)',
-                    color: 'var(--c-cyan)',
-                  }
-                : undefined
-            }
           >
             {/* Toggle label: "Análisis" → "Salir de Análisis" while the card
                 is open; the workspace points render only while analysisOpen */}
@@ -2122,7 +2093,7 @@ export default function App() {
           </button>
           {robotMode === 'normal' ? (
             <button
-              className="pill-btn"
+              className="pill-btn pill-btn--primary"
               onClick={() => { void enterDrawingMode(); }}
               disabled={transitioning}
             >
@@ -2130,13 +2101,8 @@ export default function App() {
             </button>
           ) : (
             <button
-              className="pill-btn"
+              className="pill-btn pill-btn--active"
               onClick={exitDrawingMode}
-              style={{
-                background: 'rgba(0, 242, 254, 0.16)',
-                border: '1px solid rgba(0, 242, 254, 0.45)',
-                color: 'var(--c-cyan)',
-              }}
             >
               Salir de modo dibujo
             </button>
@@ -2172,10 +2138,14 @@ export default function App() {
               width: 32,
               height: 32,
               padding: 0,
-              background: 'transparent',
-              border: '1px solid var(--border)',
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02))',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              borderTopColor: 'rgba(255, 255, 255, 0.22)',
               borderRadius: '50%',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1)',
               cursor: 'pointer',
+              transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
               color: cipraJobs.lastNotice && !cipraNoticeDismissed
                 ? 'var(--c-cyan)'
                 : 'var(--c-gray)',
