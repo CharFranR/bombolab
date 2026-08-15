@@ -836,7 +836,10 @@ export default function App() {
   );
 
   const cipraPanelJobs = useMemo(
-    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
+    // 'drawing' excluded: once the user presses Dibujar the job leaves the
+    // decision panel (same as Descartar) so the card stays uncluttered. A
+    // failed draw (FAIL) moves it back to pending, so it reappears here.
+    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded' && j.status !== 'drawing'),
     [cipraJobs.jobs],
   );
 
@@ -2110,7 +2113,15 @@ export default function App() {
               {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
             </button>
           ) : (
-            <button className="pill-btn" onClick={exitDrawingMode}>
+            <button
+              className="pill-btn"
+              onClick={exitDrawingMode}
+              style={{
+                background: 'rgba(0, 242, 254, 0.16)',
+                border: '1px solid rgba(0, 242, 254, 0.45)',
+                color: 'var(--c-cyan)',
+              }}
+            >
               Salir de modo dibujo
             </button>
           )}
