@@ -243,7 +243,12 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
   return (
     <div className="glass-card" style={{ padding: '12px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <h3 className="card-title" style={{ margin: 0 }}>Analizador de backlash</h3>
+        <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+        Analizador de backlash
+      </h3>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>
           Importar CSV
           <input

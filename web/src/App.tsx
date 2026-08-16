@@ -1132,19 +1132,21 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
-      {/* Sidebar — floating glass column (D9): position clears the 44px fixed
-          top bar (top 56) and the centered pill bar (bottom 92). CAD
-          contextual-inspector layout: JointControls, End-Effector (moved from
-          the right column), Fidelity, then the persistent toggles. The whole
-          panel scrolls (overflowY auto) — blocks flow in
-          order, JointControls keeps its own styling. */}
+      {/* Sidebar — floating glass column (D9): position clears the floating
+          top bar (top 72 = bar bottom 64 + 8px gap) and the centered pill
+          bar (bottom 92); bottom 330 also clears the serial-errors card
+          (bottom 92 + height 230 + 8px gap). CAD contextual-inspector
+          layout: JointControls, End-Effector (moved from the right column),
+          Fidelity, then the persistent toggles. The whole panel scrolls
+          (overflowY auto) — blocks flow in order, JointControls keeps its
+          own styling. */}
       <div
         className="glass-card"
         style={{
           position: 'fixed',
-          top: 56,
+          top: 72,
           left: 16,
-          bottom: 92,
+          bottom: 330,
           width: 280,
           minWidth: 280,
           display: 'flex',
@@ -1272,17 +1274,40 @@ export default function App() {
           </div>
         )}
 
-        {/* Conexión robot físico (WebSerial) — the dot + Conectado/Desconectado
-            row was removed (top bar badge shows it); this block now renders the
-            serialError feedback ONLY, and only when an error exists. */}
-        {serialError && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
-          </div>
-        )}
-
         {/* Reset — moved to the bottom pill bar (handleReset) */}
       </div>
+
+      {/* Serial errors card — moved OUT of the sidebar into its own glass
+          card below it (same left column, same width). Renders only when
+          an error exists; content scrolls if the list grows. */}
+      {serialError && (
+        <div
+          className="glass-card anim-in"
+          style={{
+            position: 'fixed',
+            left: 16,
+            bottom: 92,
+            width: 280,
+            height: 230,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '12px 16px',
+            zIndex: 10,
+          }}
+        >
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            </svg>
+            Errores seriales
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1, fontSize: 11, color: '#F87171', lineHeight: 1.6 }}>
+            {serialError}
+          </div>
+        </div>
+      )}
 
         {/* Right contextual dock (D5): fixed container that stacks ONLY the
             active mode cards (drawing / calibration / IK / analysis /
@@ -1292,7 +1317,7 @@ export default function App() {
         <div style={{
           position: 'fixed',
           right: 16,
-          top: 64,
+          top: 72,
           width: 320,
           maxHeight: 'calc(100vh - 160px)',
           overflowY: 'auto',
@@ -1309,7 +1334,10 @@ export default function App() {
               className="glass-card anim-in"
               style={{ padding: '12px 16px' }}
             >
-              <div className="card-title">
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                </svg>
                 Drawing Mode
               </div>
             <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1632,6 +1660,13 @@ export default function App() {
               into the dock (same gate calibRunning; content byte-identical) */}
           {calibRunning && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m12 14 4-4" />
+                  <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+                </svg>
+                Calibración
+              </div>
               <div style={{ fontSize: 11, color: 'var(--c-cyan)', marginBottom: 6 }}>{calibStatus}</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
                 {SERVO_NAMES.map((n, i) => (
@@ -1716,6 +1751,13 @@ export default function App() {
               selector + hint + IK target readout moved from the sidebar */}
           {ikMode && robotMode !== 'drawing' && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="6" />
+                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                </svg>
+                IK Mode
+              </div>
               <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
                 {[0, 1, 2].map(mode => (
@@ -1760,7 +1802,14 @@ export default function App() {
           {analysisOpen && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span className="section-label">Análisis de workspace</span>
+                <span className="section-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20V10" />
+                    <path d="M18 20V4" />
+                    <path d="M6 20v-4" />
+                  </svg>
+                  Análisis de workspace
+                </span>
                 {workspaceRunning && (
                   <button
                     onClick={cancelWorkspace}
@@ -1865,6 +1914,12 @@ export default function App() {
               exists (playerId !== null) */}
           {playerId !== null && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="6 3 20 12 6 21 6 3" />
+                </svg>
+                Playback
+              </div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                 <button
                   onClick={handlePlaybackControl}
@@ -1978,7 +2033,7 @@ export default function App() {
             className="glass-card anim-in"
             style={{
               position: 'absolute',
-              top: 56,
+              top: 72,
               right: 16,
               zIndex: 20,
               width: 280,
@@ -2118,7 +2173,7 @@ export default function App() {
           </button>
           {robotMode === 'normal' ? (
             <button
-              className="pill-btn pill-btn--primary"
+              className="pill-btn"
               onClick={() => { void enterDrawingMode(); }}
               disabled={transitioning}
             >
@@ -2149,7 +2204,14 @@ export default function App() {
         className="top-bar"
         style={{ position: 'fixed', top: 10, left: 12, right: 12, zIndex: 5 }}
       >
-        <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: '#e6edf3' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 700, letterSpacing: 1.5, color: '#E2E8F0' }}>
+          <svg width={30} height={30} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="0.5" y="0.5" width="23" height="23" rx="7.5" fill="rgba(0, 242, 254, 0.08)" stroke="rgba(0, 242, 254, 0.35)" strokeWidth="1.2" />
+            <circle cx="7" cy="18" r="1.6" stroke="#00F2FE" strokeWidth="1.4" />
+            <path d="M7 18v-7.5h10" stroke="#00F2FE" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="17" cy="10.5" r="1.3" stroke="#00F2FE" strokeWidth="1.4" />
+            <path d="M17 9.2v2.6" stroke="#00F2FE" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
           BOMBOLAB — FABRI Creator · 5-DOF
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -220,7 +220,7 @@ export default function CalibrationPanel({
       className="glass-card"
       style={{
         position: 'absolute',
-        top: 56,
+        top: 72,
         right: 16,
         zIndex: 16,
         padding: 12,
@@ -230,7 +230,11 @@ export default function CalibrationPanel({
         minWidth: 200,
       }}
     >
-      <div className="card-title">
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="m12 14 4-4" />
+          <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+        </svg>
         Calibration
       </div>
       <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
@@ -251,7 +255,7 @@ export default function CalibrationPanel({
       className="glass-card"
       style={{
         position: 'absolute',
-        top: 56,
+        top: 72,
         right: 16,
         zIndex: 16,
         padding: 12,
@@ -261,7 +265,11 @@ export default function CalibrationPanel({
         minWidth: 200,
       }}
     >
-      <div className="card-title">
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="m12 14 4-4" />
+          <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+        </svg>
         Calibration
       </div>
 

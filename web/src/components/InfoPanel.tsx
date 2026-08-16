@@ -25,7 +25,11 @@ export default function InfoPanel({ robot, rawFrames }: { robot: RobotDef; rawFr
   // the cyan accent, structure/logic unchanged.
   return (
     <div className="glass-card" style={{ padding: '12px 16px' }}>
-      <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1 }}>
+      <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="6" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
         End-Effector
       </h3>
 
