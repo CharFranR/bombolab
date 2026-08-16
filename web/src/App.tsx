@@ -2247,6 +2247,7 @@ export default function App() {
             aria-label="Notificaciones CIPRA"
             title="Notificaciones CIPRA"
             style={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -2270,6 +2271,22 @@ export default function App() {
               <path d="M12 2.6a3.4 3.4 0 0 0-3.4 3.4v.8c-2.7 1.6-4.4 4.4-4.4 7.4 0 3.5-1.6 5.6-1.6 5.6h18.8s-1.6-2.1-1.6-5.6c0-3-1.7-5.8-4.4-7.4V6a3.4 3.4 0 0 0-3.4-3.4Z" />
               <rect x="10.9" y="20.2" width="2.2" height="2.4" rx="1.1" />
             </svg>
+            {cipraJobs.lastNotice && !cipraNoticeDismissed && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: 5,
+                  right: 5,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#F87171',
+                  boxShadow: '0 0 6px rgba(248, 113, 113, 0.8)',
+                  animation: 'badgePulse 2s ease-in-out infinite',
+                }}
+              />
+            )}
           </button>
         </div>
       </div>
