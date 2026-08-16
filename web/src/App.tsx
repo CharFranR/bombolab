@@ -2043,10 +2043,18 @@ export default function App() {
         >
           {connected ? (
             <button className="pill-btn" onClick={handleDisconnect}>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v7" />
+                <path d="M4.9 4.9a10 10 0 1 0 14.2 0" />
+              </svg>
               Desconectar
             </button>
           ) : (
             <button className="pill-btn" onClick={handleConnect}>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v7" />
+                <path d="M4.9 4.9a10 10 0 1 0 14.2 0" />
+              </svg>
               Conectar
             </button>
           )}
@@ -2071,6 +2079,10 @@ export default function App() {
               }
             }}
           >
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="6" />
+              <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
             {ikMode ? 'Desactivar IK' : 'IK Mode'}
           </button>
           <button
@@ -2078,9 +2090,17 @@ export default function App() {
             onClick={() => { void enterCalibration(); }}
             disabled={!connected}
           >
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m12 14 4-4" />
+              <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+            </svg>
             Calibrar Servos
           </button>
           <button className="pill-btn" onClick={handleReset}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <path d="M9 22V12h6v10" />
+            </svg>
             Reset Home
           </button>
           <button
@@ -2089,6 +2109,11 @@ export default function App() {
           >
             {/* Toggle label: "Análisis" → "Salir de Análisis" while the card
                 is open; the workspace points render only while analysisOpen */}
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20V10" />
+              <path d="M18 20V4" />
+              <path d="M6 20v-4" />
+            </svg>
             {analysisOpen ? 'Salir de Análisis' : 'Análisis'}
           </button>
           {robotMode === 'normal' ? (
@@ -2097,6 +2122,9 @@ export default function App() {
               onClick={() => { void enterDrawingMode(); }}
               disabled={transitioning}
             >
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
               {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
             </button>
           ) : (
@@ -2104,18 +2132,22 @@ export default function App() {
               className="pill-btn pill-btn--active"
               onClick={exitDrawingMode}
             >
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
               Salir de modo dibujo
             </button>
           )}
         </div>
       </div>
 
-      {/* Top bar chrome (TB-1): full-width glass strip overlaying the viewport.
-          zIndex 5 stays above the canvas (z-auto) and vignette (z1), below
-          CalibrationPanel (z10) and the CIPRA alert overlay (z20). */}
+      {/* Top bar chrome (TB-1): floating glass capsule overlaying the
+          viewport. zIndex 5 stays above the canvas (z-auto) and vignette
+          (z1), below CalibrationPanel (z10) and the CIPRA alert (z20).
+          Inset 12px with a 10px top gap reads as a floating bar. */}
       <div
         className="top-bar"
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 5 }}
+        style={{ position: 'fixed', top: 10, left: 12, right: 12, zIndex: 5 }}
       >
         <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: '#e6edf3' }}>
           BOMBOLAB — FABRI Creator · 5-DOF
