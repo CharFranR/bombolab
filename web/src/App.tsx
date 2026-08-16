@@ -2226,15 +2226,13 @@ export default function App() {
         style={{ position: 'fixed', top: 10, left: 12, right: 12, zIndex: 5 }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 700, letterSpacing: 1.5, color: '#E2E8F0' }}>
-          <svg width={32} height={32} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="0.5" y="0.5" width="23" height="23" rx="8" fill="rgba(0, 242, 254, 0.10)" stroke="rgba(0, 242, 254, 0.45)" strokeWidth="1.1" />
-            <path d="M2.5 4.6a2.1 2.1 0 0 1 2.1-2.1h14.8a2.1 2.1 0 0 1 2.1 2.1v3.4H2.5V4.6Z" fill="rgba(255, 255, 255, 0.12)" />
-            <circle cx="7" cy="18" r="1.7" fill="#00F2FE" />
-            <path d="M7 18v-7.5h10" stroke="#00F2FE" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="7" cy="10.5" r="1.5" fill="#00F2FE" />
-            <circle cx="17" cy="10.5" r="1.5" fill="#00F2FE" />
-            <rect x="16.3" y="7.8" width="1.4" height="2.8" rx="0.7" fill="#00F2FE" />
-          </svg>
+          <img
+            src="/logo.png"
+            alt="Bombolab"
+            width={32}
+            height={32}
+            style={{ borderRadius: 8, objectFit: 'contain' }}
+          />
           BOMBOLAB — FABRI Creator · 5-DOF
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
