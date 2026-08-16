@@ -1299,23 +1299,18 @@ export default function App() {
       >
         <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <svg
-            width={15}
-            height={15}
+            width={16}
+            height={16}
             viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            fill="currentColor"
+            aria-hidden="true"
             style={{
               color: serialError ? '#F87171' : 'var(--c-text-faint)',
               filter: serialError ? 'drop-shadow(0 0 6px rgba(248, 113, 113, 0.55))' : 'none',
               animation: serialError ? 'badgePulse 2s ease-in-out infinite' : 'none',
             }}
           >
-            <path d="M12 9v4" />
-            <path d="M12 17h.01" />
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <path fillRule="evenodd" d="M12 3.4 22.3 20.8H1.7L12 3.4ZM10.9 9.2h2.2v5.2h-2.2v-5.2Zm0 7.2h2.2v2h-2.2v-2Z" />
           </svg>
           Errores seriales
         </div>
@@ -1356,8 +1351,8 @@ export default function App() {
               style={{ padding: '12px 16px' }}
             >
               <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M17 3.4a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3.4Z" />
                 </svg>
                 Drawing Mode
               </div>
@@ -1682,9 +1677,9 @@ export default function App() {
           {calibRunning && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
               <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m12 14 4-4" />
-                  <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+                  <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+                  <path d="m12 12 3.4-5" />
                 </svg>
                 Calibración
               </div>
@@ -1773,9 +1768,12 @@ export default function App() {
           {ikMode && robotMode !== 'drawing' && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
               <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="6" />
-                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M12 6.8a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4ZM12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z" />
+                  <rect x="11.15" y="1.8" width="1.7" height="4" rx="0.85" />
+                  <rect x="11.15" y="18.2" width="1.7" height="4" rx="0.85" />
+                  <rect x="1.8" y="11.15" width="4" height="1.7" rx="0.85" />
+                  <rect x="18.2" y="11.15" width="4" height="1.7" rx="0.85" />
                 </svg>
                 IK Mode
               </div>
@@ -1824,10 +1822,10 @@ export default function App() {
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span className="section-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20V10" />
-                    <path d="M18 20V4" />
-                    <path d="M6 20v-4" />
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="4.5" y="13.5" width="3.6" height="8" rx="1.2" />
+                    <rect x="10.2" y="9.5" width="3.6" height="12" rx="1.2" />
+                    <rect x="15.9" y="5" width="3.6" height="16.5" rx="1.2" />
                   </svg>
                   Análisis de workspace
                 </span>
@@ -1936,8 +1934,8 @@ export default function App() {
           {playerId !== null && (
             <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
               <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="6 3 20 12 6 21 6 3" />
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinejoin="round" aria-hidden="true">
+                  <path d="M7.5 4.8 19 12 7.5 19.2Z" />
                 </svg>
                 Playback
               </div>
@@ -2119,17 +2117,17 @@ export default function App() {
         >
           {connected ? (
             <button className="pill-btn" onClick={handleDisconnect}>
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2v7" />
-                <path d="M4.9 4.9a10 10 0 1 0 14.2 0" />
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M12 2.6a9.4 9.4 0 1 1 0 18.8 9.4 9.4 0 0 1 0-18.8ZM12 4.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4Z" />
+                <rect x="11.15" y="1.8" width="1.7" height="6.6" rx="0.85" />
               </svg>
               Desconectar
             </button>
           ) : (
             <button className="pill-btn" onClick={handleConnect}>
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2v7" />
-                <path d="M4.9 4.9a10 10 0 1 0 14.2 0" />
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M12 2.6a9.4 9.4 0 1 1 0 18.8 9.4 9.4 0 0 1 0-18.8ZM12 4.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4Z" />
+                <rect x="11.15" y="1.8" width="1.7" height="6.6" rx="0.85" />
               </svg>
               Conectar
             </button>
@@ -2155,9 +2153,12 @@ export default function App() {
               }
             }}
           >
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="6" />
-              <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M12 6.8a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4ZM12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z" />
+              <rect x="11.15" y="1.8" width="1.7" height="4" rx="0.85" />
+              <rect x="11.15" y="18.2" width="1.7" height="4" rx="0.85" />
+              <rect x="1.8" y="11.15" width="4" height="1.7" rx="0.85" />
+              <rect x="18.2" y="11.15" width="4" height="1.7" rx="0.85" />
             </svg>
             {ikMode ? 'Desactivar IK' : 'IK Mode'}
           </button>
@@ -2166,16 +2167,15 @@ export default function App() {
             onClick={() => { void enterCalibration(); }}
             disabled={!connected}
           >
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="m12 14 4-4" />
-              <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+              <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+              <path d="m12 12 3.4-5" />
             </svg>
             Calibrar Servos
           </button>
           <button className="pill-btn" onClick={handleReset}>
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <path d="M9 22V12h6v10" />
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M12 3.4 2.9 10.6h2.1v8.6c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-8.6h2.1L12 3.4ZM10 14.6h4v6.6h-4v-6.6Z" />
             </svg>
             Reset Home
           </button>
@@ -2185,10 +2185,10 @@ export default function App() {
           >
             {/* Toggle label: "Análisis" → "Salir de Análisis" while the card
                 is open; the workspace points render only while analysisOpen */}
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20V10" />
-              <path d="M18 20V4" />
-              <path d="M6 20v-4" />
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="4.5" y="13.5" width="3.6" height="8" rx="1.2" />
+              <rect x="10.2" y="9.5" width="3.6" height="12" rx="1.2" />
+              <rect x="15.9" y="5" width="3.6" height="16.5" rx="1.2" />
             </svg>
             {analysisOpen ? 'Salir de Análisis' : 'Análisis'}
           </button>
@@ -2198,8 +2198,8 @@ export default function App() {
               onClick={() => { void enterDrawingMode(); }}
               disabled={transitioning}
             >
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17 3.4a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3.4Z" />
               </svg>
               {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
             </button>
@@ -2208,8 +2208,8 @@ export default function App() {
               className="pill-btn pill-btn--active"
               onClick={exitDrawingMode}
             >
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17 3.4a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3.4Z" />
               </svg>
               Salir de modo dibujo
             </button>
@@ -2226,12 +2226,14 @@ export default function App() {
         style={{ position: 'fixed', top: 10, left: 12, right: 12, zIndex: 5 }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 700, letterSpacing: 1.5, color: '#E2E8F0' }}>
-          <svg width={30} height={30} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="0.5" y="0.5" width="23" height="23" rx="7.5" fill="rgba(0, 242, 254, 0.08)" stroke="rgba(0, 242, 254, 0.35)" strokeWidth="1.2" />
-            <circle cx="7" cy="18" r="1.6" stroke="#00F2FE" strokeWidth="1.4" />
-            <path d="M7 18v-7.5h10" stroke="#00F2FE" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="17" cy="10.5" r="1.3" stroke="#00F2FE" strokeWidth="1.4" />
-            <path d="M17 9.2v2.6" stroke="#00F2FE" strokeWidth="1.6" strokeLinecap="round" />
+          <svg width={32} height={32} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="0.5" y="0.5" width="23" height="23" rx="8" fill="rgba(0, 242, 254, 0.10)" stroke="rgba(0, 242, 254, 0.45)" strokeWidth="1.1" />
+            <path d="M2.5 4.6a2.1 2.1 0 0 1 2.1-2.1h14.8a2.1 2.1 0 0 1 2.1 2.1v3.4H2.5V4.6Z" fill="rgba(255, 255, 255, 0.12)" />
+            <circle cx="7" cy="18" r="1.7" fill="#00F2FE" />
+            <path d="M7 18v-7.5h10" stroke="#00F2FE" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="7" cy="10.5" r="1.5" fill="#00F2FE" />
+            <circle cx="17" cy="10.5" r="1.5" fill="#00F2FE" />
+            <rect x="16.3" y="7.8" width="1.4" height="2.8" rx="0.7" fill="#00F2FE" />
           </svg>
           BOMBOLAB — FABRI Creator · 5-DOF
         </span>
@@ -2266,18 +2268,9 @@ export default function App() {
                 : 'var(--c-gray)',
             }}
           >
-            <svg
-              width={24}
-              height={24}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2.6a3.4 3.4 0 0 0-3.4 3.4v.8c-2.7 1.6-4.4 4.4-4.4 7.4 0 3.5-1.6 5.6-1.6 5.6h18.8s-1.6-2.1-1.6-5.6c0-3-1.7-5.8-4.4-7.4V6a3.4 3.4 0 0 0-3.4-3.4Z" />
+              <rect x="10.9" y="20.2" width="2.2" height="2.4" rx="1.1" />
             </svg>
           </button>
         </div>
