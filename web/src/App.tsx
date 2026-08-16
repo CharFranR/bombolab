@@ -1134,8 +1134,8 @@ export default function App() {
     <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
       {/* Sidebar — floating glass column (D9): position clears the floating
           top bar (top 72 = bar bottom 64 + 8px gap) and the serial-errors
-          card (bottom 76 + height 140 + 8px gap), which in turn sits at
-          the pill bar's height (bottom 76). CAD contextual-inspector
+          card (bottom 16 + height 120 + 8px gap), whose bottom edge aligns
+          with the pill bar's bottom edge. CAD contextual-inspector
           layout: JointControls, End-Effector (moved from the right column),
           Fidelity, then the persistent toggles. The whole panel scrolls
           (overflowY auto) — blocks flow in order, JointControls keeps its
@@ -1146,7 +1146,7 @@ export default function App() {
           position: 'fixed',
           top: 72,
           left: 16,
-          bottom: 224,
+          bottom: 144,
           width: 280,
           minWidth: 280,
           display: 'flex',
@@ -1278,18 +1278,19 @@ export default function App() {
       </div>
 
       {/* Serial errors card — always visible, compact, own glass card below
-          the sidebar (same left column, same width), bottom edge aligned
-          with the pill bar height. Empty state shows a soft muted "Sin
-          errores" placeholder; when an error exists the alert icon lights
-          up (red glow + pulse) and the message scrolls if it grows. */}
+          the sidebar (same left column, same width); its bottom edge
+          coincides with the pill bar's bottom edge (bottom 16). Empty
+          state shows a soft muted "Sin errores" placeholder; when an error
+          exists the alert icon lights up (red glow + pulse) and the
+          message scrolls if it grows. */}
       <div
         className="glass-card anim-in"
         style={{
           position: 'fixed',
           left: 16,
-          bottom: 76,
+          bottom: 16,
           width: 280,
-          height: 140,
+          height: 120,
           display: 'flex',
           flexDirection: 'column',
           padding: '12px 16px',
