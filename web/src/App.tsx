@@ -108,6 +108,7 @@ export default function App() {
   const firmwareTraceRef = useRef<FirmwareSample[]>([]);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
   const traceRecorderRef = useRef<TraceRecorder | null>(null);
+  const manifestAbortControllerRef = useRef<AbortController | null>(null);
 
   // Backlash take-up per channel — EXPERIMENTAL and DISABLED by default:
   // the A/B test showed a fixed 2°/1° compensation made the drawing WORSE
@@ -261,6 +262,11 @@ export default function App() {
     try {
       await portRef.current?.close();
     } catch {}
+    // Any in-flight manifest flow is over — abort it so no stale reader
+    // keeps consuming the port and the STOP paths below never hit a null port.
+    manifestAbortControllerRef.current?.abort();
+    manifestModeRef.current = false;
+    manifestAbortRef.current = true;
     servoInterpolatorRef.current?.stop();
     servoInterpolatorRef.current = null;
     portRef.current = null;
@@ -362,6 +368,7 @@ export default function App() {
   const exitDrawingMode = useCallback(() => {
     if (manifestModeRef.current) {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+      manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
     }
@@ -408,7 +415,10 @@ export default function App() {
         // scene is NOT re-rendered on every frame delta.
         traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
         if (st === 'completed' && manifestModeRef.current) {
-          manifestModeRef.current = false;
+          // The JS player completing is NOT the end of the manifest phase: the
+          // firmware may still be executing its trajectory. The phase ends on
+          // DONE (continueManifestUpload onDone) or an error/abort path — only
+          // surface the firmware trace collected so far.
           setFirmwareTrace([...firmwareTraceRef.current]);
         }
         if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
@@ -453,7 +463,26 @@ export default function App() {
 
   const finalizeTrace = useCallback(() => {
     const result = traceRecorderRef.current?.stop();
-    if (result) setTraceResult(result);
+    if (!result) return;
+    // Merge with any earlier (pause-finalized) segment; the seam sample is never duplicated.
+    setTraceResult((prev) => {
+      if (prev === null) return result;
+      const shift = result.t0 - prev.t0;
+      const samples = [...prev.samples];
+      let lastTs = samples.length > 0 ? samples[samples.length - 1].ts_ms : -Infinity;
+      for (const s of result.samples) {
+        const ts = s.ts_ms + shift;
+        if (ts <= lastTs) continue;
+        const last = samples[samples.length - 1];
+        if (last !== undefined && last.q_us.every((v, i) => v === s.q_us[i])) {
+          samples[samples.length - 1] = { ...last, count: last.count + s.count };
+        } else {
+          samples.push({ ...s, ts_ms: ts });
+        }
+        lastTs = ts;
+      }
+      return { samples, t0: prev.t0, truncated: prev.truncated || result.truncated, framesWritten: prev.framesWritten + result.framesWritten, dedupe: prev.dedupe + result.dedupe };
+    });
   }, []);
 
   // Starts a drawing trajectory ONLY after a pre-flight reachability check
@@ -543,19 +572,44 @@ export default function App() {
     setPlayerState('running');
     const port = portRef.current;
     if (port && connected) {
+      // R3-1: the firmware may still be executing a previous manifest — a new
+      // flow must STOP it first (otherwise ERR BAD_STATE discards the
+      // executor and the handshake fails into a silent local-only fallback).
+      if (manifestModeRef.current) {
+        sendSerial(port, new TextEncoder().encode('STOP\n'));
+        manifestModeRef.current = false;
+        manifestAbortRef.current = true;
+        setFirmwareTrace([...firmwareTraceRef.current]);
+      }
+      manifestAbortControllerRef.current?.abort();
+      const manifestController = new AbortController();
+      manifestAbortControllerRef.current = manifestController;
       manifestAbortRef.current = false;
       const built = buildManifest(samples);
       if (built instanceof Error) {
         console.warn('[manifest] build fallback legacy:', built.message);
       } else {
         try {
+          // F4: gate the legacy output (heartbeat/sendQ) from BEFORE the
+          // handshake until the firmware phase truly ends (DONE/error/abort).
+          manifestModeRef.current = true;
           const chunkMax = await handshakeV2(port);
           if (chunkMax instanceof Error) {
+            manifestModeRef.current = false;
             console.warn('[manifest] handshake fallback legacy:', chunkMax.message);
           } else {
             const chunks = sliceLines(built.lines, chunkMax);
-            const upload = await uploadManifest(port, chunks, chunkMax);
+            const upload = await uploadManifest(
+              port,
+              chunks,
+              chunkMax,
+              built.count,
+              built.durationUs,
+              undefined,
+              manifestController.signal,
+            );
             if (upload.error) {
+              manifestModeRef.current = false;
               setDrawingBlock({
                 reason: 'El firmware rechazó el manifest: ' + upload.error,
                 points: [],
@@ -567,7 +621,6 @@ export default function App() {
               return false;
             }
             sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
-            manifestModeRef.current = true;
             firmwareTraceRef.current = [];
             const remaining = built.lines.slice(upload.sent);
             void (async () => {
@@ -581,8 +634,16 @@ export default function App() {
                     firmwareTraceRef.current.shift();
                   }
                 },
+                () => {
+                  manifestModeRef.current = false;
+                  setFirmwareTrace([...firmwareTraceRef.current]);
+                },
+                manifestController.signal,
+                built.durationUs,
               );
               if (res.error && !manifestAbortRef.current) {
+                manifestModeRef.current = false;
+                setFirmwareTrace([...firmwareTraceRef.current]);
                 setDrawingBlock({
                   reason: 'El firmware abortó el manifest: ' + res.error,
                   points: [],
@@ -595,6 +656,7 @@ export default function App() {
             })();
           }
         } catch (e) {
+          manifestModeRef.current = false;
           console.warn('[manifest] fallback legacy:', e);
         }
       }
@@ -750,6 +812,7 @@ export default function App() {
   const handleClearDrawingBlock = useCallback(() => {
     if (manifestModeRef.current) {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+      manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
       setFirmwareTrace([...firmwareTraceRef.current]);
@@ -848,6 +911,7 @@ export default function App() {
     try {
       if (manifestModeRef.current) {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+        manifestAbortControllerRef.current?.abort();
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
       }
@@ -858,6 +922,14 @@ export default function App() {
       } else if (playerState === 'paused') {
         motionPlayerResume(playerId);
         setPlayerState('running');
+        // R3-2: pause finalized the recorder (stop()); resume must restart
+        // it or post-pause samples are lost from the exported CSV.
+        let rec = traceRecorderRef.current;
+        if (rec === null || !rec.isRecording()) {
+          rec = new TraceRecorder();
+          traceRecorderRef.current = rec;
+        }
+        rec.start();
       } else {
         motionPlayerPlay(playerId);
         traceRecorderRef.current?.start();
@@ -874,6 +946,7 @@ export default function App() {
     try {
       if (manifestModeRef.current) {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+        manifestAbortControllerRef.current?.abort();
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
         setFirmwareTrace([...firmwareTraceRef.current]);
@@ -923,6 +996,7 @@ export default function App() {
     if (!port || calibRunning) return;
     if (manifestModeRef.current) {
       sendSerial(port, new TextEncoder().encode('STOP\n'));
+      manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
     }
