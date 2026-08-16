@@ -266,6 +266,13 @@ export default function App() {
       setSerialLost(true);
       setConnected(false);
       setManifestStatus('⚠ dispositivo USB perdido — reintentando reconexión…');
+      // CRITICAL-2 fix: mirror handleDisconnect — abort any in-flight manifest
+      // so the heartbeat/sendQ gates reopen instead of staying closed until
+      // the DONE deadline; an interrupted CIPRA job returns to pending.
+      manifestAbortControllerRef.current?.abort();
+      if (manifestModeRef.current) failActiveCipraDraw(); // VAL-2: skip when DONE already landed
+      manifestModeRef.current = false;
+      manifestAbortRef.current = true;
       void (async () => {
         // El Arduino se resetea y re-enumera: buscar el dispositivo (incluido el
         // MISMO objeto de puerto, que Chrome puede reutilizar tras la re-enumeración)
@@ -331,6 +338,7 @@ export default function App() {
     // Any in-flight manifest flow is over — abort it so no stale reader
     // keeps consuming the port and the STOP paths below never hit a null port.
     manifestAbortControllerRef.current?.abort();
+    if (manifestModeRef.current) failActiveCipraDraw(); // VAL-2: skip when DONE already landed
     manifestModeRef.current = false;
     manifestAbortRef.current = true;
     servoInterpolatorRef.current?.stop();
@@ -519,6 +527,7 @@ export default function App() {
       manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      failActiveCipraDraw();
     }
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
@@ -744,6 +753,7 @@ export default function App() {
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
         setFirmwareTrace([...firmwareTraceRef.current]);
+        failActiveCipraDraw();
       }
       manifestAbortControllerRef.current?.abort();
       const manifestController = new AbortController();
@@ -865,6 +875,7 @@ export default function App() {
               pushDiag(`continueManifestUpload: ${JSON.stringify(res)} T-lines=${tCount}`);
               setManifestStatus(`T-lines: ${tCount}${res.error ? ' · error: ' + res.error : ''}`);
               if (res.error && !manifestAbortRef.current) {
+                failActiveCipraDraw(); // gate sees manifestModeRef true (Phase A)
                 manifestModeRef.current = false;
                 setFirmwareTrace([...firmwareTraceRef.current]);
                 setDrawingBlock({
@@ -879,6 +890,7 @@ export default function App() {
             })();
           }
         } catch (e) {
+          failActiveCipraDraw(); // gate sees manifestModeRef true (Phase A)
           manifestModeRef.current = false;
           const msg = e instanceof Error ? e.message : String(e);
           pushDiag('error: ' + msg);
@@ -997,6 +1009,27 @@ export default function App() {
     cipraJobsRef.current = cipraJobs;
   }, [cipraJobs]);
 
+  // CRITICAL-1 fix: an interrupted manifest must not strand the active CIPRA
+  // job in `drawing` — FAIL returns it to pending (reappears in the decision
+  // panel, single-active guard freed). The gate covers the whole manifest
+  // lifetime: the playback binding (post-validation), the in-flight manifest
+  // (Phase A upload/execute) and the abort flag (interruption paths clear
+  // manifestModeRef before calling). Reducer FAIL is a no-op when the job is
+  // not `drawing`, so calling this from every manifest-interruption path is
+  // idempotent and safe.
+  const failActiveCipraDraw = useCallback(() => {
+    const id = cipraJobsRef.current.drawingId;
+    if (
+      id !== null &&
+      (cipraDrawPlayerIdRef.current !== null ||
+        manifestModeRef.current === true ||
+        manifestAbortRef.current === true)
+    ) {
+      cipraDispatch({ type: 'FAIL', id });
+      cipraDrawPlayerIdRef.current = null;
+    }
+  }, [cipraDispatch]);
+
   useEffect(() => {
     const client = new GcodeClient(
       buildGcodeWsUrl(
@@ -1047,6 +1080,7 @@ export default function App() {
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
       setFirmwareTrace([...firmwareTraceRef.current]);
+      failActiveCipraDraw();
     }
     setDrawingBlock(null);
     setTracePath([]);
@@ -1059,7 +1093,7 @@ export default function App() {
     }
     setPlayerState('idle');
     setIkTarget(null);
-  }, [playerId]);
+  }, [playerId, failActiveCipraDraw]);
 
   const failCipraDraw = useCallback(
     (jobId: string, reason: LoadGcodeTextResult['reason'] | 'exception') => {
@@ -1145,6 +1179,7 @@ export default function App() {
         manifestAbortControllerRef.current?.abort();
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
+        failActiveCipraDraw();
       }
       if (playerState === 'running') {
         motionPlayerPause(playerId);
@@ -1170,7 +1205,7 @@ export default function App() {
     } catch (e) {
       console.error('[motion]', e);
     }
-  }, [playerId, playerState, finalizeTrace]);
+  }, [playerId, playerState, finalizeTrace, failActiveCipraDraw]);
 
   const handleStopDemo = useCallback(() => {
     if (playerId === null) return;
@@ -1181,6 +1216,7 @@ export default function App() {
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
         setFirmwareTrace([...firmwareTraceRef.current]);
+        failActiveCipraDraw();
       }
       motionPlayerStop(playerId);
       setPlayerState('stopped');
@@ -1188,7 +1224,7 @@ export default function App() {
     } catch (e) {
       console.error('[motion]', e);
     }
-  }, [playerId, finalizeTrace]);
+  }, [playerId, finalizeTrace, failActiveCipraDraw]);
 
   // Exportar = mostrar el CSV en pantalla (modal): funciona en CUALQUIER navegador,
   // sin depender del sistema de descargas (que algunos entornos bloquean en silencio).
@@ -1276,6 +1312,7 @@ export default function App() {
       manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      failActiveCipraDraw();
     }
     // Stop any running trajectory.
     if (playerId !== null) {
@@ -1300,7 +1337,7 @@ export default function App() {
     setCalibStatus('Modo calibración: elegí joint, pulsá ±1° y marcá si se movió.');
     sendSerial(port, encodeWire(homeServo.map(servoDegToUs)));
     servoInterpolatorRef.current?.sync(homeServo.map(servoDegToUs));
-  }, [calibRunning, playerId]);
+  }, [calibRunning, playerId, failActiveCipraDraw]);
 
   const exitCalibration = useCallback(() => {
     const port = portRef.current;
