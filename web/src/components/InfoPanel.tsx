@@ -26,9 +26,12 @@ export default function InfoPanel({ robot, rawFrames }: { robot: RobotDef; rawFr
   return (
     <div className="glass-card" style={{ padding: '12px 16px' }}>
       <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="6" />
-          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path fillRule="evenodd" d="M12 6.8a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4ZM12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z" />
+          <rect x="11.15" y="1.8" width="1.7" height="4" rx="0.85" />
+          <rect x="11.15" y="18.2" width="1.7" height="4" rx="0.85" />
+          <rect x="1.8" y="11.15" width="4" height="1.7" rx="0.85" />
+          <rect x="18.2" y="11.15" width="4" height="1.7" rx="0.85" />
         </svg>
         End-Effector
       </h3>

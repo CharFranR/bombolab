@@ -27,8 +27,13 @@ export default function JointControls({
   return (
     <div className="glass-card" style={{ padding: '12px 16px' }}>
       <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="3" y="6" width="18" height="2.6" rx="1.3" />
+          <circle cx="10" cy="7.3" r="2.2" />
+          <rect x="3" y="12" width="18" height="2.6" rx="1.3" />
+          <circle cx="15" cy="13.3" r="2.2" />
+          <rect x="3" y="18" width="18" height="2.6" rx="1.3" />
+          <circle cx="7" cy="19.3" r="2.2" />
         </svg>
         Joint Control
       </h3>

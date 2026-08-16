@@ -231,9 +231,9 @@ export default function CalibrationPanel({
       }}
     >
       <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <path d="m12 14 4-4" />
-          <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+          <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+          <path d="m12 12 3.4-5" />
         </svg>
         Calibration
       </div>
@@ -266,9 +266,9 @@ export default function CalibrationPanel({
       }}
     >
       <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <path d="m12 14 4-4" />
-          <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+          <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+          <path d="m12 12 3.4-5" />
         </svg>
         Calibration
       </div>
