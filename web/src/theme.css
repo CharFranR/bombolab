@@ -8,22 +8,25 @@
 
 /* ---- Design tokens ---- */
 :root {
-  /* Palette — deep dark base + vibrant accents */
-  --bg0: #0A0E14;
-  --bg1: #10161E;
+  /* Palette — deep blue-black base, accents used sparingly */
+  --bg0: #05070B;
+  --bg1: #0A1020;
+  --bg2: #111A30;
   --c-cyan: #00F2FE;
-  --c-violet: #8B5CF6;
+  --c-blue: #3B82F6;
+  --c-violet: #A78BFA;
   --c-cobalt: #0066FF;
-  --c-gray: #8B949E;
-  --c-text: #dce3ea;
-  --c-text-dim: #9aa4b2;
-  --c-text-faint: #6e7681;
+  --c-green: #22C55E;
+  --c-gray: #8CA3BE;
+  --c-text: #E2E8F0;
+  --c-text-dim: #94A3B8;
+  --c-text-faint: #64748B;
   --border: #FFFFFF18;
 
   /* Liquid glass surfaces: layered translucency + top-light gradient
      (the specular rim), saturated backdrop blur, inner highlight with
      a soft bottom shade and an outer drop for depth. */
-  --glass-bg: rgba(17, 23, 31, 0.58);
+  --glass-bg: rgba(14, 22, 40, 0.55);
   --glass-blur: 20px;
   --glass-saturate: 1.6;
   --glass-border: 1px solid #FFFFFF18;
@@ -40,6 +43,21 @@
     inset 0 -1px 0 rgba(0, 0, 0, 0.25),
     0 2px 4px rgba(0, 0, 0, 0.28),
     0 14px 44px rgba(0, 0, 0, 0.5);
+
+  /* Active/emphasis gradient: cyan → electric blue → soft violet,
+     always at low alpha so it reads as light, never neon */
+  --grad-active: linear-gradient(
+    135deg,
+    rgba(0, 242, 254, 0.2),
+    rgba(59, 130, 246, 0.14) 50%,
+    rgba(167, 139, 250, 0.2)
+  );
+  --grad-active-strong: linear-gradient(
+    135deg,
+    rgba(0, 242, 254, 0.26),
+    rgba(59, 130, 246, 0.18) 50%,
+    rgba(167, 139, 250, 0.26)
+  );
 
   /* Typography */
   --font-sans: 'Inter', system-ui;
@@ -65,8 +83,10 @@
 
   /* Glow — soft halos, never hard shadows */
   --glow-cyan: 0 0 10px 2px rgba(0, 242, 254, 0.35);
-  --glow-violet: 0 0 12px 2px rgba(139, 92, 246, 0.4);
+  --glow-violet: 0 0 12px 2px rgba(167, 139, 250, 0.4);
   --glow-cobalt: 0 0 10px 2px rgba(0, 102, 255, 0.35);
+  --glow-blue: 0 0 14px rgba(59, 130, 246, 0.25);
+  --glow-green: 0 0 10px 2px rgba(34, 197, 94, 0.4);
   --glow-soft: 0 0 14px rgba(0, 242, 254, 0.3);
 }
 
@@ -96,14 +116,14 @@
   border-top-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Uppercase panel title inside glass cards */
+/* Uppercase panel title inside glass cards — spaced, high contrast */
 .panel-title {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 1.2px;
+  letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: var(--c-gray);
+  color: #A5B4CB;
   font-family: var(--font-sans);
 }
 
@@ -114,9 +134,9 @@
   margin: 0 0 10px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: var(--c-gray);
+  color: #A5B4CB;
   font-family: var(--font-sans);
 }
 
@@ -163,14 +183,14 @@
 }
 .ctl-btn--active {
   background:
-    linear-gradient(180deg, rgba(139, 92, 246, 0.28), rgba(139, 92, 246, 0.12)),
+    var(--grad-active),
     rgba(18, 24, 33, 0.4);
-  border-color: rgba(139, 92, 246, 0.5);
-  border-top-color: rgba(200, 180, 255, 0.3);
-  color: #d8ccff;
+  border-color: rgba(96, 165, 250, 0.45);
+  border-top-color: rgba(255, 255, 255, 0.25);
+  color: #E8F1FF;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 12px rgba(139, 92, 246, 0.25);
+    0 0 14px rgba(96, 165, 250, 0.22);
 }
 .ctl-btn:disabled {
   opacity: 0.45;
@@ -194,8 +214,9 @@
   border-color: rgba(0, 242, 254, 0.45);
 }
 
-/* Ultra-thin floating top bar — liquid glass strip with a glowing
-   status LED on the brand side. */
+/* Floating top bar — elevated glass capsule with a luminous blue/cyan
+   edge, soft outer shadow and a glowing status LED on the brand side.
+   Position is set inline in App.tsx (top 10, inset 12). */
 .top-bar {
   position: relative;
   z-index: 30;
@@ -204,16 +225,18 @@
   justify-content: space-between;
   height: 44px;
   padding: 0 var(--space-4) 0 38px;
+  border-radius: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.14);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015) 55%, rgba(255, 255, 255, 0.03)),
-    rgba(12, 16, 23, 0.62);
+    rgba(13, 20, 36, 0.62);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
   backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 1px 0 rgba(0, 0, 0, 0.4),
-    0 8px 24px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 18px 48px rgba(0, 0, 0, 0.55);
   font-family: var(--font-sans);
   transition: box-shadow 0.3s ease;
 }
@@ -256,13 +279,16 @@
   background: currentColor;
 }
 
-/* Online state: bright glowing indicator (cyan) */
+/* Online state: green luminous indicator + soft pulse (translucent pill) */
 .badge--online {
-  color: var(--c-cyan);
+  color: var(--c-green);
   box-shadow:
-    0 0 10px 2px rgba(0, 242, 254, 0.3),
+    0 0 10px 2px rgba(34, 197, 94, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   animation: badgePulse 2s ease-in-out infinite;
+}
+.badge--online::before {
+  box-shadow: var(--glow-green);
 }
 
 /* Offline state: dim static indicator */
@@ -278,24 +304,29 @@
   box-shadow: 0 0 8px 2px currentColor;
 }
 
-/* Bottom pill action bar — floating liquid glass capsule */
+/* Bottom pill action bar — floating liquid glass capsule, intense blur,
+   luminous edge, clearly separated actions */
 .pill-bar {
   border-radius: var(--r-pill);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-top-color: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.16);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(10, 14, 20, 0.55);
-  -webkit-backdrop-filter: blur(24px) saturate(1.7);
-  backdrop-filter: blur(24px) saturate(1.7);
+    rgba(8, 12, 22, 0.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.7);
+  backdrop-filter: blur(28px) saturate(1.7);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 10px 40px rgba(0, 0, 0, 0.55);
+    0 12px 44px rgba(0, 0, 0, 0.6);
 }
 
-/* Bottom pill action button — liquid glass, cyan glow on hover,
-   violet for active/emphasis states */
+/* Bottom pill action button — liquid glass, icon + label, cyan glow on
+   hover, tri-gradient active/emphasis states */
 .pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   padding: 9px 20px;
   border-radius: var(--r-pill);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -337,49 +368,50 @@
   box-shadow: none;
 }
 
-/* Active/emphasis pill: violet glass (approved cyan+violet system:
-   violet owns active/emphasis states, cyan owns system/status) */
+/* Active/emphasis pill: soft cyan → blue → violet gradient (approved
+   system: accent gradient owns active/emphasis, cyan owns hovers) */
 .pill-btn--active {
   background:
-    linear-gradient(180deg, rgba(139, 92, 246, 0.3), rgba(139, 92, 246, 0.14) 60%, rgba(139, 92, 246, 0.2)),
+    var(--grad-active),
     rgba(18, 24, 33, 0.5);
-  border-color: rgba(139, 92, 246, 0.45);
-  border-top-color: rgba(200, 180, 255, 0.35);
-  color: #e4dcff;
+  border-color: rgba(96, 165, 250, 0.4);
+  border-top-color: rgba(255, 255, 255, 0.3);
+  color: #EAF2FF;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 18px rgba(139, 92, 246, 0.3),
+    0 0 16px rgba(96, 165, 250, 0.25),
     0 6px 20px rgba(0, 0, 0, 0.4);
 }
 .pill-btn--active:hover {
-  border-color: rgba(139, 92, 246, 0.7);
-  color: #f2ecff;
+  border-color: rgba(96, 165, 250, 0.65);
+  color: #F5F9FF;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 0 24px rgba(139, 92, 246, 0.45),
+    0 0 22px rgba(96, 165, 250, 0.38),
     0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-/* Primary CTA pill: violet emphasis — the action the app exists for */
+/* Primary CTA pill: stronger tri-gradient + brighter text — the highest
+   contrast action (Modo dibujo) */
 .pill-btn--primary {
   background:
-    linear-gradient(180deg, rgba(139, 92, 246, 0.32), rgba(139, 92, 246, 0.15) 60%, rgba(139, 92, 246, 0.22)),
+    var(--grad-active-strong),
     rgba(18, 24, 33, 0.5);
-  border-color: rgba(139, 92, 246, 0.5);
-  border-top-color: rgba(200, 180, 255, 0.4);
-  color: #ece6ff;
+  border-color: rgba(96, 165, 250, 0.55);
+  border-top-color: rgba(255, 255, 255, 0.35);
+  color: #F5F9FF;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 0 20px rgba(139, 92, 246, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 20px rgba(96, 165, 250, 0.35),
     0 6px 20px rgba(0, 0, 0, 0.42);
 }
 .pill-btn--primary:hover {
   transform: translateY(-1px);
-  border-color: rgba(139, 92, 246, 0.75);
-  color: #f6f2ff;
+  border-color: rgba(96, 165, 250, 0.8);
+  color: #FFFFFF;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0 28px rgba(139, 92, 246, 0.5),
+    0 0 28px rgba(96, 165, 250, 0.5),
     0 8px 26px rgba(0, 0, 0, 0.48);
 }
 
@@ -414,14 +446,14 @@
 }
 .segmented__opt--active {
   background:
-    linear-gradient(180deg, rgba(139, 92, 246, 0.32), rgba(139, 92, 246, 0.16)),
-    rgba(139, 92, 246, 0.08);
-  border-color: rgba(139, 92, 246, 0.55);
-  border-top-color: rgba(200, 180, 255, 0.4);
-  color: #e0d7ff;
+    var(--grad-active),
+    rgba(18, 24, 33, 0.3);
+  border-color: rgba(96, 165, 250, 0.5);
+  border-top-color: rgba(255, 255, 255, 0.3);
+  color: #EAF2FF;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 12px rgba(139, 92, 246, 0.3);
+    0 0 12px rgba(96, 165, 250, 0.28);
 }
 .segmented__opt:hover,
 .segmented__opt--active:hover {
@@ -495,11 +527,17 @@
   cursor: not-allowed;
 }
 
-/* 3D viewport shell: hosts the transparent canvas; centered radial
-   vignette darkens the edges for the cinematic depth cue. */
+/* 3D viewport shell: hosts the transparent canvas; deep blue-black
+   gradient with discreet ambient glows (cyan / electric blue / violet)
+   that read through the frosted glass panels and the 3D scene. */
 .app-viewport {
   position: relative;
   overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 14% -6%, rgba(0, 242, 254, 0.1), transparent 60%),
+    radial-gradient(1000px 800px at 86% 10%, rgba(59, 130, 246, 0.12), transparent 60%),
+    radial-gradient(900px 700px at 72% 108%, rgba(167, 139, 250, 0.09), transparent 60%),
+    linear-gradient(165deg, var(--bg0) 0%, var(--bg1) 55%, var(--bg2) 100%);
 }
 .app-viewport::after {
   content: '';
