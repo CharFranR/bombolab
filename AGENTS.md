@@ -21,13 +21,11 @@ cargo fmt --all -- --check
 
 3 separate Rust packages (all edition 2024): root `bombolab` (stub), `bombolab-core`, `bombolab-wasm`. `cargo <cmd> --workspace` from root covers **only the root package**. Target crates via `--manifest-path crates/<crate>/Cargo.toml` or from inside the crate dir. (`-p bombolab-core` happens to resolve from root because it's a path dependency; `-p bombolab-wasm` does not.)
 
-CI pipeline order: `cargo check --workspace` → `cargo test --workspace` → `cargo clippy --workspace -- -D warnings` → `cargo fmt --all -- --check`, plus separate jobs for core with `--features ws-bridge`, wasm with `--target wasm32-unknown-unknown`, `web/` `npx tsc --noEmit`, and firmware `pio run -d "arduino/Arduino Nano"`.
+CI pipeline order: `cargo check --workspace` → `cargo test --workspace` → `cargo clippy --workspace -- -D warnings` → `cargo fmt --all -- --check`, plus separate jobs for wasm with `--target wasm32-unknown-unknown`, `web/` `npx tsc --noEmit`, and firmware `pio run -d "arduino/Arduino Nano"`.
 
 ## Feature gates (easy to trip)
 
-- `bombolab-core` default features = `["serial"]` — gates the `communication` module and the `serial-test` bin.
-- `ws-bridge` bin needs `--features ws-bridge` (pulls in tokio/serde); plain `cargo run --bin ws-bridge` fails.
-- `bombolab-wasm` depends on core with `default-features = false` → no `serial`/`communication` in wasm builds. Code added to `communication` won't compile for wasm.
+- `bombolab-wasm` depends on `bombolab-core` with `default-features = false`; the core crate defines no features.
 
 ## Web app
 
@@ -36,13 +34,13 @@ CI pipeline order: `cargo check --workspace` → `cargo test --workspace` → `c
 
 ## CLI binaries (in `bombolab-core`)
 
-`dh-solve`, `quaternion-solve`, `dynamics-report`, `test-case-report`, `serial-test`, `ws-bridge`. Run: `cargo run --bin dh-solve --manifest-path crates/bombolab-core/Cargo.toml`.
+`dh-solve`, `quaternion-solve`, `dynamics-report`, `test-case-report`, `workspace-report`, `singularity-report`. Run: `cargo run --bin dh-solve --manifest-path crates/bombolab-core/Cargo.toml`.
 
 ## Docs
 
 - `mdbook build` (needs the `mdbook` CLI); book.toml sets `build-dir = "docs"`, so output lands directly in committed `docs/` (served by GitHub Pages) — regenerate + commit it when editing `book/src/`.
 - Gotcha: `.github/workflows/book.yml` deploys `./docs/book`, which doesn't match `build-dir = "docs"` (real output is `docs/`) — treat that deploy path as stale.
-- Only integration test: `crates/bombolab-core/tests/cli_serial_test.rs` runs `serial-test --help` and asserts non-zero exit + `Usage:` on stderr (no hardware needed; slow because it spawns `cargo run`).
+- Integration tests live in `crates/bombolab-core/tests/` (`cli_workspace_report_test.rs`).
 
 ## Architecture notes
 

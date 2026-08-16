@@ -25,7 +25,9 @@ export interface PlanOptions {
   startTcp: [number, number, number];
 }
 
-export const DEFAULT_PLAN_DT = 0.05;
+// Plan sampling interval (s): 40 ms step cadence for drawing playback
+// (unified with the legacy step delay; speed is set by the gcode F).
+export const DEFAULT_PLAN_DT = 0.04;
 
 const MIN_PUSH_MM = 0.5;
 const EPS = 1e-6;

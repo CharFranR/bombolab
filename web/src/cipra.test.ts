@@ -284,6 +284,55 @@ describe('cipra/loadGcodeText.ts — shared gcode→trajectory pipeline (R12)', 
     expect(flags[0]).toBe(true);
     expect(flags[flags.length - 1]).toBe(false);
   });
+
+  it('autofit=false parses at real scale 1:1 WITHOUT consulting the safe area', async () => {
+    let areaConsulted = false;
+    let seenAutofit: boolean | undefined = true;
+    const deps = makeLoaderDeps({
+      safeDrawingArea: async () => {
+        areaConsulted = true;
+        return { xMin: 160, xMax: 240, yMin: -35, yMax: 35 };
+      },
+      parseGcode: (text, opts) => {
+        seenAutofit = opts.autofit;
+        expect(opts.area).toBeUndefined();
+        return {
+          commands: [{ type: 'move', target: [220, 0, DRAW_PLANE_Z], speed: 40 }],
+          warnings: [],
+          bounds: null,
+          moveCount: 1,
+        };
+      },
+    });
+    const res = await loadGcodeText('G21\nG1 X220 Y0', 'real.gcode', { ...deps, autofit: false });
+    expect(res).toEqual({ ok: true });
+    expect(seenAutofit).toBe(false);
+    expect(areaConsulted).toBe(false);
+  });
+
+  it('default autofit still consults the safe area and passes it to the parser', async () => {
+    let areaConsulted = false;
+    let seenAutofit: boolean | undefined = true;
+    const deps = makeLoaderDeps({
+      safeDrawingArea: async () => {
+        areaConsulted = true;
+        return { xMin: 160, xMax: 240, yMin: -35, yMax: 35 };
+      },
+      parseGcode: (text, opts) => {
+        seenAutofit = opts.autofit;
+        expect(opts.area).toEqual({ xMin: 160, xMax: 240, yMin: -35, yMax: 35 });
+        return {
+          commands: [{ type: 'move', target: [40, 0, DRAW_PLANE_Z], speed: 40 }],
+          warnings: [],
+          bounds: null,
+          moveCount: 1,
+        };
+      },
+    });
+    await loadGcodeText('G21\nG1 X10 Y10', 'fitted.gcode', deps);
+    expect(seenAutofit).toBeUndefined(); // default: autofit on, area-driven
+    expect(areaConsulted).toBe(true);
+  });
 });
 
 class FakeWebSocket {

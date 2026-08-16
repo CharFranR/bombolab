@@ -64,7 +64,7 @@ recording and flags the run as `truncated`.
 
 ### Plan timeline
 
-`planTimeline(cmds, { ik, robot, startQ, gripperPct, dt = 0.05, startTcp })`
+`planTimeline(cmds, { ik, robot, startQ, gripperPct, dt = 0.04, startTcp })`
 samples the analytic trajectory every `dt` seconds:
 
 - `move` → linear segment at `speed` (duration = distance / speed);

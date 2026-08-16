@@ -7,17 +7,19 @@ import { squareCommands, diagnosticLinesCommands, arcCommands, drawingPath, type
 import { parseGcode } from './motion/gcode';
 import { validateDrawingCommands, safeDrawingArea, isReachablePoint, DRAW_PLANE_Z, TRAVEL_PLANE_Z, type ReachResult } from './motion/reachability';
 import { runSingularityGate } from './motion/singularityGate';
-import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, handshakeV2, uploadManifest, continueManifestUpload } from './serial';
+import { qToServoUs, gripperToServoUs, servoDegToUs, encodeWire, requestSerialPort, openPort, sendSerial, awaitSendSerial, releaseSerial, drainSerial, handshakeV2, uploadManifest, continueManifestUpload, sendManifestHeader } from './serial';
 import { buildManifest, sliceLines, V2_CHUNK_MAX } from './motion/manifest';
 import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './motion/traceFirmware';
-import { ServoInterpolator, type InterpolationConfig } from './interpolation';
+import { DEFAULT_INTERPOLATION, ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
 import { planTimeline, type PlanSample } from './motion/planTimeline';
-import { downloadTraceCsv } from './motion/csv';
+import { downloadTraceCsv, downloadBlob, copyText, exportTraceCsv } from './motion/csv';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
 import RobotViewer from './components/RobotViewer';
 import JointControls from './components/JointControls';
+import GamepadControls from './components/GamepadControls';
+import { mapGamepadToCommands, clampAngle, type GamepadCommand } from './gamepad';
 import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
@@ -64,16 +66,39 @@ export default function App() {
   const [transitioning, setTransitioning] = useState(false);
   const [playerId, setPlayerId] = useState<number | null>(null);
   const [playerState, setPlayerState] = useState<PlayerStateJs>('idle');
+  // ─── Gamepad (rate) control ──────────────────────────────────────────────
+  // Velocity-style sticks: active only while enabled AND the same gates that
+  // disable the manual sliders (normal mode, no IK target) AND no trajectory
+  // playback. The readout is throttled in the loop (see below) so this panel
+  // does not re-render at 60 Hz.
+  const [gamepadEnabled, setGamepadEnabled] = useState(false);
+  const [gamepadId, setGamepadId] = useState<string | null>(null);
+  const [gamepadReadout, setGamepadReadout] = useState<GamepadCommand | null>(null);
+  const [gamepadApiAvailable] = useState(
+    () => typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function',
+  );
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [firmwareTrace, setFirmwareTrace] = useState<FirmwareSample[]>([]);
+  const [manifestStatus, setManifestStatus] = useState('');
+  const [exportMsg, setExportMsg] = useState('');
+  const diagRef = useRef<string[]>([]);
+  const pushDiag = useCallback((msg: string) => {
+    diagRef.current.push(`[${new Date().toISOString().slice(11, 23)}] ${msg}`);
+  }, []);
+  const [serialLost, setSerialLost] = useState(false);
+  const [csvModal, setCsvModal] = useState<{ title: string; content: string } | null>(null);
   const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
   const [gcodeName, setGcodeName] = useState<string | null>(null);
   const [gcodeWarnings, setGcodeWarnings] = useState<string[]>([]);
   const [gcodeError, setGcodeError] = useState<string | null>(null);
+  // Real-scale 1:1 mode: parse the gcode WITHOUT autofit so coordinates are
+  // used verbatim (the pattern 150×100 is already authored in robot space).
+  // The reachability gate still blocks trajectories that leave the workspace.
+  const [gcodeAutofit, setGcodeAutofit] = useState(true);
   const gcodeInputRef = useRef<HTMLInputElement | null>(null);
   // Last parsed gcode text + name, kept so the "Reajustar" button can re-autofit
   // into a smaller safe area if the current drawing is rejected by the workspace.
@@ -232,27 +257,67 @@ export default function App() {
   const sendQRef = useRef(sendQ);
   sendQRef.current = sendQ;
 
+  // Cablea un puerto ya abierto: listeners, interpolator, estado. Reutilizable
+  // por la conexión manual y por la reconexión automática tras pérdida USB.
+  const setupPort = useCallback((port: SerialPort) => {
+    if (!robot) return;
+    portRef.current = port;
+    port.addEventListener('disconnect', () => {
+      setSerialLost(true);
+      setConnected(false);
+      setManifestStatus('⚠ dispositivo USB perdido — reintentando reconexión…');
+      void (async () => {
+        // El Arduino se resetea y re-enumera: buscar el dispositivo (incluido el
+        // MISMO objeto de puerto, que Chrome puede reutilizar tras la re-enumeración)
+        // y reconectar automáticamente (getPorts no requiere gesto del usuario).
+        const info = port.getInfo();
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 500));
+          try {
+            const ports = await navigator.serial.getPorts();
+            const fresh = ports.find((p) => {
+              const pi = p.getInfo();
+              return pi.usbVendorId === info.usbVendorId && pi.usbProductId === info.usbProductId;
+            });
+            if (fresh) {
+              // si es el mismo objeto muerto, probar igual: puede haber revivido
+              await fresh.open({ baudRate: 115200 });
+              setupPort(fresh);
+              setSerialLost(false);
+              setManifestStatus('reconectado automáticamente tras la pérdida USB');
+              return;
+            }
+          } catch {
+            /* el dispositivo aún no volvió o el open falló: reintentar */
+          }
+        }
+        setManifestStatus('⚠ no se pudo reconectar solo: conectá el dispositivo de nuevo.');
+      })();
+    });
+    // Start the interpolation scheduler from the current pose and push
+    // one frame so the firmware leaves its boot/home state.
+    const initial = [...qToServoUs(robot.segments.map((s) => s.q)), gripperToServoUs(gripper)];
+    if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
+    servoInterpolatorRef.current = new ServoInterpolator(
+      (wire) => {
+        traceRecorderRef.current?.record(wire);
+        sendSerial(port, wire);
+      },
+      initial,
+      // Pacing unificado en 40 ms con el CLI Rust (DEFAULT_INTERPOLATION).
+      { ...DEFAULT_INTERPOLATION, backlash: backlashEnabled ? BACKLASH_US : undefined },
+    );
+    servoInterpolatorRef.current.keepAlive();
+    setConnected(true);
+  }, [robot, gripper, backlashEnabled]);
+
   const handleConnect = useCallback(async () => {
     if (!robot) return;
     try {
       setSerialError(null);
       const port = await requestSerialPort();
       await openPort(port);
-      portRef.current = port;
-      // Start the interpolation scheduler from the current pose and push
-      // one frame so the firmware leaves its boot/home state.
-      const initial = [...qToServoUs(robot.segments.map(s => s.q)), gripperToServoUs(gripper)];
-      if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
-      servoInterpolatorRef.current = new ServoInterpolator(
-        (wire) => {
-          traceRecorderRef.current?.record(wire);
-          sendSerial(port, wire);
-        },
-        initial,
-        { stepSize: 5, delayMs: 50, backlash: backlashEnabled ? BACKLASH_US : undefined },
-      );
-      servoInterpolatorRef.current.keepAlive();
-      setConnected(true);
+      setupPort(port);
     } catch (e: any) {
       setSerialError(e.message ?? 'Error al conectar');
     }
@@ -260,6 +325,7 @@ export default function App() {
 
   const handleDisconnect = useCallback(async () => {
     try {
+      releaseSerial(portRef.current!);
       await portRef.current?.close();
     } catch {}
     // Any in-flight manifest flow is over — abort it so no stale reader
@@ -272,6 +338,10 @@ export default function App() {
     portRef.current = null;
     setConnected(false);
   }, []);
+
+  useEffect(() => {
+    if (connected) setSerialLost(false);
+  }, [connected]);
 
   const handleJointChange = useCallback((index: number, qRad: number) => {
     setRobot(prev => {
@@ -317,6 +387,9 @@ export default function App() {
 
   useEffect(() => {
     if (!robot) return;
+    // Durante un manifest el robot NO debe recibir frames legacy: contaminarían
+    // el handshake v2 y el flujo de ACKs (el heartbeat ya respeta este flag).
+    if (manifestModeRef.current) return;
     sendQ(robot.segments, gripper);
   }, [robot, gripper, sendQ]);
 
@@ -340,6 +413,81 @@ export default function App() {
     }, 1000);
     return () => clearInterval(id);
   }, [connected]);
+
+  // ─── Gamepad rAF loop ───────────────────────────────────────────────────
+  // Reads the gamepad every animation frame and accumulates q += v·dt into
+  // the SAME `robot` state the sliders drive, so the 3D view follows without
+  // hardware; the existing `sendQ` effect (robot/gripper change → interpolator
+  // → sendSerial) then pushes the wire frames through the exact same path as
+  // manual control. Gates are re-checked per frame via refs and the loop
+  // self-pauses (no accumulation, no sends, readout zeroed) whenever any of
+  // them closes — it never commands during drawing/IK/playback, and a
+  // gamepad disconnect simply leaves the state untouched (no surprise frame).
+  const robotModeRef = useRef(robotMode);
+  robotModeRef.current = robotMode;
+  const playerStateRef = useRef(playerState);
+  playerStateRef.current = playerState;
+  const ikModeRef = useRef(ikMode);
+  ikModeRef.current = ikMode;
+  const robotRef = useRef(robot);
+  robotRef.current = robot;
+  useEffect(() => {
+    if (!gamepadEnabled) return;
+    let raf = 0;
+    let lastT = 0;
+    let lastReadoutT = 0;
+    let lastSeenId: string | null = null;
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      const gatesOpen =
+        robotRef.current !== null &&
+        robotModeRef.current === 'normal' &&
+        playerStateRef.current === 'idle' &&
+        !ikModeRef.current &&
+        !manifestModeRef.current;
+      // Status is polled even while gated so the panel shows connect/disconnect.
+      let gp: Gamepad | null = null;
+      try {
+        const gps = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+        gp = gps.find((g): g is Gamepad => g !== null) ?? null;
+      } catch { /* gamepad API unavailable or threw */ }
+      const id = gp?.id ?? null;
+      if (id !== lastSeenId) {
+        lastSeenId = id;
+        setGamepadId(id);
+      }
+      if (!gatesOpen) {
+        if (now - lastReadoutT > 200) { setGamepadReadout(null); lastReadoutT = now; }
+        return;
+      }
+      if (!gp) {
+        if (now - lastReadoutT > 200) { setGamepadReadout(null); lastReadoutT = now; }
+        return;
+      }
+      const dt = lastT > 0 ? Math.min((now - lastT) / 1000, 0.1) : 0;
+      lastT = now;
+      const cmd = mapGamepadToCommands(gp);
+      if (now - lastReadoutT > 100) { setGamepadReadout(cmd); lastReadoutT = now; }
+      setRobot(prev => {
+        if (!prev) return prev;
+        let changed = false;
+        const segments = prev.segments.map((seg, i) => {
+          const v = cmd.jointVelocities[i] ?? 0;
+          if (v === 0) return seg;
+          const q = clampAngle(seg.q + v * dt, seg.q_min, seg.q_max);
+          if (q === seg.q) return seg;
+          changed = true;
+          return { ...seg, q };
+        });
+        return changed ? { ...prev, segments } : prev;
+      });
+      if (cmd.gripperDeltaPct !== 0) {
+        setGripper(prev => Math.min(100, Math.max(0, prev + cmd.gripperDeltaPct * dt)));
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [gamepadEnabled]);
 
   const handleReset = useCallback(() => {
     const home = fabriCreator();
@@ -420,6 +568,19 @@ export default function App() {
           // DONE (continueManifestUpload onDone) or an error/abort path — only
           // surface the firmware trace collected so far.
           setFirmwareTrace([...firmwareTraceRef.current]);
+          // El interpolator quedó frenado al iniciar el manifest: resincronizar
+          // con la última pose aplicada por el firmware para el próximo control manual.
+          const lastFw = firmwareTraceRef.current[firmwareTraceRef.current.length - 1];
+          if (lastFw) servoInterpolatorRef.current?.sync(lastFw.joints);
+          // Descarga automática: el dato queda accesible aunque el botón falle.
+          if (firmwareTraceRef.current.length > 0) {
+            try {
+              downloadBlob('firmware-trace.csv', new Blob([firmwareTraceCsv(firmwareTraceRef.current)], { type: 'text/csv' }));
+              setExportMsg(`firmware-trace.csv descargado automáticamente (${firmwareTraceRef.current.length} muestras). Si no lo ves, usá "Ver CSV".`);
+            } catch {
+              /* el modal "Ver CSV" queda como respaldo */
+            }
+          }
         }
         if ((st === 'running' || st === 'paused') && !manifestModeRef.current) {
           const target = motionPlayerTarget(playerId);
@@ -567,6 +728,9 @@ export default function App() {
     lastStartedPlayerIdRef.current = id;
     setPlayerId(id);
     motionPlayerPlay(id);
+    // El recorder se crea perezosamente: antes solo existía tras conectar el puerto,
+    // así que sin hardware la traza web nunca se grababa y el export quedaba mudo.
+    if (traceRecorderRef.current === null) traceRecorderRef.current = new TraceRecorder();
     traceRecorderRef.current?.start();
     setTraceResult(null);
     setPlayerState('running');
@@ -592,24 +756,53 @@ export default function App() {
         try {
           // F4: gate the legacy output (heartbeat/sendQ) from BEFORE the
           // handshake until the firmware phase truly ends (DONE/error/abort).
+          // Detener heartbeat/sendQ legacy ANTES del handshake: el tráfico legacy
+          // contamina el puerto y el handshake v2 falla (residuos OK/ERR).
           manifestModeRef.current = true;
+          setManifestStatus('iniciando: handshake v2…');
+          diagRef.current = [`[${new Date().toISOString().slice(11, 23)}] browser: ${navigator.userAgent}`];
+          pushDiag(`puerto: readable=${!!port.readable} writable=${!!port.writable}`);
+          // Frenar el interpolator legacy: si está en movimiento (p. ej. la pinza
+          // al entrar en modo dibujo), sus frames contaminan el handshake v2
+          // (el firmware responde OK a cada uno y el HELLO OK se pierde).
+          servoInterpolatorRef.current?.stop();
+          const hsT0 = Date.now();
           const chunkMax = await handshakeV2(port);
+          pushDiag(`handshake: ${Date.now() - hsT0}ms → ${chunkMax instanceof Error ? 'FALLÓ: ' + chunkMax.message : 'OK (chunkMax=' + chunkMax + ')'}`);
+          if (!(chunkMax instanceof Error)) {
+            // Drenar ERRs stale que hayan quedado en el TX del firmware por
+            // intentos previos fallidos (p. ej. el CLI o un draw abortado).
+            const stale = await drainSerial(port);
+            if (stale > 0) pushDiag(`drenado post-handshake: ${stale} líneas stale`);
+          }
           if (chunkMax instanceof Error) {
             manifestModeRef.current = false;
+            setManifestStatus('handshake v2 FALLÓ: ' + chunkMax.message);
             console.warn('[manifest] handshake fallback legacy:', chunkMax.message);
           } else {
+            setManifestStatus('handshake v2 OK');
+            // Protocolo v2: el firmware exige MANIFEST (count/durationUs) antes del
+            // primer SAMPLE (gate manifest_ready). Se envía como línea individual;
+            // el firmware no responde a esta línea. El upload no se cierra con
+            // END_UPLOAD: tras el EXECUTE el resto viaja vía continueManifestUpload.
+            await sendManifestHeader(port, built.count, built.durationUs);
+            pushDiag(`manifest enviado: ${built.count} samples, ${built.durationUs}us`);
+            pushDiag('línea MANIFEST: `MANIFEST ' + built.count + ' ' + built.durationUs + '`');
+            pushDiag('primer SAMPLE: `' + built.lines[0] + '`');
+            pushDiag('último SAMPLE: `' + built.lines[built.lines.length - 1] + '`');
+            setManifestStatus(`manifest enviado (${built.count} samples)`);
             const chunks = sliceLines(built.lines, chunkMax);
-            const upload = await uploadManifest(
-              port,
-              chunks,
-              chunkMax,
-              built.count,
-              built.durationUs,
-              undefined,
-              manifestController.signal,
-            );
+            // Registrar cada SAMPLE enviado en el trace (mismo formato wire que el
+            // interpolator) para que "Exportar traza CSV" capture el manifest.
+            const recordManifestSample = (q: number[]) => {
+              traceRecorderRef.current?.record(new TextEncoder().encode(q.join(',') + '\n'));
+            };
+            const upload = await uploadManifest(port, chunks, chunkMax, undefined, recordManifestSample);
+            pushDiag(`upload: sent=${upload.sent}/${upload.total}${upload.error ? ' error=' + upload.error : ''}`);
+            setManifestStatus(`upload ${upload.sent}/${upload.total}`);
             if (upload.error) {
               manifestModeRef.current = false;
+              setManifestStatus('upload FALLÓ: ' + upload.error);
               setDrawingBlock({
                 reason: 'El firmware rechazó el manifest: ' + upload.error,
                 points: [],
@@ -620,15 +813,42 @@ export default function App() {
               setPlayerState('idle');
               return false;
             }
-            sendSerial(port, new TextEncoder().encode('EXECUTE\n'));
+// Defensa en profundidad: NUNCA mandar EXECUTE con el ring incompleto.
+            // Defensa en profundidad: NUNCA mandar EXECUTE con el ring incompleto.
+            // cargó una fracción sin confirmar, el EXECUTE deja al firmware mudo
+            // (sin T-lines) esperando samples que nunca llegan.
+            const ringLimit = 2 * chunkMax;
+            const expectedPreExecute = Math.min(upload.total, ringLimit);
+            if (upload.sent < expectedPreExecute) {
+              manifestModeRef.current = false;
+              setManifestStatus('upload INCOMPLETO: ' + upload.sent + '/' + upload.total + ' — no se envía EXECUTE');
+              setDrawingBlock({
+                reason: `El manifest no se cargó completo antes del EXECUTE (${upload.sent}/${upload.total}). Reintentá o verificá el firmware.`,
+                points: [],
+                canRefit: false,
+              });
+              try { motionPlayerDrop(id); } catch {}
+              setPlayerId(null);
+              setPlayerState('idle');
+              return false;
+            }
+            await awaitSendSerial(port, new TextEncoder().encode('EXECUTE\n'));
+            pushDiag(`EXECUTE enviado (ring: ${upload.sent})`);
+            setManifestStatus(`EXECUTE enviado (ring: ${upload.sent})`);
             firmwareTraceRef.current = [];
             const remaining = built.lines.slice(upload.sent);
             void (async () => {
+              let tCount = 0;
               const res = await continueManifestUpload(
                 port,
+                2 * chunkMax, // ring del firmware (2×chunkMax): tope de vuelo exacto
                 remaining,
                 undefined,
                 (tUs, joints) => {
+                  tCount += 1;
+                  if (tCount <= 3 || tCount % 100 === 0) {
+                    setManifestStatus(`T-lines: ${tCount} (ejecutando…)`);
+                  }
                   firmwareTraceRef.current.push({ tUs, joints });
                   if (firmwareTraceRef.current.length > 100000) {
                     firmwareTraceRef.current.shift();
@@ -640,7 +860,10 @@ export default function App() {
                 },
                 manifestController.signal,
                 built.durationUs,
+                recordManifestSample,
               );
+              pushDiag(`continueManifestUpload: ${JSON.stringify(res)} T-lines=${tCount}`);
+              setManifestStatus(`T-lines: ${tCount}${res.error ? ' · error: ' + res.error : ''}`);
               if (res.error && !manifestAbortRef.current) {
                 manifestModeRef.current = false;
                 setFirmwareTrace([...firmwareTraceRef.current]);
@@ -657,6 +880,14 @@ export default function App() {
           }
         } catch (e) {
           manifestModeRef.current = false;
+          const msg = e instanceof Error ? e.message : String(e);
+          pushDiag('error: ' + msg);
+          if (/lost|disconnect/i.test(msg)) {
+            setSerialLost(true);
+            setManifestStatus('⚠ dispositivo USB perdido durante el manifest: revisá la alimentación de los servos y el cable, y reconectá.');
+          } else {
+            setManifestStatus('error: ' + msg);
+          }
           console.warn('[manifest] fallback legacy:', e);
         }
       }
@@ -668,8 +899,7 @@ export default function App() {
   // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
   // picker and the CIPRA arrival "Dibujar" action both go through this so
   // reachability/robot-mode gating is never duplicated.
-  const runLoadGcodeText = useCallback(
-    (text: string, name: string) =>
+  const runLoadGcodeText = useCallback(    (text: string, name: string) =>
       loadGcodeText(text, name, {
         safeDrawingArea: () => safeDrawingArea(DRAW_PLANE_Z),
         parseGcode,
@@ -678,8 +908,9 @@ export default function App() {
         setGcodeError,
         setGcodeWarnings,
         setGcodeName,
+        autofit: gcodeAutofit,
       }),
-    [startTrajectory],
+    [startTrajectory, gcodeAutofit],
   );
 
   const handleStartDemo = useCallback(() => {
@@ -959,21 +1190,67 @@ export default function App() {
     }
   }, [playerId, finalizeTrace]);
 
+  // Exportar = mostrar el CSV en pantalla (modal): funciona en CUALQUIER navegador,
+  // sin depender del sistema de descargas (que algunos entornos bloquean en silencio).
   const handleExportTrace = useCallback(() => {
-    if (traceResult === null || traceResult.samples.length === 0) return;
-    downloadTraceCsv(traceResult);
+    if (traceResult === null || traceResult.samples.length === 0) {
+      setExportMsg('Sin datos: ejecutá un dibujo para generar la traza.');
+      return;
+    }
+    setCsvModal({ title: `traza web — ${traceResult.samples.length} muestras`, content: exportTraceCsv(traceResult) });
   }, [traceResult]);
 
   const handleExportFirmwareTrace = useCallback(() => {
+    if (firmwareTrace.length === 0) {
+      setExportMsg('Sin T-lines: el manifest debe ejecutarse en el robot. ' + (manifestStatus || ''));
+      return;
+    }
+    setCsvModal({ title: `traza firmware — ${firmwareTrace.length} muestras`, content: firmwareTraceCsv(firmwareTrace) });
+  }, [firmwareTrace, manifestStatus]);
+
+  const handleModalDownload = useCallback(() => {
+    if (csvModal === null) return;
+    try {
+      downloadBlob('trace.csv', new Blob([csvModal.content], { type: 'text/csv' }));
+      setExportMsg('Descargando trace.csv… (si no aparece, usá Copiar)');
+    } catch (e) {
+      setExportMsg('Error de descarga: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [csvModal]);
+
+  const handleModalCopy = useCallback(async () => {
+    if (csvModal === null) return;
+    const ok = await copyText(csvModal.content);
+    setExportMsg(ok ? 'Copiado al portapapeles' : 'No se pudo copiar');
+  }, [csvModal]);
+
+  const handleViewDiag = useCallback(() => {
+    setCsvModal({
+      title: 'diagnóstico del flujo manifest',
+      content: diagRef.current.length > 0 ? diagRef.current.join('\n') : '(sin datos todavía: ejecutá un dibujo y si falla, volvé a este botón)',
+    });
+  }, []);
+
+  const handleViewTrace = useCallback(() => {
+    if (traceResult === null || traceResult.samples.length === 0) return;
+    setCsvModal({ title: `traza web (${traceResult.samples.length} muestras)`, content: exportTraceCsv(traceResult) });
+  }, [traceResult]);
+
+  const handleViewFirmwareTrace = useCallback(() => {
     if (firmwareTrace.length === 0) return;
-    const csv = firmwareTraceCsv(firmwareTrace);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'firmware-trace.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    setCsvModal({ title: `traza firmware (${firmwareTrace.length} muestras)`, content: firmwareTraceCsv(firmwareTrace) });
+  }, [firmwareTrace]);
+
+  const handleCopyTrace = useCallback(async () => {
+    if (traceResult === null || traceResult.samples.length === 0) return;
+    const ok = await copyText(exportTraceCsv(traceResult));
+    setExportMsg(ok ? `Copiado al portapapeles (${traceResult.samples.length} muestras)` : 'No se pudo copiar');
+  }, [traceResult]);
+
+  const handleCopyFirmwareTrace = useCallback(async () => {
+    if (firmwareTrace.length === 0) return;
+    const ok = await copyText(firmwareTraceCsv(firmwareTrace));
+    setExportMsg(ok ? `Copiado al portapapeles (${firmwareTrace.length} muestras)` : 'No se pudo copiar');
   }, [firmwareTrace]);
 
   // ─── Servo calibration (deadband / backlash) — manual mode ─────────────
@@ -1065,12 +1342,7 @@ export default function App() {
       lines.push(`${e.joint + 1},${e.from},${e.to},${e.moved ? 'si' : 'no'}`);
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'servo-calibration.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob('servo-calibration.csv', blob);
   }, [calibLog]);
 
   // ─── Calibration save handler ──────────────────────────────────────────
@@ -1094,12 +1366,7 @@ export default function App() {
       [JSON.stringify({ version: 1, stlScale: stlScaleRef.current, entries }, null, 2)],
       { type: 'application/json' },
     );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'calibration.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob('calibration.json', blob);
   }, []);
 
   // ─── Calibration reload handler ─────────────────────────────────────────
@@ -1188,7 +1455,7 @@ export default function App() {
     [robot],
   );
 
-  // EE-1: base style for the Fidelity segmented options — geometry and
+// EE-1: base style for the Fidelity segmented options — geometry and
   // typography only; the look lives in theme.css (`.segmented__opt` base +
   // `.segmented__opt--active` violet capsule). No background key here so the
   // active class can own the surface.
@@ -1201,6 +1468,11 @@ export default function App() {
     fontFamily: 'var(--font-sans)',
     cursor: 'pointer',
   };
+
+  // Gamepad loop gates, mirrored for the panel badge (same gates as the
+  // rAF loop above: normal mode + no IK target + no trajectory playback).
+  const gamepadActive =
+    gamepadEnabled && robotMode === 'normal' && playerState === 'idle' && !ikMode && !manifestModeRef.current;
 
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
@@ -1229,8 +1501,16 @@ export default function App() {
           zIndex: 10,
         }}
       >
+        {serialLost && (
+          <div style={{
+            padding: '10px 16px', background: '#4a2222', borderBottom: '1px solid #733',
+            fontSize: 12, color: '#f88',
+          }}>
+            ⚠ Conexión USB perdida: el Arduino se desconectó (posible brownout por la
+            alimentación de los servos o cable USB). Revisá la alimentación y reconectá.
+          </div>
+        )}
         {/* Joint sliders */}
-        <div>
           <JointControls
             segments={robot.segments}
             gripper={gripper}
@@ -1238,7 +1518,15 @@ export default function App() {
             onChange={handleJointChange}
             disabled={ikMode}
           />
-        </div>
+
+          <GamepadControls
+            enabled={gamepadEnabled}
+            onEnabledChange={setGamepadEnabled}
+            apiAvailable={gamepadApiAvailable}
+            gamepadId={gamepadId}
+            commands={gamepadReadout}
+            active={gamepadActive}
+          />
 
         {/* End-Effector (EE-1) — moved from the right column into the left
             panel (CAD inspector layout). Component and wiring byte-identical. */}
@@ -1544,6 +1832,26 @@ export default function App() {
                 >
                   {gcodeName ? `G-code: ${gcodeName}` : 'Cargar .gcode'}
                 </button>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '0 6px',
+                    fontSize: 11,
+                    color: '#999',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={gcodeAutofit}
+                    onChange={(e) => setGcodeAutofit(e.target.checked)}
+                    title="Activado: escala y centra el gcode al área de trabajo. Desactivado: usa las coordenadas tal cual (escala real 1:1)."
+                  />
+                  Autofit
+                </label>
                 <input
                   ref={gcodeInputRef}
                   type="file"
@@ -1622,7 +1930,7 @@ export default function App() {
                     >
                       Cerrar
                     </button>
-                    {drawingBlock.canRefit && (
+                    {drawingBlock.canRefit && gcodeAutofit && (
                       <button
                         onClick={handleRefitGcode}
                         style={{
@@ -2047,6 +2355,21 @@ export default function App() {
               </div>
               <div style={{ fontSize: 11, color: 'var(--c-gray)', marginBottom: 6 }}>
                 Trayectoria: <b style={{ color: 'var(--c-text)' }}>{playerState}</b>
+                {manifestStatus && (
+                  <div style={{ fontSize: 11, color: '#8a8', marginBottom: 4 }}>manifest: {manifestStatus}</div>
+                )}
+                <button
+                  onClick={handleViewDiag}
+                  style={{
+                    padding: '6px 10px', background: '#333', border: 'none', borderRadius: 4,
+                    color: '#aac', fontSize: 12, cursor: 'pointer', width: '100%', marginBottom: 4,
+                  }}
+                >
+                  📋 Diagnóstico del último intento
+                </button>
+                {exportMsg && (
+                  <div style={{ fontSize: 11, color: '#aa8', marginBottom: 4 }}>{exportMsg}</div>
+                )}
                 {playerId !== null && playerState !== 'idle' && (
                   <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
@@ -2076,6 +2399,43 @@ export default function App() {
           )}
         </div>
 
+      {/* Modal CSV — acceso garantizado al dato, sin depender del sistema de descargas */}
+      {csvModal !== null && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: '80%', maxWidth: 900, maxHeight: '85%',
+            background: '#24242a', border: '1px solid #444', borderRadius: 8,
+            display: 'flex', flexDirection: 'column', padding: 12, gap: 8,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: '#ccc' }}>{csvModal.title}</span>
+              <button
+                onClick={() => setCsvModal(null)}
+                style={{ padding: '6px 12px', background: '#444', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer', fontSize: 12 }}
+              >
+                Cerrar
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={csvModal.content}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{
+                flex: 1, minHeight: 300, background: '#1c1c20', color: '#9c9',
+                border: '1px solid #333', borderRadius: 4, fontSize: 11,
+                fontFamily: 'monospace', padding: 8, whiteSpace: 'pre', overflow: 'auto',
+              }}
+            />
+            <div style={{ fontSize: 11, color: '#888' }}>
+              Seleccioná todo (Ctrl+A dentro del cuadro) y copiá (Ctrl+C) — o guardá con "Copiar" abajo si preferís.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3D Viewport */}
       <div className="app-viewport" style={{ flex: 1, position: 'relative' }}>

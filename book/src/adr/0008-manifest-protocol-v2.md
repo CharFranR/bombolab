@@ -9,8 +9,8 @@ The host-paced frame protocol (ADR-0002) suffers scheduling jitter: frames are
 paced by the host (rAF, `setInterval`, React effects), so command timing is at
 the mercy of the browser. The Thalos execution manifest (waypoints + delta
 timing, firmware executes autonomously) fixes this, but a full manifest cannot
-fit the Arduino Nano's 2 KB RAM: real drawing trajectories need 1.6–9.6 KB
-(square ~100 samples, gcode 200–600 at 50 ms dt), while only ~1.7 KB are free.
+fit the Arduino Nano's 2 KB RAM: real drawing trajectories need 2.0–12.0 KB
+(square ~125 samples, gcode 250–750 at 40 ms dt), while only ~1.7 KB are free.
 
 ## Decision
 

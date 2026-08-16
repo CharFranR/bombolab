@@ -30,12 +30,23 @@ V2Result v2_executor_store(V2Executor* e, const uint16_t* joints, uint32_t dt_us
     if (e->in_use == V2_RING_SIZE) {
         return V2_ERR_BAD_STATE;
     }
+    bool was_empty = (e->in_use == 0);
     for (int i = 0; i < V2_JOINT_COUNT; i++) {
         e->joints[e->head][i] = joints[i];
     }
     e->dt[e->head] = dt_us;
     e->head = (uint8_t)((e->head + 1) % V2_RING_SIZE);
     e->in_use++;
+    if (was_empty && e->running) {
+        // Re-anclar el pacing tras un ring vacío: v2_executor_tick deja de
+        // avanzar target_time cuando in_use llega a 0 (no hay dt siguiente), y
+        // si el refill llega MUCHO después, el próximo tick consume TODAS las
+        // muestras almacenadas de una (modo ráfaga): el brazo "lata" los
+        // samples y los ACK densos que emite desbordan el ring web-side.
+        // La muestra recién almacenada se consume ya (el timeline está
+        // atrasado de todas formas) y las siguientes respetan su dt.
+        e->target_time = (uint32_t)(e->now() - e->exec_start);
+    }
     return V2_OK;
 }
 

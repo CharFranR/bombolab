@@ -12,9 +12,9 @@ Bombolab models robots as serial chains of revolute/prismatic/twist joints using
 - **Jacobian** — Geométrica 3×n (lineal), validada numéricamente
 - **Web 3D Visualizer** — React + Three.js, IK target arrastrable con rueda para Z, modo dibujo
 - **WASM Core** — Rust compilado a WASM, FK, IK, y PoseGenerator unificados
-- **Serial Control** — Arduino Nano via USB (115200 baud)
+- **WebSerial Control** — Arduino Nano via WebSerial (browser → USB, protocol v2 manifest)
 - **Gripper** — Pinza paralela 75mm con control de apertura
-- **CLI Tools** — `dh-solve`, `quaternion-solve`, `serial-test`
+- **CLI Tools** — `dh-solve`, `quaternion-solve`
 
 ## Getting Started
 
@@ -41,7 +41,6 @@ cd web && npm install && npm run dev
 ```bash
 cargo run --bin dh-solve -p bombolab-core
 cargo run --bin quaternion-solve -p bombolab-core
-cargo run --bin serial-test -p bombolab-core
 ```
 
 ### WASM Build (when Rust changes)
@@ -58,15 +57,14 @@ bombolab/
 ├── src/main.rs                      # Root app stub (GUI lives in web/)
 ├── book.toml                        # mdBook configuration (src = book/src, output = docs/)
 ├── crates/
-│   ├── bombolab-core/               # Domain model, kinematics, math, serial (lib + 6 bins)
+│   ├── bombolab-core/               # Domain model, kinematics, math (lib + 6 bins)
 │   │   └── src/
-│   │       ├── lib.rs               # Re-exports: robot, math, kinematics, communication
+│   │       ├── lib.rs               # Re-exports: robot, math, kinematics
 │   │       ├── robot/               # Joint, DHParams, Segment, Robot, errors, fabri_creator
 │   │       ├── kinematics/          # Forward kinematics, IK solver, DH solve
 │   │       ├── math/                # Isometries (nalgebra wrappers), quaternions, constants
-│   │       ├── communication/       # Serial protocol, ServoMapper, interpolation
 │   │       └── bin/                 # dh-solve, quaternion-solve, dynamics-report,
-│   │                                # test-case-report, serial-test, ws-bridge
+│   │                                # test-case-report, workspace-report, singularity-report
 │   └── bombolab-wasm/               # WASM bridge (wasm-bindgen): FK, IK, fabri_creator
 │       └── src/lib.rs
 ├── web/                             # Visualizador 3D web (React + Three.js)
@@ -90,7 +88,7 @@ The project is organized as Rust packages plus web/firmware components:
 | Crate | Type | Responsibility |
 |-------|------|----------------|
 | **bombolab** (root) | app stub | Prints a pointer to the web viewer |
-| **bombolab-core** | lib + 6 bins | Domain model, kinematics, math, serial, CLI tools |
+| **bombolab-core** | lib + 6 bins | Domain model, kinematics, math, CLI tools |
 | **bombolab-wasm** | lib (wasm) | wasm-bindgen bridge: FK, IK, robot factory |
 
 Additional non-Rust components:
@@ -152,15 +150,14 @@ Position-only Damped Least Squares solver. Takes a 3D target and initial joint g
 - Geometric Jacobian — 3×n linear velocity, validated with finite differences
 - WASM bridge — FK, IK, and robot factory exported to TypeScript
 - Web visualizer — React + Three.js, orbit controls, IK drag target
-- CLI tools: `dh-solve` (numeric/symbolic), `quaternion-solve`, `serial-test`
-- Serial communication — Arduino Nano protocol, ServoMapper, interpolation
+- CLI tools: `dh-solve` (numeric/symbolic), `quaternion-solve`
+- WebSerial communication — browser → Arduino Nano, protocol v2 manifest (HELLO/MANIFEST/SAMPLE/EXECUTE)
 - Arduino Nano firmware (PlatformIO C++)
 
 ### Planned
 
 - Robot model catalog
 - Orientation IK (6-DOF)
-- WebSerial direct control (currently CLI-only)
 
 ## Contributing
 

@@ -1,7 +1,7 @@
 /**
- * Client-side servo interpolation — a TypeScript mirror of the Rust
- * `communication::interpolation` module (same algorithms: per-joint
- * stepping with final-value padding, all joints arrive simultaneously).
+ * Client-side servo interpolation — the wire-side interpolation for the
+ * browser (per-joint stepping with final-value padding, all joints arrive
+ * simultaneously).
  *
  * The web viewer sends frames directly via WebSerial with no pacing, so
  * IK and demo movements jump straight to the solved pose. `ServoInterpolator`
@@ -27,9 +27,9 @@ export interface InterpolationConfig {
   backlash?: number[];
 }
 
-/** Viewer pacing: 5° per step, 50 ms between steps (user-tuned; the Rust
- *  `InterpolationConfig::default()` keeps 100 ms for serial-test/CLI). */
-export const DEFAULT_INTERPOLATION: InterpolationConfig = { stepSize: 5, delayMs: 50 };
+/** Viewer pacing: 5° per step, 40 ms between steps — unified with the
+ *  firmware-side servo step delay at 40 ms. */
+export const DEFAULT_INTERPOLATION: InterpolationConfig = { stepSize: 5, delayMs: 40 };
 
 /**
  * Linear interpolation of one channel from `current` to `target`, stepping

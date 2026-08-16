@@ -29,7 +29,7 @@ function makeIk(calls: [number, number, number][] = [], failAtX?: number): IkFn 
 
 function lastT(samples: PlanSample[]): number {
   const last = samples[samples.length - 1];
-  return last.t + (last.count - 1) * 0.05;
+  return last.t + (last.count - 1) * 0.04;
 }
 
 describe('planTimeline — TC-1 analytic timeline', () => {
@@ -41,7 +41,7 @@ describe('planTimeline — TC-1 analytic timeline', () => {
     expect(tl[0]).toEqual({ t: 0, q_us: qUs([0, 0, 0, 0, 0]), count: 1 });
     expect(tl[tl.length - 1].t).toBe(2.0);
     expect(lastT(tl)).toBeCloseTo(2.0, 6);
-    expect(calls.length).toBe(41);
+    expect(calls.length).toBe(51);
     for (const s of tl) {
       expect(s.q_us).toHaveLength(6);
       expect(s.q_us[5]).toBe(gripperToServoUs(50));
@@ -59,10 +59,10 @@ describe('planTimeline — TC-1 analytic timeline', () => {
     const hold = tl.find((s) => s.count > 5);
     expect(hold).toBeDefined();
     expect(hold!.t).toBe(2.0);
-    expect(hold!.count).toBe(31);
+    expect(hold!.count).toBe(39);
     expect(hold!.q_us).toEqual(qUs([1, 0, 0, 0, 0]));
     const endpoint = tl[tl.length - 1];
-    expect(endpoint.t + (endpoint.count - 1) * 0.05).toBe(6.5);
+    expect(endpoint.t + (endpoint.count - 1) * 0.04).toBe(6.5);
     expect(endpoint.q_us).toEqual(qUs([1.6, 0, 0, 0, 0]));
   });
 
@@ -89,7 +89,9 @@ describe('planTimeline — playback mirror', () => {
   it('skips the IK solve when the target moved less than 0.5 mm', () => {
     const calls: [number, number, number][] = [];
     const cmds: MotionCommandJS[] = [{ type: 'move', target: [1, 0, 0], speed: 5 }];
-    const tl = planTimeline(cmds, { ik: makeIk(calls), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0] });
+    // Grilla explícita de 50 ms: el comportamiento de skip (< 0.5 mm) se prueba
+    // sobre esta cadencia, independiente del default (40 ms).
+    const tl = planTimeline(cmds, { ik: makeIk(calls), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0], dt: 0.05 });
     expect(calls).toHaveLength(2);
     expect(calls[0]).toEqual([0, 0, 0]);
     expect(calls[1][0]).toBeCloseTo(0.75, 12);
@@ -97,13 +99,14 @@ describe('planTimeline — playback mirror', () => {
     expect(tl[0].count).toBe(3);
     expect(tl[1].t).toBeCloseTo(0.15, 12);
     expect(tl[1].count).toBe(2);
-    expect(lastT(tl)).toBe(0.2);
+    expect(tl[1].t + (tl[1].count - 1) * 0.05).toBe(0.2);
   });
 
   it('holds the previous q when the IK solve fails', () => {
     const cmds: MotionCommandJS[] = [{ type: 'move', target: [100, 0, 0], speed: 100 }];
     const failedUs = qUs([0.05, 0, 0, 0, 0])[0];
-    const tl = planTimeline(cmds, { ik: makeIk([], 5), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0] });
+    // Grilla explícita de 50 ms: el fallo IK está amarrado a x=5 (primer push).
+    const tl = planTimeline(cmds, { ik: makeIk([], 5), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0], dt: 0.05 });
     expect(tl.some((s) => s.q_us[0] === failedUs)).toBe(false);
     const held = tl[0];
     expect(held.q_us[0]).toBe(qUs([0, 0, 0, 0, 0])[0]);

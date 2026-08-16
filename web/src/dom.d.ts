@@ -9,6 +9,8 @@ interface SerialPort {
   readonly readable: ReadableStream<Uint8Array> | null;
   readonly writable: WritableStream<Uint8Array> | null;
   getInfo(): SerialPortInfo;
+  addEventListener(type: 'disconnect', listener: () => void): void;
+  removeEventListener(type: 'disconnect', listener: () => void): void;
 }
 
 interface SerialPortInfo {

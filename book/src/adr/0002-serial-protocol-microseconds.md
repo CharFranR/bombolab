@@ -24,8 +24,8 @@ fast and deterministic.
 - Full servo resolution on the wire (1 µs steps instead of 1° steps).
 - The firmware conversion layer disappeared; it stores and forwards native
   pulse widths.
-- Unit ambiguity is resolved by range detection, documented in
-  `book/src/core-concepts/communication.md` and covered by the
-  `cli_serial_test` integration test.
+- Unit ambiguity is resolved by range detection, documented in the
+  WebSerial implementation (`web/src/serial.ts` /
+  `web/src/motion/manifestProtocol.ts`).
 - Host pacing remains the responsibility of the host (interpolation delay and
   motion player `update(dt)`); the firmware is a deterministic executor.

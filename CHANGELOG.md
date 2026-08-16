@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gripper jaw animation order: `world × jawM × scale × cal` (FK local space, matches SimpleRobotScene)
 - Removed low-fi skeleton overlay from high fidelity mode
 
+### Removed
+
+- **Legacy Rust serial stack deprecated and removed** — the `communication`
+  module in `bombolab-core` (`ArduinoNano`, `ServoMapper`, `ServoCommand`,
+  interpolation), the `serial-test` / `ws-bridge` binaries, the
+  `serial` / `ws-bridge` features, and the `serialport` / `ctrlc` /
+  `futures-util` / `serde` / `serde_json` / `tokio` / `tokio-tungstenite`
+  dependencies. The browser talks to the firmware directly via WebSerial
+  (protocol v2 manifest); the Rust serial stack was dead code. See
+  ADR-0009.
+
 ### Fixed
 
 - STL-to-joint mapping corrected per user-identified physical parts
@@ -101,8 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Physical pin table unverified** — servo pin mapping (J1→A1, J2→A0,
   J3→A2, J4→A4, J5→13, Gripper→A5) was unified to the firmware as the
   source of truth; still needs validation against the physical wiring
-  (marked `VERIFICAR contra el cableado físico real` in
-  `communication/mod.rs` and firmware `main.cpp`).
+  (marked `VERIFICAR contra el cableado físico real` in firmware
+  `main.cpp`).
 - **Dynamics simplifications** — `dynamics.rs` models COM at frame origins,
   masses/inertias are estimates (PETG 25% + MG996R/MG90S specs), and no
   Coriolis/centrifugal term exists. Acceptable for educational use;

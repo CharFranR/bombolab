@@ -13,7 +13,6 @@
 - [Forward Kinematics](./core-concepts/forward-kinematics.md)
 - [Robot Model](./core-concepts/robot-model.md)
 - [FABRI Creator](./core-concepts/fabri-creator.md)
-- [Serial Communication](./core-concepts/communication.md)
 - [Jacobian](./core-concepts/jacobian.md)
 - [Inverse Kinematics](./core-concepts/inverse-kinematics.md)
 
@@ -30,12 +29,12 @@
   - [ADR-0006: Workspace Analysis](./adr/0006-workspace-analysis.md)
   - [ADR-0007: Plan vs Execution Trace](./adr/0007-plan-vs-execution-trace.md)
   - [ADR-0008: Manifest Protocol v2](./adr/0008-manifest-protocol-v2.md)
+  - [ADR-0009: Deprecate Rust Serial Stack](./adr/0009-deprecate-rust-serial-stack.md)
 
 # CLI Tools
 
 - [dh-solve](./cli/dh-solve.md)
 - [quaternion-solve](./cli/quaternion-solve.md)
-- [serial-test](./cli/serial-test.md)
 - [ik-solve](./cli/ik-solve.md)
 
 # API Reference

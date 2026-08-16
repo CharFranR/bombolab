@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Serial Communication - Bombolab</title>
+        <title>ADR-0009: Deprecate Rust Serial Stack - Bombolab</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6c020120.js";
+            window.path_to_searchindex_js = "../searchindex-ae0f75a4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1cc40636.js"></script>
+        <script src="../toc-55f41179.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -146,7 +146,7 @@
                         <a href="https://github.com/charfranr/bombolab" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/charfranr/bombolab/edit/main/docs/src/book/src/core-concepts/communication.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/charfranr/bombolab/edit/main/docs/src/book/src/adr/0009-deprecate-rust-serial-stack.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,374 +180,59 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="serial-communication"><a class="header" href="#serial-communication">Serial Communication</a></h1>
-<p><strong>Hardware interface for sending joint angles to the Arduino Nano firmware.</strong></p>
-<p>The <code>communication</code> module provides a serial connection to the robot’s microcontroller, sending interpolated angle commands and verifying responses.</p>
-<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code>communication/
-├── mod.rs              # ConnectionError, protocol constants, pin mapping
-├── arduino_nano.rs     # ArduinoNano serial wrapper
-├── command.rs          # ServoCommand typed struct
-├── mapper.rs           # ServoMapper — centralized q→servo mapping
-└── interpolation.rs    # Smooth multi-joint movement
-</code></pre>
-<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::{
-    ArduinoNano, ServoCommand, InterpolationConfig, interpolate_all,
-};
-
-// Connect to Arduino
-let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
-
-// Send angles via ServoCommand (typed struct: 5 joints + gripper)
-let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
-nano.send(&amp;cmd)?;
-
-// Or interpolate smoothly between positions
-let current = [90, 115, 110, 170, 90, 90];
-let target = [90, 120, 100, 170, 90, 90];
-let config = InterpolationConfig::default();
-
-let steps = interpolate_all(&amp;current, &amp;target, &amp;config);
-for step in &amp;steps {
-    let cmd = ServoCommand::from_raw_array(step);
-    nano.send(&amp;cmd)?;
-    std::thread::sleep(std::time::Duration::from_millis(config.delay_ms));
-}
-
-nano.disconnect()?;
-<span class="boring">}</span></code></pre>
-<h2 id="serial-protocol"><a class="header" href="#serial-protocol">Serial Protocol</a></h2>
-<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Constant</th><th>Value</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>BAUD_RATE</code></td><td>115200</td><td>Serial baud rate</td></tr>
-<tr><td><code>JOINT_COUNT</code></td><td>6</td><td>Values per message (5 joints + gripper)</td></tr>
-<tr><td><code>ANGLE_MIN</code></td><td>10</td><td>Minimum servo angle (degrees)</td></tr>
-<tr><td><code>ANGLE_MAX</code></td><td>170</td><td>Maximum servo angle (degrees)</td></tr>
-<tr><td><code>READ_TIMEOUT_MS</code></td><td>1000</td><td>Read timeout (milliseconds)</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="message-format"><a class="header" href="#message-format">Message Format</a></h3>
-<pre><code>TX: "90,115,110,170,90,90\n"
-RX: "OK\n"
-</code></pre>
-<p>The 6 values map to:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Index</th><th>Servo</th><th>Joint</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td>0</td><td>S1</td><td>J1</td><td>Base yaw</td></tr>
-<tr><td>1</td><td>S2</td><td>J2</td><td>Shoulder pitch</td></tr>
-<tr><td>2</td><td>S3</td><td>J3</td><td>Elbow pitch</td></tr>
-<tr><td>3</td><td>S4</td><td>J4</td><td>Wrist roll</td></tr>
-<tr><td>4</td><td>S5</td><td>J5</td><td>Wrist pitch</td></tr>
-<tr><td>5</td><td>S6</td><td>—</td><td>Gripper</td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Note:</strong> The gripper (index 5) is not part of the 5-DOF kinematic model but is included in the serial protocol for hardware control.</p>
-<h2 id="arduinonano"><a class="header" href="#arduinonano">ArduinoNano</a></h2>
-<h3 id="connection"><a class="header" href="#connection">Connection</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::{ArduinoNano, ServoCommand};
-
-// List available ports
-let ports = ArduinoNano::list_ports()?;
-
-// Connect
-let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
-
-// Build a typed command and send it
-let cmd = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
-nano.send(&amp;cmd)?;
-
-// Or send and wait for OK/ERR response
-nano.send_and_verify(&amp;cmd)?;
-
-// Clean disconnect (also handled by Drop)
-nano.disconnect()?;
-<span class="boring">}</span></code></pre>
-<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>list_ports()</code></td><td>Returns available serial port names</td></tr>
-<tr><td><code>connect(port_name)</code></td><td>Opens connection at 115200 baud</td></tr>
-<tr><td><code>send(cmd)</code></td><td>Sends a <code>ServoCommand</code> as CSV</td></tr>
-<tr><td><code>send_and_verify(cmd)</code></td><td>Send + read + check for “OK”</td></tr>
-<tr><td><code>read_response()</code></td><td>Reads one line (expects “OK” or “ERR”)</td></tr>
-<tr><td><code>disconnect()</code></td><td>Flush and close port</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
-<p>All methods return <code>Result&lt;T, ConnectionError&gt;</code>:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::ConnectionError;
-
-match nano.send_and_verify(&amp;cmd) {
-    Ok(()) =&gt; println!("Angles sent"),
-    Err(ConnectionError::InvalidResponse { port, response }) =&gt; {
-        eprintln!("Arduino returned: {}", response);
-    }
-    Err(ConnectionError::WriteFailed { port, source }) =&gt; {
-        eprintln!("Serial write failed: {}", source);
-    }
-    Err(e) =&gt; eprintln!("Error: {}", e),
-}
-<span class="boring">}</span></code></pre>
-<h2 id="servocommand"><a class="header" href="#servocommand">ServoCommand</a></h2>
-<p><code>ServoCommand</code> is a typed struct that replaces raw <code>[i32; 6]</code> arrays with semantic fields:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>pub struct ServoCommand {
-    pub joints: [f64; 5],  // 5 joint angles in degrees
-    pub gripper: u8,        // gripper angle 0–255
-}
-<span class="boring">}</span></code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new(joints, gripper)</code></td><td>Creates a <code>ServoCommand</code>, validates joints [10°, 170°] and gripper 0–255</td></tr>
-<tr><td><code>to_wire()</code></td><td>Serializes to <code>"a1,a2,a3,a4,a5,g\n"</code> for the serial protocol</td></tr>
-<tr><td><code>to_raw_array()</code></td><td>Converts to <code>[i32; 6]</code> for use with <code>interpolate_all()</code></td></tr>
-<tr><td><code>from_raw_array(arr)</code></td><td>Builds from an <code>[i32; 6]</code> (e.g., from interpolation output)</td></tr>
-</tbody>
-</table>
-</div>
-<p>The wire format is identical to the previous raw-array API — no protocol breakage.</p>
-<h2 id="servomapper"><a class="header" href="#servomapper">ServoMapper</a></h2>
-<p><code>ServoMapper</code> centralizes the conversion from kinematic coordinates (q in radians) to servo angles (degrees), combining offsets, clamping, and gripper into a single step:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::{fabri_creator, communication::ServoMapper};
-
-let robot = fabri_creator();
-let mapper = ServoMapper::new(&amp;robot);
-
-// q = [0,0,0,0,0] → servo angles at home pose
-let cmd = mapper.map_q(&amp;[0.0; 5], 90);
-assert_eq!(cmd.to_wire(), "90,115,110,170,90,90\n");
-<span class="boring">}</span></code></pre>
-<p><strong>What <code>ServoMapper</code> does internally:</strong></p>
-<ol>
-<li>Delegates to <code>Robot::q_to_servo()</code> to add per-joint offsets (radians)</li>
-<li>Converts radians to degrees</li>
-<li>Clamps each joint to [10°, 170°]</li>
-<li>Packages everything into a <code>ServoCommand</code></li>
-</ol>
-<h2 id="interpolation"><a class="header" href="#interpolation">Interpolation</a></h2>
-<p>Moving directly from one angle to another can cause jerky motion. The interpolation module generates smooth intermediate steps.</p>
-<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::InterpolationConfig;
-
-let config = InterpolationConfig {
-    step_size: 5,   // degrees per step
-    delay_ms: 100,  // milliseconds between steps (default)
-};
-<span class="boring">}</span></code></pre>
-<h3 id="single-joint"><a class="header" href="#single-joint">Single Joint</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::interpolate_joint;
-
-// 90° → 100° with step 5°
-let steps = interpolate_joint(90, 100, 5);
-assert_eq!(steps, vec![95, 100]);
-
-// Non-exact step: 90° → 102° with step 5°
-let steps = interpolate_joint(90, 102, 5);
-assert_eq!(steps, vec![95, 100, 102]);
-<span class="boring">}</span></code></pre>
-<h3 id="all-joints"><a class="header" href="#all-joints">All Joints</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::communication::interpolate_all;
-
-let current = [90, 90, 90, 90, 90, 90];
-let target = [95, 100, 85, 115, 90, 90];
-let config = InterpolationConfig { step_size: 5, delay_ms: 0 };
-
-let steps = interpolate_all(&amp;current, &amp;target, &amp;config);
-
-// All joints move simultaneously:
-// - Faster joints pad with their final value
-// - All arrive at target in the same number of steps
-assert_eq!(steps.len(), 5); // J3 (90→115) dictates step count
-<span class="boring">}</span></code></pre>
-<p><strong>Key behavior:</strong></p>
+                        <h1 id="adr-0009-deprecate-rust-serial-stack"><a class="header" href="#adr-0009-deprecate-rust-serial-stack">ADR-0009: Deprecate Rust Serial Stack</a></h1>
 <ul>
-<li>Each joint interpolates independently</li>
-<li>Shorter movements pad with their final value</li>
-<li>All joints arrive at the target simultaneously</li>
+<li><strong>Status</strong>: Accepted</li>
+<li><strong>Date</strong>: 2026-08-12</li>
 </ul>
-<h2 id="cli-tool-serial-test"><a class="header" href="#cli-tool-serial-test">CLI Tool: serial-test</a></h2>
-<p>An interactive REPL for testing serial communication:</p>
-<pre><code class="language-bash">cargo run --bin serial-test
-</code></pre>
-<h3 id="commands"><a class="header" href="#commands">Commands</a></h3>
-<pre><code>&gt; 1 90        # Move servo 1 to 90°
-&gt; all 90 115 110 170 90 90  # Move all servos
-&gt; quit        # Disconnect and exit
-</code></pre>
-<h3 id="features"><a class="header" href="#features">Features</a></h3>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>The host-side serial path lived in Rust: the <code>communication</code> module in
+<code>bombolab-core</code> (<code>ArduinoNano</code>, <code>ServoMapper</code>, <code>ServoCommand</code>,
+interpolation), the <code>serial-test</code> CLI debug tool, the <code>ws-bridge</code>
+WebSocket→serial server, the <code>serial</code>/<code>ws-bridge</code> feature gates, and the
+<code>serialport</code>/<code>ctrlc</code>/<code>futures-util</code>/<code>serde</code>/<code>serde_json</code>/<code>tokio</code>/
+<code>tokio-tungstenite</code> dependencies. The browser talks to the firmware
+directly via WebSerial (protocol v2 manifest, ADR-0008): it performs the
+handshake, streams <code>SAMPLE</code> lines with ACK pacing, and executes plans
+without any Rust intermediary. The Rust serial stack was dead code —
+nothing referenced it — and the wasm build never compiled it
+(<code>default-features = false</code>).</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<p>Remove the entire legacy Rust serial stack from the repository:</p>
 <ul>
-<li>Auto-detects USB serial devices (<code>/dev/ttyUSB*</code>, <code>/dev/ttyACM*</code>)</li>
-<li>Ctrl+C handler for clean disconnect</li>
-<li>Angle validation (10–170° range)</li>
-<li>Smooth interpolation between positions</li>
+<li>Delete the <code>communication</code> module (11 files) and its re-exports.</li>
+<li>Delete the <code>serial-test</code> and <code>ws-bridge</code> binaries and their tests.</li>
+<li>Delete the <code>serial</code> / <code>ws-bridge</code> features and the now-unused
+dependencies (<code>serialport</code>, <code>ctrlc</code>, <code>futures-util</code>, <code>serde</code>,
+<code>serde_json</code>, <code>tokio</code>, <code>tokio-tungstenite</code>).</li>
+<li>Remove the <code>core-ws-bridge</code> CI job and the <code>cli_serial_test</code>
+integration test.</li>
+<li>Drop the <code>communication</code> and <code>serial-test</code> book pages; record this
+decision as ADR-0009.</li>
 </ul>
-<h2 id="integration-with-robot-model"><a class="header" href="#integration-with-robot-model">Integration with Robot Model</a></h2>
-<p>The <code>ServoMapper</code> bridges kinematic q (radians) to servo angles (degrees), centralizing offset and clamping logic:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use bombolab_core::{
-    fabri_creator,
-    communication::{ArduinoNano, ServoMapper, ServoCommand, interpolate_all_command},
-};
-
-let robot = fabri_creator();
-let mapper = ServoMapper::new(&amp;robot);
-let mut nano = ArduinoNano::connect("/dev/ttyUSB0")?;
-
-// Map kinematic q to ServoCommand
-let q = vec![0.1, -0.2, 0.3, -0.1, 0.15];
-let target_cmd = mapper.map_q(&amp;q, 90); // 90 = gripper angle
-
-// Interpolate smoothly from home to target
-let home = ServoCommand::new([90.0, 115.0, 110.0, 170.0, 90.0], 90)?;
-let steps = interpolate_all_command(&amp;home, &amp;target_cmd, &amp;Default::default());
-
-for step in &amp;steps {
-    nano.send(&amp;step)?;
-    std::thread::sleep(std::time::Duration::from_millis(40));
-}
-<span class="boring">}</span></code></pre>
-<p>No manual rad→deg conversion, clamping, or gripper appending needed — <code>ServoMapper</code> handles it all.</p>
-<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
-<pre><code class="language-bash"># Run communication module tests
-cargo test -p bombolab-core communication
-
-# Run interpolation tests specifically
-cargo test -p bombolab-core interpolation
-</code></pre>
-<p>The interpolation tests cover:</p>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
 <ul>
-<li>Exact multiples, non-exact steps, no movement</li>
-<li>Ascending and descending angles</li>
-<li>Multi-joint padding and synchronization</li>
+<li>Fewer dependencies: <code>bombolab-core</code> now depends only on <code>nalgebra</code>.</li>
+<li>No dead hardware path: there is exactly one way to talk to the
+firmware, the browser WebSerial implementation.</li>
+<li>CLI debug tooling moved to the browser (the WebSerial code paths in
+<code>web/src/serial.ts</code> and <code>web/src/motion/manifestProtocol.ts</code> are the
+live debug/verification surface).</li>
+<li>The wire protocol decisions (ADR-0002, ADR-0008) remain in force,
+now implemented in TypeScript instead of Rust.</li>
+<li>Rollback: the deleted code is recoverable from git history; no
+firmware or wasm changes were required.</li>
 </ul>
-<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
-<h3 id="port-not-found"><a class="header" href="#port-not-found">Port not found</a></h3>
-<pre><code>Error: port not found: /dev/ttyUSB0
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Arduino not plugged in</li>
-<li>Wrong port name (check with <code>ls /dev/ttyUSB* /dev/ttyACM*</code>)</li>
-<li>Permission issue (user not in <code>dialout</code> group)</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<pre><code class="language-bash"># Check available ports
-ls /dev/ttyUSB* /dev/ttyACM*
-
-# Add yourself to the dialout group (Linux)
-sudo usermod -a -G dialout $USER
-# Then log out and back in
-</code></pre>
-<h3 id="permission-denied"><a class="header" href="#permission-denied">Permission denied</a></h3>
-<pre><code>Error: failed to open /dev/ttyUSB0: Permission denied
-</code></pre>
-<p><strong>Fix:</strong> Add your user to the <code>dialout</code> group:</p>
-<pre><code class="language-bash">sudo usermod -a -G dialout $USER
-# Log out and back in for changes to take effect
-</code></pre>
-<h3 id="arduino-not-responding"><a class="header" href="#arduino-not-responding">Arduino not responding</a></h3>
-<pre><code>Error: invalid response from /dev/ttyUSB0: ""
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Arduino firmware not uploaded</li>
-<li>Wrong baud rate (must be 115200)</li>
-<li>Arduino reset (unplug and replug)</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Verify firmware is uploaded: open Arduino IDE Serial Monitor at 115200 baud, type <code>90,115,110,170,90,90</code> and press Enter. You should see <code>OK</code>.</li>
-<li>Check baud rate matches: <code>BAUD_RATE</code> in <code>communication/mod.rs</code> must match the firmware’s <code>Serial.begin()</code> value.</li>
-</ol>
-<h3 id="servos-jittering-or-moving-erratically"><a class="header" href="#servos-jittering-or-moving-erratically">Servos jittering or moving erratically</a></h3>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Insufficient power supply (USB power may not be enough for all servos)</li>
-<li>Angles outside valid range</li>
-<li>Serial data corruption</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Use an external 5V power supply for servos (not USB power)</li>
-<li>Ensure angles are between 10° and 170°</li>
-<li>Check serial cable length — keep under 1 meter for reliable communication</li>
-</ol>
-<h3 id="intermittent-err-responses"><a class="header" href="#intermittent-err-responses">Intermittent ERR responses</a></h3>
-<pre><code>Error: invalid response from /dev/ttyUSB0: "ERR"
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Angle out of range (firmware validates 10–170°)</li>
-<li>Mechanical obstruction preventing servo movement</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Check which joint caused the error (log the angles being sent)</li>
-<li>Verify all angles are within 10–170°</li>
-<li>Move the robot manually to check for mechanical binding</li>
-</ol>
-<h3 id="timeout-waiting-for-response"><a class="header" href="#timeout-waiting-for-response">Timeout waiting for response</a></h3>
-<pre><code>Error: read timeout on /dev/ttyUSB0 after 1000ms
-</code></pre>
-<p><strong>Causes:</strong></p>
-<ul>
-<li>Arduino frozen or crashed</li>
-<li>Serial buffer overflow (sending too fast)</li>
-<li>USB connection unstable</li>
-</ul>
-<p><strong>Fix:</strong></p>
-<ol>
-<li>Reset Arduino (unplug and replug)</li>
-<li>Increase delay between commands (currently 40ms default)</li>
-<li>Try a different USB port or cable</li>
-</ol>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../core-concepts/fabri-creator.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../adr/0008-manifest-protocol-v2.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../core-concepts/jacobian.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../cli/dh-solve.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -557,11 +242,11 @@ sudo usermod -a -G dialout $USER
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../core-concepts/fabri-creator.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../adr/0008-manifest-protocol-v2.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../core-concepts/jacobian.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../cli/dh-solve.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
