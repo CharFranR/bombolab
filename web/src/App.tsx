@@ -1133,9 +1133,9 @@ export default function App() {
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
       {/* Sidebar — floating glass column (D9): position clears the floating
-          top bar (top 72 = bar bottom 64 + 8px gap) and the centered pill
-          bar (bottom 92); bottom 330 also clears the serial-errors card
-          (bottom 92 + height 230 + 8px gap). CAD contextual-inspector
+          top bar (top 72 = bar bottom 64 + 8px gap) and the serial-errors
+          card (bottom 76 + height 140 + 8px gap), which in turn sits at
+          the pill bar's height (bottom 76). CAD contextual-inspector
           layout: JointControls, End-Effector (moved from the right column),
           Fidelity, then the persistent toggles. The whole panel scrolls
           (overflowY auto) — blocks flow in order, JointControls keeps its
@@ -1146,7 +1146,7 @@ export default function App() {
           position: 'fixed',
           top: 72,
           left: 16,
-          bottom: 330,
+          bottom: 224,
           width: 280,
           minWidth: 280,
           display: 'flex',
@@ -1277,37 +1277,57 @@ export default function App() {
         {/* Reset — moved to the bottom pill bar (handleReset) */}
       </div>
 
-      {/* Serial errors card — moved OUT of the sidebar into its own glass
-          card below it (same left column, same width). Renders only when
-          an error exists; content scrolls if the list grows. */}
-      {serialError && (
-        <div
-          className="glass-card anim-in"
-          style={{
-            position: 'fixed',
-            left: 16,
-            bottom: 92,
-            width: 280,
-            height: 230,
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '12px 16px',
-            zIndex: 10,
-          }}
-        >
-          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 9v4" />
-              <path d="M12 17h.01" />
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-            </svg>
-            Errores seriales
-          </div>
+      {/* Serial errors card — always visible, compact, own glass card below
+          the sidebar (same left column, same width), bottom edge aligned
+          with the pill bar height. Empty state shows a soft muted "Sin
+          errores" placeholder; when an error exists the alert icon lights
+          up (red glow + pulse) and the message scrolls if it grows. */}
+      <div
+        className="glass-card anim-in"
+        style={{
+          position: 'fixed',
+          left: 16,
+          bottom: 76,
+          width: 280,
+          height: 140,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '12px 16px',
+          zIndex: 10,
+        }}
+      >
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg
+            width={15}
+            height={15}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              color: serialError ? '#F87171' : 'var(--c-text-faint)',
+              filter: serialError ? 'drop-shadow(0 0 6px rgba(248, 113, 113, 0.55))' : 'none',
+              animation: serialError ? 'badgePulse 2s ease-in-out infinite' : 'none',
+            }}
+          >
+            <path d="M12 9v4" />
+            <path d="M12 17h.01" />
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          </svg>
+          Errores seriales
+        </div>
+        {serialError ? (
           <div style={{ overflowY: 'auto', flex: 1, fontSize: 11, color: '#F87171', lineHeight: 1.6 }}>
             {serialError}
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--c-text-faint)', opacity: 0.6 }}>
+            Sin errores
+          </div>
+        )}
+      </div>
 
         {/* Right contextual dock (D5): fixed container that stacks ONLY the
             active mode cards (drawing / calibration / IK / analysis /
