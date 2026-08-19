@@ -1,6 +1,6 @@
 import { useMemo, useRef, useCallback } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
-import { TransformControls } from '@react-three/drei';
+import { Grid, TransformControls } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { RobotRendererProps, VisualLink } from './types';
@@ -22,6 +22,8 @@ interface MeshEntry extends VisualLink {
 }
 
 function buildEntries(geometries: THREE.BufferGeometry[]): MeshEntry[] {
+  // ONE shared material for all STL meshes — original color/props restored
+  // (user amendment: no dark matte gray); structure untouched (buildEntries identical)
   const material = new THREE.MeshStandardMaterial({
     color: '#bbbbcc',
     roughness: 0.5,
@@ -285,6 +287,19 @@ export default function StlRobotScene({
 
   return (
     <group>
+      {/* Radial-fade isometric grid (D5) — same recipe as SimpleRobotScene */}
+      <Grid
+        position={[0, -0.5, 0]}
+        args={[1600, 1600]}
+        cellSize={10}
+        cellThickness={0.35}
+        cellColor="#5f5f6b"
+        sectionSize={50}
+        sectionThickness={0.9}
+        sectionColor="#70798a"
+        fadeDistance={780}
+        fadeStrength={1.1}
+      />
       {entries.map((entry, i) => {
         const isTarget = targetEntry && targetEntry.index === i;
         const el = <primitive key={i} object={entry.mesh} />;

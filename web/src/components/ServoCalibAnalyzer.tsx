@@ -178,8 +178,8 @@ function Histogram({ stats }: { stats: JointStats }) {
             style={{
               width: 14,
               height: Math.max(2, (c / maxCount) * 36),
-              background: c > 0 ? '#aa8' : '#2a2a2a',
-              borderRadius: 2,
+              background: c > 0 ? 'var(--c-cyan)' : 'rgba(255, 255, 255, 0.05)',
+              borderRadius: 'var(--radius-ctl)',
             }}
           />
           <span style={{ fontSize: 8, color: '#777' }}>{i + 1}°</span>
@@ -196,7 +196,7 @@ function Scatter({ stats }: { stats: JointStats }) {
   const x = (angle: number) => (angle / 180) * W;
   const y = (v: number) => H - 8 - (v / (maxVal + 1)) * (H - 20);
   return (
-    <svg width={W} height={H} style={{ marginTop: 4, background: '#1a1a1e', borderRadius: 4 }}>
+    <svg width={W} height={H} style={{ marginTop: 4, background: '#1a1a1e', borderRadius: 'var(--radius-ctl)' }}>
       {[0, 45, 90, 135, 180].map((a) => (
         <g key={a}>
           <line x1={x(a)} y1={4} x2={x(a)} y2={H - 10} stroke="#2c2c32" strokeWidth={1} />
@@ -241,9 +241,14 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
   };
 
   return (
-    <div style={{ borderTop: '1px solid #333', padding: '8px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: '#888' }}>Analizador de backlash</span>
+    <div className="glass-card" style={{ padding: '12px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+        Analizador de backlash
+      </h3>
         <label style={{ fontSize: 10, color: '#69c', cursor: 'pointer' }}>
           Importar CSV
           <input
@@ -265,15 +270,15 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
           </button>
         )}
         {entries.length === 0 && (
-          <span style={{ fontSize: 10, color: '#555' }}>sin datos — corré la calibración</span>
+          <span style={{ fontSize: 10, color: 'var(--c-text-faint)' }}>sin datos — corré la calibración</span>
         )}
       </div>
 
       {stats.map((s) => (
-        <div key={s.joint} style={{ marginBottom: 10, border: '1px solid #2c2c32', borderRadius: 6, padding: 8 }}>
+        <div key={s.joint} style={{ marginBottom: 10, border: '1px solid var(--border)', borderRadius: 'var(--radius-ctl)', padding: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: 12, color: '#ccc', fontWeight: 600 }}>J{s.joint}</span>
-            <span style={{ fontSize: 10, color: '#888', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 12, color: 'var(--c-text)', fontWeight: 600 }}>J{s.joint}</span>
+            <span style={{ fontSize: 10, color: 'var(--c-gray)', fontFamily: 'monospace' }}>
               n={s.count} · media {s.mean.toFixed(1)}° · mediana {s.median.toFixed(1)}° · σ{' '}
               {s.sigma.toFixed(1)}° · [{s.min}–{s.max}]°
             </span>
@@ -284,7 +289,7 @@ export default function ServoCalibAnalyzer({ log }: { log: CalibEntry[] }) {
           </div>
           <Histogram stats={s} />
           <Scatter stats={s} />
-          <div style={{ fontSize: 9, color: '#666', marginTop: 2 }}>
+          <div style={{ fontSize: 9, color: 'var(--c-text-faint)', marginTop: 2 }}>
             {s.sigma <= 0.75 && s.count >= 3
               ? 'σ baja → compensación fija viable'
               : s.count >= 3

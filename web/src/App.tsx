@@ -33,11 +33,11 @@ import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, t
 
 function LoadingScreen({ error }: { error?: string }) {
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: 'var(--c-gray)', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
       {error ? (
         <p style={{ fontSize: 14, color: '#e55' }}>Error: {error}</p>
       ) : (
-        <p style={{ fontSize: 16, color: '#888' }}>Cargando WASM...</p>
+        <p style={{ fontSize: 16, color: 'var(--c-gray)' }}>Cargando WASM...</p>
       )}
     </div>
   );
@@ -173,6 +173,7 @@ export default function App() {
   const firmwareTraceRef = useRef<FirmwareSample[]>([]);
   const servoInterpolatorRef = useRef<ServoInterpolator | null>(null);
   const traceRecorderRef = useRef<TraceRecorder | null>(null);
+  const manifestAbortControllerRef = useRef<AbortController | null>(null);
 
   // Backlash take-up per channel — EXPERIMENTAL and DISABLED by default:
   // the A/B test showed a fixed 2°/1° compensation made the drawing WORSE
@@ -186,6 +187,12 @@ export default function App() {
     showStlOrigins: false,
     showCalibrationAxes: false,
   });
+  // DEBUG accordion — presentation-only UI state (precedent: calibAnalyzerOpen).
+  const [debugOpen, setDebugOpen] = useState(false);
+  // D5: presentational visibility ONLY — the "Análisis" pill button toggles
+  // the Analysis card inside the right contextual dock. No behavior change
+  // to runWorkspace/sample counts/etc.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   // ─── Calibration state ──────────────────────────────────────────────────
   const [calibrationMode, setCalibrationMode] = useState(false);
@@ -322,6 +329,13 @@ export default function App() {
       setSerialLost(true);
       setConnected(false);
       setManifestStatus('⚠ dispositivo USB perdido — reintentando reconexión…');
+      // CRITICAL-2 fix: mirror handleDisconnect — abort any in-flight manifest
+      // so the heartbeat/sendQ gates reopen instead of staying closed until
+      // the DONE deadline; an interrupted CIPRA job returns to pending.
+      manifestAbortControllerRef.current?.abort();
+      if (manifestModeRef.current) failActiveCipraDraw(); // VAL-2: skip when DONE already landed
+      manifestModeRef.current = false;
+      manifestAbortRef.current = true;
       void (async () => {
         // El Arduino se resetea y re-enumera: buscar el dispositivo (incluido el
         // MISMO objeto de puerto, que Chrome puede reutilizar tras la re-enumeración)
@@ -384,6 +398,12 @@ export default function App() {
       releaseSerial(portRef.current!);
       await portRef.current?.close();
     } catch {}
+    // Any in-flight manifest flow is over — abort it so no stale reader
+    // keeps consuming the port and the STOP paths below never hit a null port.
+    manifestAbortControllerRef.current?.abort();
+    if (manifestModeRef.current) failActiveCipraDraw(); // VAL-2: skip when DONE already landed
+    manifestModeRef.current = false;
+    manifestAbortRef.current = true;
     servoInterpolatorRef.current?.stop();
     servoInterpolatorRef.current = null;
     portRef.current = null;
@@ -425,16 +445,11 @@ export default function App() {
     }
   }, [ikTarget, ikMode, drawingMode, robotMode]);
 
-  // Scroll wheel → ajustar Z del target IK
-  useEffect(() => {
-    if (!ikMode || !ikTarget) return;
-    const onWheel = (e: WheelEvent) => {
-      const step = e.deltaY > 0 ? -5 : 5;
-      setIkTarget(prev => prev ? [prev[0], prev[1], prev[2] + step] : null);
-    };
-    window.addEventListener('wheel', onWheel, { passive: true });
-    return () => window.removeEventListener('wheel', onWheel);
-  }, [ikMode, ikTarget]);
+  // NOTE: scroll-wheel Z adjustment of the IK target was REMOVED — the global
+  // window wheel listener hijacked OrbitControls zoom: every zoom gesture
+  // changed ikTarget.z by ±5 and, via the IK-solve effect, moved the robot
+  // joints. Zoom must only zoom the camera. (If the Z adjust is wanted again,
+  // it belongs on the IK card as an explicit control, not on the wheel.)
 
   // Deactivate calibration mode when switching to low fidelity
   useEffect(() => {
@@ -572,8 +587,10 @@ export default function App() {
   const exitDrawingMode = useCallback(() => {
     if (manifestModeRef.current) {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+      manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      failActiveCipraDraw();
     }
     if (playerId !== null) {
       try { motionPlayerDrop(playerId); } catch {}
@@ -618,8 +635,10 @@ export default function App() {
         // scene is NOT re-rendered on every frame delta.
         traceProgressRef.current = st === 'completed' ? 1 : motionPlayerProgress(playerId);
         if (st === 'completed' && manifestModeRef.current) {
-          manifestModeRef.current = false;
-          setManifestStatus(`completado — T-lines: ${firmwareTraceRef.current.length}`);
+          // The JS player completing is NOT the end of the manifest phase: the
+          // firmware may still be executing its trajectory. The phase ends on
+          // DONE (continueManifestUpload onDone) or an error/abort path — only
+          // surface the firmware trace collected so far.
           setFirmwareTrace([...firmwareTraceRef.current]);
           // El interpolator quedó frenado al iniciar el manifest: resincronizar
           // con la última pose aplicada por el firmware para el próximo control manual.
@@ -677,7 +696,26 @@ export default function App() {
 
   const finalizeTrace = useCallback(() => {
     const result = traceRecorderRef.current?.stop();
-    if (result) setTraceResult(result);
+    if (!result) return;
+    // Merge with any earlier (pause-finalized) segment; the seam sample is never duplicated.
+    setTraceResult((prev) => {
+      if (prev === null) return result;
+      const shift = result.t0 - prev.t0;
+      const samples = [...prev.samples];
+      let lastTs = samples.length > 0 ? samples[samples.length - 1].ts_ms : -Infinity;
+      for (const s of result.samples) {
+        const ts = s.ts_ms + shift;
+        if (ts <= lastTs) continue;
+        const last = samples[samples.length - 1];
+        if (last !== undefined && last.q_us.every((v, i) => v === s.q_us[i])) {
+          samples[samples.length - 1] = { ...last, count: last.count + s.count };
+        } else {
+          samples.push({ ...s, ts_ms: ts });
+        }
+        lastTs = ts;
+      }
+      return { samples, t0: prev.t0, truncated: prev.truncated || result.truncated, framesWritten: prev.framesWritten + result.framesWritten, dedupe: prev.dedupe + result.dedupe };
+    });
   }, []);
 
   // Starts a drawing trajectory ONLY after a pre-flight reachability check
@@ -798,12 +836,27 @@ export default function App() {
     setPlayerState('running');
     const port = portRef.current;
     if (port && connected) {
+      // R3-1: the firmware may still be executing a previous manifest — a new
+      // flow must STOP it first (otherwise ERR BAD_STATE discards the
+      // executor and the handshake fails into a silent local-only fallback).
+      if (manifestModeRef.current) {
+        sendSerial(port, new TextEncoder().encode('STOP\n'));
+        manifestModeRef.current = false;
+        manifestAbortRef.current = true;
+        setFirmwareTrace([...firmwareTraceRef.current]);
+        failActiveCipraDraw();
+      }
+      manifestAbortControllerRef.current?.abort();
+      const manifestController = new AbortController();
+      manifestAbortControllerRef.current = manifestController;
       manifestAbortRef.current = false;
       const built = manifest instanceof Error ? null : manifest;
       if (built === null) {
         console.warn('[manifest] build fallback legacy:', manifest instanceof Error ? manifest.message : manifest);
       } else {
         try {
+          // F4: gate the legacy output (heartbeat/sendQ) from BEFORE the
+          // handshake until the firmware phase truly ends (DONE/error/abort).
           // Detener heartbeat/sendQ legacy ANTES del handshake: el tráfico legacy
           // contamina el puerto y el handshake v2 falla (residuos OK/ERR).
           manifestModeRef.current = true;
@@ -831,8 +884,8 @@ export default function App() {
             setManifestStatus('handshake v2 OK');
             // Protocolo v2: el firmware exige MANIFEST (count/durationUs) antes del
             // primer SAMPLE (gate manifest_ready). Se envía como línea individual;
-            // el firmware no responde a esta línea. No se envía END_UPLOAD todavía
-            // (su ACK contaminaría el batch de continueManifestUpload → RING_FULL).
+            // el firmware no responde a esta línea. El upload no se cierra con
+            // END_UPLOAD: tras el EXECUTE el resto viaja vía continueManifestUpload.
             await sendManifestHeader(port, built.count, built.durationUs);
             pushDiag(`manifest enviado: ${built.count} samples, ${built.durationUs}us`);
             pushDiag('línea MANIFEST: `MANIFEST ' + built.count + ' ' + built.durationUs + '`');
@@ -861,8 +914,8 @@ export default function App() {
               setPlayerState('idle');
               return false;
             }
+// Defensa en profundidad: NUNCA mandar EXECUTE con el ring incompleto.
             // Defensa en profundidad: NUNCA mandar EXECUTE con el ring incompleto.
-            // El firmware declaró `built.count` en el MANIFEST; si el web solo
             // cargó una fracción sin confirmar, el EXECUTE deja al firmware mudo
             // (sin T-lines) esperando samples que nunca llegan.
             const ringLimit = 2 * chunkMax;
@@ -902,11 +955,20 @@ export default function App() {
                     firmwareTraceRef.current.shift();
                   }
                 },
+                () => {
+                  manifestModeRef.current = false;
+                  setFirmwareTrace([...firmwareTraceRef.current]);
+                },
+                manifestController.signal,
+                built.durationUs,
                 recordManifestSample,
               );
               pushDiag(`continueManifestUpload: ${JSON.stringify(res)} T-lines=${tCount}`);
               setManifestStatus(`T-lines: ${tCount}${res.error ? ' · error: ' + res.error : ''}`);
               if (res.error && !manifestAbortRef.current) {
+                failActiveCipraDraw(); // gate sees manifestModeRef true (Phase A)
+                manifestModeRef.current = false;
+                setFirmwareTrace([...firmwareTraceRef.current]);
                 setDrawingBlock({
                   reason: 'El firmware abortó el manifest: ' + res.error,
                   points: [],
@@ -919,6 +981,8 @@ export default function App() {
             })();
           }
         } catch (e) {
+          failActiveCipraDraw(); // gate sees manifestModeRef true (Phase A)
+          manifestModeRef.current = false;
           const msg = e instanceof Error ? e.message : String(e);
           pushDiag('error: ' + msg);
           if (/lost|disconnect/i.test(msg)) {
@@ -1061,6 +1125,27 @@ export default function App() {
     cipraJobsRef.current = cipraJobs;
   }, [cipraJobs]);
 
+  // CRITICAL-1 fix: an interrupted manifest must not strand the active CIPRA
+  // job in `drawing` — FAIL returns it to pending (reappears in the decision
+  // panel, single-active guard freed). The gate covers the whole manifest
+  // lifetime: the playback binding (post-validation), the in-flight manifest
+  // (Phase A upload/execute) and the abort flag (interruption paths clear
+  // manifestModeRef before calling). Reducer FAIL is a no-op when the job is
+  // not `drawing`, so calling this from every manifest-interruption path is
+  // idempotent and safe.
+  const failActiveCipraDraw = useCallback(() => {
+    const id = cipraJobsRef.current.drawingId;
+    if (
+      id !== null &&
+      (cipraDrawPlayerIdRef.current !== null ||
+        manifestModeRef.current === true ||
+        manifestAbortRef.current === true)
+    ) {
+      cipraDispatch({ type: 'FAIL', id });
+      cipraDrawPlayerIdRef.current = null;
+    }
+  }, [cipraDispatch]);
+
   useEffect(() => {
     const client = new GcodeClient(
       buildGcodeWsUrl(
@@ -1107,9 +1192,11 @@ export default function App() {
   const handleClearDrawingBlock = useCallback(() => {
     if (manifestModeRef.current) {
       sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+      manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
       setFirmwareTrace([...firmwareTraceRef.current]);
+      failActiveCipraDraw();
     }
     setDrawingBlock(null);
     setTracePath([]);
@@ -1122,7 +1209,7 @@ export default function App() {
     }
     setPlayerState('idle');
     setIkTarget(null);
-  }, [playerId]);
+  }, [playerId, failActiveCipraDraw]);
 
   const failCipraDraw = useCallback(
     (jobId: string, reason: LoadGcodeTextResult['reason'] | 'exception') => {
@@ -1188,7 +1275,10 @@ export default function App() {
   );
 
   const cipraPanelJobs = useMemo(
-    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded'),
+    // 'drawing' excluded: once the user presses Dibujar the job leaves the
+    // decision panel (same as Descartar) so the card stays uncluttered. A
+    // failed draw (FAIL) moves it back to pending, so it reappears here.
+    () => cipraJobs.jobs.filter((j) => j.status !== 'completed' && j.status !== 'discarded' && j.status !== 'drawing'),
     [cipraJobs.jobs],
   );
 
@@ -1202,8 +1292,10 @@ export default function App() {
     try {
       if (manifestModeRef.current) {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+        manifestAbortControllerRef.current?.abort();
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
+        failActiveCipraDraw();
       }
       if (playerState === 'running') {
         motionPlayerPause(playerId);
@@ -1212,6 +1304,14 @@ export default function App() {
       } else if (playerState === 'paused') {
         motionPlayerResume(playerId);
         setPlayerState('running');
+        // R3-2: pause finalized the recorder (stop()); resume must restart
+        // it or post-pause samples are lost from the exported CSV.
+        let rec = traceRecorderRef.current;
+        if (rec === null || !rec.isRecording()) {
+          rec = new TraceRecorder();
+          traceRecorderRef.current = rec;
+        }
+        rec.start();
       } else {
         motionPlayerPlay(playerId);
         traceRecorderRef.current?.start();
@@ -1221,16 +1321,18 @@ export default function App() {
     } catch (e) {
       console.error('[motion]', e);
     }
-  }, [playerId, playerState, finalizeTrace]);
+  }, [playerId, playerState, finalizeTrace, failActiveCipraDraw]);
 
   const handleStopDemo = useCallback(() => {
     if (playerId === null) return;
     try {
       if (manifestModeRef.current) {
         sendSerial(portRef.current!, new TextEncoder().encode('STOP\n'));
+        manifestAbortControllerRef.current?.abort();
         manifestModeRef.current = false;
         manifestAbortRef.current = true;
         setFirmwareTrace([...firmwareTraceRef.current]);
+        failActiveCipraDraw();
       }
       motionPlayerStop(playerId);
       setPlayerState('stopped');
@@ -1238,7 +1340,7 @@ export default function App() {
     } catch (e) {
       console.error('[motion]', e);
     }
-  }, [playerId, finalizeTrace]);
+  }, [playerId, finalizeTrace, failActiveCipraDraw]);
 
   // Exportar = mostrar el CSV en pantalla (modal): funciona en CUALQUIER navegador,
   // sin depender del sistema de descargas (que algunos entornos bloquean en silencio).
@@ -1326,10 +1428,10 @@ export default function App() {
   const SERVO_NAMES = ['J1 yaw', 'J2 shoulder', 'J3 elbow', 'J4 roll', 'J5 pitch', 'Gripper'];
   const stepBtn: React.CSSProperties = {
     padding: '6px 10px',
-    background: '#3a3a3a',
-    border: 'none',
-    borderRadius: 4,
-    color: '#ccc',
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid var(--border)',
+    borderRadius: 6,
+    color: 'var(--c-gray)',
     fontSize: 12,
     cursor: 'pointer',
   };
@@ -1339,8 +1441,10 @@ export default function App() {
     if (!port || calibRunning) return;
     if (manifestModeRef.current) {
       sendSerial(port, new TextEncoder().encode('STOP\n'));
+      manifestAbortControllerRef.current?.abort();
       manifestModeRef.current = false;
       manifestAbortRef.current = true;
+      failActiveCipraDraw();
     }
     // Stop any running trajectory.
     if (playerId !== null) {
@@ -1365,7 +1469,7 @@ export default function App() {
     setCalibStatus('Modo calibración: elegí joint, pulsá ±1° y marcá si se movió.');
     sendSerial(port, encodeWire(homeServo.map(servoDegToUs)));
     servoInterpolatorRef.current?.sync(homeServo.map(servoDegToUs));
-  }, [calibRunning, playerId]);
+  }, [calibRunning, playerId, failActiveCipraDraw]);
 
   const exitCalibration = useCallback(() => {
     const port = portRef.current;
@@ -1520,6 +1624,20 @@ export default function App() {
     [robot],
   );
 
+// EE-1: base style for the Fidelity segmented options — geometry and
+  // typography only; the look lives in theme.css (`.segmented__opt` base +
+  // `.segmented__opt--active` violet capsule). No background key here so the
+  // active class can own the surface.
+  const segmentOptStyle: React.CSSProperties = {
+    padding: '4px 14px',
+    border: '1px solid transparent',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 600,
+    fontFamily: 'var(--font-sans)',
+    cursor: 'pointer',
+  };
+
   // Gamepad loop gates, mirrored for the panel badge (same gates as the
   // rAF loop above: normal mode + no IK target + no trajectory playback).
   const gamepadActive =
@@ -1528,27 +1646,30 @@ export default function App() {
   if (!ready || !robot) return <LoadingScreen error={loadError ?? undefined} />;
 
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1c1c20', color: '#ccc' }}>
-      {/* Sidebar */}
-      <div style={{
-        width: 280,
-        minWidth: 280,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#24242a',
-        borderRight: '1px solid #333',
-      }}>
-        {/* Header */}
-        <div style={{ padding: '16px', borderBottom: '1px solid #333' }}>
-          <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#eee' }}>
-            Bombolab
-          </h1>
-          <p style={{ fontSize: 12, color: '#666', margin: '4px 0 0' }}>
-            FABRI Creator · 5-DOF
-          </p>
-        </div>
-
+    <div style={{ display: 'flex', width: '100%', height: '100%', background: 'linear-gradient(160deg, var(--bg0), var(--bg1))', color: '#ccc' }}>
+      {/* Sidebar — floating glass column (D9): position clears the floating
+          top bar (top 72 = bar bottom 64 + 8px gap) and the serial-errors
+          card (bottom 16 + height 120 + 8px gap), whose bottom edge aligns
+          with the pill bar's bottom edge. CAD contextual-inspector
+          layout: JointControls, End-Effector (moved from the right column),
+          Fidelity, then the persistent toggles. The whole panel scrolls
+          (overflowY auto) — blocks flow in order, JointControls keeps its
+          own styling. */}
+      <div
+        className="glass-card"
+        style={{
+          position: 'fixed',
+          top: 72,
+          left: 16,
+          bottom: 144,
+          width: 280,
+          minWidth: 280,
+          display: 'flex',
+          flexDirection: 'column',
+          overflowY: 'auto',
+          zIndex: 10,
+        }}
+      >
         {serialLost && (
           <div style={{
             padding: '10px 16px', background: '#4a2222', borderBottom: '1px solid #733',
@@ -1558,71 +1679,7 @@ export default function App() {
             alimentación de los servos o cable USB). Revisá la alimentación y reconectá.
           </div>
         )}
-
-        {/* CIPRA arrival ALERT — top of the sidebar, ANY mode (R13).
-            Informational only: it never decides, it only announces and offers
-            "Ir al modo dibujo". The decision panel lives inside drawing mode. */}
-        {cipraJobs.lastNotice && !cipraNoticeDismissed && (
-          <div
-            role="alert"
-            style={{
-              padding: '8px 16px',
-              borderBottom: '1px solid #554',
-              background: '#2b2b1e',
-            }}
-          >
-            <div style={{ fontSize: 12, color: '#dc8', fontWeight: 600 }}>
-               Trabajo nuevo desde CIPRA
-            </div>
-            <div style={{ fontSize: 11, color: '#aa8', margin: '4px 0' }}>
-              {cipraJobs.lastNotice.whileDrawing
-                ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
-                : 'Se recibió un trabajo nuevo de CIPRA.'}
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              {robotMode !== 'drawing' && (
-                <button
-                  onClick={() => {
-                    void enterDrawingMode();
-                    setCipraNoticeDismissed(true);
-                  }}
-                  disabled={transitioning}
-                  style={{
-                    flex: 1,
-                    padding: '4px 6px',
-                    fontSize: 11,
-                    background: '#464',
-                    border: 'none',
-                    borderRadius: 3,
-                    color: '#ccc',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Ir al modo dibujo
-                </button>
-              )}
-              <button
-                onClick={() => setCipraNoticeDismissed(true)}
-                style={{
-                  flex: 1,
-                  padding: '4px 6px',
-                  fontSize: 11,
-                  background: '#333',
-                  border: '1px solid #444',
-                  borderRadius: 3,
-                  color: '#aaa',
-                  cursor: 'pointer',
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Contenido del sidebar en UN scroll container (joints, info, modo dibujo, exports).
-            minHeight:0 es obligatorio: sin él un flex item no encoge y overflow:auto no scrollea. */}
-        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+        {/* Joint sliders */}
           <JointControls
             segments={robot.segments}
             gripper={gripper}
@@ -1640,42 +1697,28 @@ export default function App() {
             active={gamepadActive}
           />
 
-        {/* Info panel */}
-        <InfoPanel robot={robot} rawFrames={rawFrames} />
+        {/* End-Effector (EE-1) — moved from the right column into the left
+            panel (CAD inspector layout). Component and wiring byte-identical. */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+          <InfoPanel robot={robot} rawFrames={rawFrames} />
+        </div>
 
-        {/* Fidelity toggle */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: '#888' }}>Fidelidad:</span>
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
+        {/* Fidelity segmented control — moved from the right column. Wiring
+            byte-identical (same state setter). */}
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 11, color: 'var(--c-gray)' }}>Fidelidad:</span>
+          <div className="segmented">
             <button
               onClick={() => setFidelityMode('low')}
-              style={{
-                flex: 1,
-                padding: '6px 0',
-                fontSize: 12,
-                background: fidelityMode === 'low' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (fidelityMode === 'low' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: fidelityMode === 'low' ? '#ddc' : '#888',
-                cursor: 'pointer',
-              }}
+              className={'segmented__opt' + (fidelityMode === 'low' ? ' segmented__opt--active' : '')}
+              style={segmentOptStyle}
             >
               Low
             </button>
             <button
               onClick={() => setFidelityMode('high')}
-              style={{
-                flex: 1,
-                padding: '6px 0',
-                fontSize: 12,
-                background: fidelityMode === 'high' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (fidelityMode === 'high' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: fidelityMode === 'high' ? '#ddc' : '#888',
-                cursor: 'pointer',
-              }}
+              className={'segmented__opt' + (fidelityMode === 'high' ? ' segmented__opt--active' : '')}
+              style={segmentOptStyle}
             >
               High
             </button>
@@ -1684,13 +1727,14 @@ export default function App() {
 
         {/* Calibration mode — visible only in high fidelity */}
         {fidelityMode === 'high' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer' }}>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+            <label className="toggle">
               <input
                 type="checkbox"
                 checked={calibrationMode}
                 onChange={(e) => setCalibrationMode(e.target.checked)}
               />
+              <span className="toggle__track"><span className="toggle__knob" /></span>
               Calibration Mode
             </label>
           </div>
@@ -1698,185 +1742,192 @@ export default function App() {
 
         {/* Debug visualization toggles — visible only in high fidelity */}
         {fidelityMode === 'high' && (
-          <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Debug:</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showJointFrames}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showJointFrames: e.target.checked }))}
-              />
-              Show Joint Frames
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showStlOrigins}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showStlOrigins: e.target.checked }))}
-              />
-              Show STL Origins
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showCalibrationAxes}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
-              />
-              Show Calibration Axes
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#aaa', cursor: 'pointer', marginBottom: 4 }}>
-              <input
-                type="checkbox"
-                checked={debugToggles.showCandidates ?? false}
-                onChange={(e) => setDebugToggles(prev => ({ ...prev, showCandidates: e.target.checked }))}
-              />
-              Show Calibrator Candidates
-            </label>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
+            <div
+              className="debug-acc"
+              onClick={() => setDebugOpen(!debugOpen)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                color: 'var(--c-gray)',
+                marginBottom: debugOpen ? 6 : 0,
+              }}
+            >
+              <span style={{
+                display: 'inline-block',
+                transform: debugOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.15s ease',
+              }}>&gt;</span>
+              DEBUG
+            </div>
+            {debugOpen && (
+              <>
+                <label className="toggle" style={{ marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showJointFrames}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showJointFrames: e.target.checked }))}
+                  />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
+                  Show Joint Frames
+                </label>
+                <label className="toggle" style={{ marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showStlOrigins}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showStlOrigins: e.target.checked }))}
+                  />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
+                  Show STL Origins
+                </label>
+                <label className="toggle" style={{ marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showCalibrationAxes}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showCalibrationAxes: e.target.checked }))}
+                  />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
+                  Show Calibration Axes
+                </label>
+                <label className="toggle" style={{ marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={debugToggles.showCandidates ?? false}
+                    onChange={(e) => setDebugToggles(prev => ({ ...prev, showCandidates: e.target.checked }))}
+                  />
+                  <span className="toggle__track"><span className="toggle__knob" /></span>
+                  Show Calibrator Candidates
+                </label>
+              </>
+            )}
           </div>
         )}
 
-        {/* Conexión robot físico (WebSerial) */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: connected ? '#4cd964' : '#666',
-            }} />
-            <span style={{ fontSize: 12, color: '#888' }}>
-              {connected ? 'Conectado' : 'Desconectado'}
-            </span>
-          </div>
-          {serialError && (
-            <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>{serialError}</div>
-          )}
-          {connected ? (
-            <button onClick={handleDisconnect} style={{
-              width: '100%', padding: 8, background: '#633',
-              border: 'none', borderRadius: 4, color: '#ccc', fontSize: 13, cursor: 'pointer',
-            }}>
-              Desconectar
-            </button>
-          ) : (
-            <button onClick={handleConnect} style={{
-              width: '100%', padding: 8, background: '#364',
-              border: 'none', borderRadius: 4, color: '#ccc', fontSize: 13, cursor: 'pointer',
-            }}>
-              Conectar robot físico
-            </button>
-          )}
+        {/* Test temporal: plano cartesiano de la traza enviada (local) */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+          <button
+            onClick={() => setTestPanelOpen((v) => !v)}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: testPanelOpen ? 'rgba(140, 130, 80, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid ' + (testPanelOpen ? '#885' : 'var(--border)'),
+              borderRadius: 6,
+              color: testPanelOpen ? '#ddc' : 'var(--c-gray)',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {testPanelOpen ? '▼ Test de dibujo (temporal)' : '▶ Test de dibujo (temporal)'}
+          </button>
+          {testPanelOpen && <DrawTestPanel />}
         </div>
 
-        {/* Conexión CIPRA (subscriber) — status indicator, never a modal (R15) */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: cipraConn === 'connected' ? '#4cd964' : cipraConn === 'connecting' ? '#c8a84' : '#666',
-            }} />
-            <span role="status" style={{ fontSize: 12, color: '#888' }}>
-              {getConnectionStatusLabel(cipraConn)}
-            </span>
-          </div>
+        {/* Reset — también en el bottom pill bar; el botón del sidebar se conserva */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+          <button
+            onClick={handleReset}
+            style={{
+              width: '100%',
+              padding: '8px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--c-gray)',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Reset Home
+          </button>
         </div>
 
-        {/* Calibración de servos (deadband/backlash) — manual */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          {!calibRunning ? (
-            <button
-              onClick={() => { void enterCalibration(); }}
-              disabled={!connected}
-              style={{
-                width: '100%',
-                padding: 8,
-                background: '#444',
-                border: 'none',
-                borderRadius: 4,
-                color: '#ccc',
-                fontSize: 12,
-                cursor: 'pointer',
-              }}
+        {/* Reset — moved to the bottom pill bar (handleReset) */}
+      </div>
+
+      {/* Serial errors card — always visible, compact, own glass card below
+          the sidebar (same left column, same width); its bottom edge
+          coincides with the pill bar's bottom edge (bottom 16). Empty
+          state shows a soft muted "Sin errores" placeholder; when an error
+          exists the alert icon lights up (red glow + pulse) and the
+          message scrolls if it grows. */}
+      <div
+        className="glass-card anim-in"
+        style={{
+          position: 'fixed',
+          left: 16,
+          bottom: 16,
+          width: 280,
+          height: 120,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '12px 16px',
+          zIndex: 10,
+        }}
+      >
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg
+            width={16}
+            height={16}
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+            style={{
+              color: serialError ? '#F87171' : 'var(--c-text-faint)',
+              filter: serialError ? 'drop-shadow(0 0 6px rgba(248, 113, 113, 0.55))' : 'none',
+              animation: serialError ? 'badgePulse 2s ease-in-out infinite' : 'none',
+            }}
+          >
+            <path fillRule="evenodd" d="M12 3.4 22.3 20.8H1.7L12 3.4ZM10.9 9.2h2.2v5.2h-2.2v-5.2Zm0 7.2h2.2v2h-2.2v-2Z" />
+          </svg>
+          Errores seriales
+        </div>
+        {serialError ? (
+          <div style={{ overflowY: 'auto', flex: 1, fontSize: 11, color: '#F87171', lineHeight: 1.6 }}>
+            {serialError}
+          </div>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--c-text-faint)', opacity: 0.6 }}>
+            Sin errores
+          </div>
+        )}
+      </div>
+
+        {/* Right contextual dock (D5): fixed container that stacks ONLY the
+            active mode cards (drawing / calibration / IK / analysis /
+            playback). Empty when no mode is active — clean viewport. The
+            dock positions the cards; each card keeps its own glass chrome.
+            Card order below is the fixed stacking order. */}
+        <div style={{
+          position: 'fixed',
+          right: 16,
+          top: 72,
+          width: 320,
+          maxHeight: 'calc(100vh - 160px)',
+          overflowY: 'auto',
+          zIndex: 15,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          {/* Drawing card — relocated from the D2 floating card into the dock
+              (same gate, content byte-identical; its own fixed positioning
+              dropped, the dock positions it) */}
+          {robotMode === 'drawing' && ikMode && (
+            <div
+              className="glass-card anim-in"
+              style={{ padding: '12px 16px' }}
             >
-              Calibrar servos (manual)
-            </button>
-          ) : (
-            <>
-              <div style={{ fontSize: 11, color: '#aa8', marginBottom: 6 }}>{calibStatus}</div>
-              <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
-                {SERVO_NAMES.map((n, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCalibJoint(i)}
-                    style={{
-                      flex: 1,
-                      minWidth: 60,
-                      padding: '4px 2px',
-                      fontSize: 10,
-                      background: calibJoint === i ? '#553' : '#3a3a3a',
-                      border: '1px solid ' + (calibJoint === i ? '#885' : '#444'),
-                      borderRadius: 3,
-                      color: calibJoint === i ? '#ddc' : '#888',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M17 3.4a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3.4Z" />
+                </svg>
+                Drawing Mode
               </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-                <button
-                  onClick={() => calibStep(-5)}
-                  style={stepBtn}
-                >
-                  −5°
-                </button>
-                <button onClick={() => calibStep(-1)} style={stepBtn}>−1°</button>
-                <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#ccc', minWidth: 40, textAlign: 'center' }}>
-                  {calibPose[calibJoint]}°
-                </span>
-                <button onClick={() => calibStep(1)} style={stepBtn}>+1°</button>
-                <button onClick={() => calibStep(5)} style={stepBtn}>+5°</button>
-              </div>
-              {calibLastMove && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                  <button
-                    onClick={() => calibRecord(true)}
-                    style={{ ...stepBtn, background: '#464', flex: 1, padding: 8 }}
-                  >
-                     Se movió
-                  </button>
-                  <button
-                    onClick={() => calibRecord(false)}
-                    style={{ ...stepBtn, background: '#633', flex: 1, padding: 8 }}
-                  >
-                     No se movió
-                  </button>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  onClick={downloadCalibLog}
-                  disabled={calibLog.length === 0}
-                  style={{ ...stepBtn, flex: 1 }}
-                >
-                  Descargar CSV ({calibLog.length})
-                </button>
-                <button
-                  onClick={() => setCalibAnalyzerOpen(!calibAnalyzerOpen)}
-                  style={{ ...stepBtn, flex: 1, background: calibAnalyzerOpen ? '#553' : '#3a3a3a' }}
-                >
-                  {calibAnalyzerOpen ? 'Ocultar análisis' : 'Analizar'}
-                </button>
-                <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
-                <button onClick={exitCalibration} style={{ ...stepBtn, background: '#633' }}>Salir</button>
-              </div>
-            </>
-          )}
-          {calibAnalyzerOpen && <ServoCalibAnalyzer log={calibLog} />}
-        </div>
-        {ikMode && (
-          <>
-            <div style={{ padding: '4px 16px', borderTop: '1px solid #333', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 11, color: '#888', marginRight: 4 }}>Dibujo:</span>
+            <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
               {[0, 1, 2].map(mode => (
                 <button
                   key={mode}
@@ -1885,10 +1936,10 @@ export default function App() {
                     flex: 1,
                     padding: '3px 0',
                     fontSize: 11,
-                    background: drawingMode === mode ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (drawingMode === mode ? '#885' : '#444'),
-                    borderRadius: 3,
-                    color: drawingMode === mode ? '#ddc' : '#888',
+                    background: drawingMode === mode ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (drawingMode === mode ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: drawingMode === mode ? 'var(--c-cyan)' : 'var(--c-gray)',
                     cursor: 'pointer',
                   }}
                 >
@@ -1897,8 +1948,8 @@ export default function App() {
               ))}
 
             </div>
-            <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <label style={{ fontSize: 11, color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 11, color: 'var(--c-gray)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input
                   type="checkbox"
                   checked={smoothTrajectory}
@@ -1907,205 +1958,33 @@ export default function App() {
                 />
                 Suavizar trayectoria
               </label>
-              <span style={{ fontSize: 9, color: '#555' }}>
+              <span style={{ fontSize: 9, color: 'var(--c-text-faint)' }}>
                 {smoothTrajectory ? '(IK filtrada)' : '(IK cruda)'}
               </span>
               {ikTracePath && (
-                <span style={{ fontSize: 9, color: '#588' }}>
+                <span style={{ fontSize: 9, color: 'var(--c-cobalt)' }}>
                   {ikTracePath.drawing.length} dib + {ikTracePath.travel.length} viaje
                 </span>
               )}
               {ikDeviation !== null && (
-                <span style={{ fontSize: 10, color: '#4cf', marginLeft: 'auto' }}>
+                <span style={{ fontSize: 10, color: 'var(--c-cyan)', marginLeft: 'auto' }}>
                   Desvío máx: {ikDeviation.toFixed(2)} mm
                 </span>
               )}
             </div>
-            <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
+            <div style={{ padding: '0 16px 4px', fontSize: 10, color: 'var(--c-text-faint)' }}>
               Rueda mouse: sube/baja Z
             </div>
-          </>
-        )}
-
-        {/* IK mode */}
-        <div style={{ padding: '8px 16px', borderTop: ikMode ? 'none' : '1px solid #333' }}>
-          <button
-            onClick={() => {
-              if (!ikMode) {
-                const fk = forwardKinematics(robot.segments, robot.baseTransform);
-                const toolM = robot.toolTransform;
-                const ee = fk.frames[fk.frames.length - 1];
-                const toolPose = (() => {
-                  const m = (r: number, c: number) =>
-                    ee[r*4+0]*toolM[0*4+c] + ee[r*4+1]*toolM[1*4+c] +
-                    ee[r*4+2]*toolM[2*4+c] + ee[r*4+3]*toolM[3*4+c];
-                  return [m(0,3), m(1,3), m(2,3)] as [number, number, number];
-                })();
-                setIkTarget(toolPose);
-                setIkMode(true);
-              } else {
-                setIkMode(false);
-                setIkTarget(null);
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: ikMode ? '#553' : '#444',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            {ikMode ? 'Desactivar IK' : 'IK Mode'}
-          </button>
-          {ikMode && ikTarget && (
-            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
-              {ikError !== null && (
-                <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
-                  err: {ikError.toFixed(1)}mm
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Run Analysis */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: '#888' }}>Análisis de workspace</span>
-            {workspaceRunning && (
-              <button
-                onClick={cancelWorkspace}
-                style={{
-                  padding: '2px 8px',
-                  fontSize: 11,
-                  background: '#553',
-                  border: 'none',
-                  borderRadius: 3,
-                  color: '#dc8',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>N muestras</div>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            {[1000, 5000, 10000, 50000].map((n) => (
-              <button
-                key={n}
-                onClick={() => setWorkspaceCount(n)}
-                style={{
-                  flex: 1,
-                  padding: '3px 0',
-                  fontSize: 11,
-                  background: workspaceCount === n ? '#553' : '#3a3a3a',
-                  border: '1px solid ' + (workspaceCount === n ? '#885' : '#444'),
-                  borderRadius: 3,
-                  color: '#ccc',
-                  cursor: 'pointer',
-                }}
-              >
-                {n / 1000}k
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>Modo</div>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-            <button
-              onClick={() => setWorkspaceMode('drawing-plane')}
-              style={{
-                flex: 1,
-                padding: '3px 0',
-                fontSize: 11,
-                background: workspaceMode === 'drawing-plane' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (workspaceMode === 'drawing-plane' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: '#ccc',
-                cursor: 'pointer',
-              }}
-            >
-              Plano de dibujo
-            </button>
-            <button
-              onClick={() => setWorkspaceMode('full-5dof')}
-              style={{
-                flex: 1,
-                padding: '3px 0',
-                fontSize: 11,
-                background: workspaceMode === 'full-5dof' ? '#553' : '#3a3a3a',
-                border: '1px solid ' + (workspaceMode === 'full-5dof' ? '#885' : '#444'),
-                borderRadius: 3,
-                color: '#ccc',
-                cursor: 'pointer',
-              }}
-            >
-              5 DOF
-            </button>
-          </div>
-          <button
-            onClick={() => { void runWorkspace(); }}
-            disabled={workspaceRunning}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: workspaceRunning ? '#3a3a3a' : '#464',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: workspaceRunning ? 'default' : 'pointer',
-            }}
-          >
-            {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
-          </button>
-          {workspaceError && (
-            <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
-              {workspaceError}
-            </div>
-          )}
-          {workspaceStats && (
-            <div style={{ fontSize: 10, color: '#888', marginTop: 6, fontFamily: 'monospace' }}>
-              válidos {workspaceStats.n_valid} · rechazados {workspaceStats.n_rejected} · reach{' '}
-              {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
-            </div>
-          )}
-        </div>
-
-        {/* Modo dibujo */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          {robotMode === 'normal' ? (
-            <button
-              onClick={() => { void enterDrawingMode(); }}
-              disabled={transitioning}
-              style={{
-                width: '100%',
-                padding: 8,
-                background: '#464',
-                border: 'none',
-                borderRadius: 4,
-                color: '#ccc',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
-            </button>
-          ) : (
-            <>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#aa8', marginBottom: 6, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={backlashEnabled}
-                  onChange={(e) => handleBacklashToggle(e.target.checked)}
-                />
-                Compensación de backlash (experimental, 2°/1°)
-              </label>
+            <div style={{ padding: '8px 16px' }}>
+            <label className="toggle" style={{ marginBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={backlashEnabled}
+                onChange={(e) => handleBacklashToggle(e.target.checked)}
+              />
+              <span className="toggle__track"><span className="toggle__knob" /></span>
+              Compensación de backlash (experimental, 2°/1°)
+            </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, color: '#777' }}>Tamaño:</span>
                 {[5, 7, 8].map((cm) => (
@@ -2115,10 +1994,10 @@ export default function App() {
                     style={{
                       padding: '2px 8px',
                       fontSize: 11,
-                      background: demoSizeCm === cm ? '#553' : '#3a3a3a',
-                      border: '1px solid ' + (demoSizeCm === cm ? '#885' : '#444'),
-                      borderRadius: 3,
-                      color: demoSizeCm === cm ? '#ddc' : '#888',
+                      background: demoSizeCm === cm ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (demoSizeCm === cm ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: demoSizeCm === cm ? 'var(--c-cyan)' : 'var(--c-gray)',
                       cursor: 'pointer',
                     }}
                   >
@@ -2133,10 +2012,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'square' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'square' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'square' ? '#ddc' : '#888',
+                    background: activeDemo === 'square' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'square' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'square' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -2149,10 +2028,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'lines' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'lines' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'lines' ? '#ddc' : '#888',
+                    background: activeDemo === 'lines' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'lines' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'lines' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 12,
                     cursor: 'pointer',
                   }}
@@ -2165,10 +2044,10 @@ export default function App() {
                   style={{
                     flex: 1,
                     padding: 8,
-                    background: activeDemo === 'arc' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'arc' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'arc' ? '#ddc' : '#888',
+                    background: activeDemo === 'arc' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (activeDemo === 'arc' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: activeDemo === 'arc' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 12,
                     cursor: 'pointer',
                   }}
@@ -2180,16 +2059,8 @@ export default function App() {
                 <button
                   onClick={() => gcodeInputRef.current?.click()}
                   disabled={transitioning}
-                  style={{
-                    flex: 1,
-                    padding: 8,
-                    background: activeDemo === 'gcode' ? '#553' : '#3a3a3a',
-                    border: '1px solid ' + (activeDemo === 'gcode' ? '#885' : '#444'),
-                    borderRadius: 4,
-                    color: activeDemo === 'gcode' ? '#ddc' : '#888',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
+                  className={activeDemo === 'gcode' ? 'ctl-btn ctl-btn--active' : 'ctl-btn'}
+                  style={{ flex: 1 }}
                 >
                   {gcodeName ? `G-code: ${gcodeName}` : 'Cargar .gcode'}
                 </button>
@@ -2267,10 +2138,11 @@ export default function App() {
               )}
               {drawingBlock && (
                 <div
+                  className="anim-pop"
                   style={{
-                    padding: 8,
+                    padding: 12,
                     marginBottom: 6,
-                    borderRadius: 4,
+                    borderRadius: 'var(--radius-ctl)',
                     background: '#300',
                     border: '1px solid #833',
                     color: '#f88',
@@ -2301,10 +2173,10 @@ export default function App() {
                         flex: 1,
                         padding: '2px 6px',
                         fontSize: 11,
-                        background: '#333',
+                        background: 'rgba(255, 255, 255, 0.04)',
                         border: '1px solid #444',
-                        borderRadius: 3,
-                        color: '#aaa',
+                        borderRadius: 6,
+                        color: 'var(--c-text-dim)',
                         cursor: 'pointer',
                       }}
                     >
@@ -2317,10 +2189,10 @@ export default function App() {
                           flex: 1,
                           padding: '2px 6px',
                           fontSize: 11,
-                          background: '#533',
-                          border: '1px solid #885',
-                          borderRadius: 3,
-                          color: '#ddc',
+                          background: 'transparent',
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          color: 'var(--c-cyan)',
                           cursor: 'pointer',
                         }}
                       >
@@ -2332,12 +2204,13 @@ export default function App() {
               )}
               {cipraPanelJobs.length > 0 && (
                 <div
+                  className="anim-pop"
                   style={{
-                    padding: 8,
+                    padding: 12,
                     marginBottom: 6,
-                    borderRadius: 4,
+                    borderRadius: 'var(--radius-ctl)',
                     background: '#232',
-                    border: '1px solid #364',
+                    border: '1px solid rgba(0, 242, 254, 0.45)',
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 11, color: '#9d9' }}>
@@ -2349,45 +2222,34 @@ export default function App() {
                       style={{
                         padding: 6,
                         marginBottom: 4,
-                        borderRadius: 4,
+                        borderRadius: 'var(--radius-ctl)',
                         background: '#1d1d20',
-                        border: '1px solid #333',
+                        border: '1px solid var(--border)',
                       }}
                     >
-                      <div style={{ fontSize: 11, color: '#ccc', fontWeight: 600 }}>{job.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--c-text)', fontWeight: 600 }}>{job.name}</div>
                       <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>
                         id {job.id.slice(0, 8)} · {job.status}
                       </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          onClick={() => { void handleDrawCipraJob(job); }}
-                          disabled={cipraJobs.drawingId !== null || transitioning}
-                          style={{
-                            flex: 1,
-                            padding: '4px 6px',
-                            fontSize: 11,
-                            background: '#364',
-                            border: '1px solid #487',
-                            borderRadius: 3,
-                            color: '#cfc',
-                            cursor: cipraJobs.drawingId !== null || transitioning ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          Dibujar
-                        </button>
-                        <button
-                          onClick={() => handleDiscardCipraJob(job.id)}
-                          style={{
-                            flex: 1,
-                            padding: '4px 6px',
-                            fontSize: 11,
-                            background: '#533',
-                            border: '1px solid #833',
-                            borderRadius: 3,
-                            color: '#fcc',
-                            cursor: 'pointer',
-                          }}
-                        >
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={() => { void handleDrawCipraJob(job); }}
+                      disabled={cipraJobs.drawingId !== null || transitioning}
+                      className="ctl-btn ctl-btn--active"
+                      style={{ flex: 1 }}
+                    >
+                      Dibujar
+                    </button>
+                    <button
+                      onClick={() => handleDiscardCipraJob(job.id)}
+                      className="ctl-btn"
+                      style={{
+                        flex: 1,
+                        background: 'rgba(190, 60, 60, 0.18)',
+                        border: '1px solid rgba(210, 80, 80, 0.45)',
+                        color: '#e88',
+                      }}
+                    >
                           Descartar
                         </button>
                       </div>
@@ -2397,14 +2259,330 @@ export default function App() {
               )}
               <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                 <button
+                  onClick={handleExportTrace}
+                  disabled={traceResult === null || traceResult.samples.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--c-gray)',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Exportar traza CSV
+                </button>
+                {traceResult !== null && traceResult.samples.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--c-gray)', alignSelf: 'center' }}>
+                    {traceResult.samples.length} muestras
+                    {traceResult.truncated ? ' · traza truncada' : ''}
+                  </div>
+                )}
+                <button
+                  onClick={handleExportFirmwareTrace}
+                  disabled={firmwareTrace.length === 0}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--c-gray)',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Exportar traza firmware CSV
+                </button>
+                {firmwareTrace.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--c-gray)', alignSelf: 'center' }}>
+                    firmware: {firmwareTraceStats(firmwareTrace).count} muestras ·{' '}
+                    {(firmwareTraceStats(firmwareTrace).durationUs / 1e6).toFixed(2)} s
+                  </div>
+                )}
+              </div>
+              <PlanExecPanel trace={traceResult} plan={tracePlan} />
+            </div>
+          </div>
+          )}
+
+          {/* Calibration card — servo calibration UI moved from the sidebar
+              into the dock (same gate calibRunning; content byte-identical) */}
+          {calibRunning && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+                  <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+                  <path d="m12 12 3.4-5" />
+                </svg>
+                Calibración
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--c-cyan)', marginBottom: 6 }}>{calibStatus}</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+                {SERVO_NAMES.map((n, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCalibJoint(i)}
+                    style={{
+                      flex: 1,
+                      minWidth: 60,
+                      padding: '4px 2px',
+                      fontSize: 10,
+                      background: calibJoint === i ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (calibJoint === i ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: calibJoint === i ? 'var(--c-cyan)' : 'var(--c-gray)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                <button
+                  onClick={() => calibStep(-5)}
+                  style={stepBtn}
+                >
+                  −5°
+                </button>
+                <button onClick={() => calibStep(-1)} style={stepBtn}>−1°</button>
+                <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--c-text)', minWidth: 40, textAlign: 'center' }}>
+                  {calibPose[calibJoint]}°
+                </span>
+                <button onClick={() => calibStep(1)} style={stepBtn}>+1°</button>
+                <button onClick={() => calibStep(5)} style={stepBtn}>+5°</button>
+              </div>
+              {calibLastMove && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <button
+                    onClick={() => calibRecord(true)}
+                    style={{ ...stepBtn, background: '#464', flex: 1, padding: 8 }}
+                  >
+                     Se movió
+                  </button>
+                  <button
+                    onClick={() => calibRecord(false)}
+                    style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88', flex: 1, padding: 8 }}
+                  >
+                     No se movió
+                  </button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={downloadCalibLog}
+                  disabled={calibLog.length === 0}
+                  style={{ ...stepBtn, flex: 1 }}
+                >
+                  Descargar CSV ({calibLog.length})
+                </button>
+                <button
+                  onClick={() => setCalibAnalyzerOpen(!calibAnalyzerOpen)}
+                  style={{
+                    ...stepBtn,
+                    flex: 1,
+                    background: calibAnalyzerOpen ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: calibAnalyzerOpen ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
+                    color: calibAnalyzerOpen ? 'var(--c-cyan)' : 'var(--c-gray)',
+                  }}
+                >
+                  {calibAnalyzerOpen ? 'Ocultar análisis' : 'Analizar'}
+                </button>
+                <button onClick={() => setCalibLog([])} style={stepBtn}>Limpiar</button>
+                <button onClick={exitCalibration} style={{ ...stepBtn, background: 'rgba(190, 60, 60, 0.18)', border: '1px solid rgba(210, 80, 80, 0.45)', color: '#e88' }}>Salir</button>
+              </div>
+              {calibAnalyzerOpen && <div className="anim-in"><ServoCalibAnalyzer log={calibLog} /></div>}
+            </div>
+          )}
+
+          {/* IK card — standalone IK mode (never while the drawing card is
+              up, so it never duplicates the drawing card's selector): Dibujo
+              selector + hint + IK target readout moved from the sidebar */}
+          {ikMode && robotMode !== 'drawing' && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M12 6.8a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4ZM12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z" />
+                  <rect x="11.15" y="1.8" width="1.7" height="4" rx="0.85" />
+                  <rect x="11.15" y="18.2" width="1.7" height="4" rx="0.85" />
+                  <rect x="1.8" y="11.15" width="4" height="1.7" rx="0.85" />
+                  <rect x="18.2" y="11.15" width="4" height="1.7" rx="0.85" />
+                </svg>
+                IK Mode
+              </div>
+              <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="section-label" style={{ marginRight: 4 }}>Dibujo:</span>
+                {[0, 1, 2].map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setDrawingMode(mode)}
+                    style={{
+                      flex: 1,
+                      padding: '3px 0',
+                      fontSize: 11,
+                      background: drawingMode === mode ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (drawingMode === mode ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: drawingMode === mode ? 'var(--c-cyan)' : 'var(--c-gray)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {mode === 0 ? 'Off' : `Modo ${mode}`}
+                  </button>
+                ))}
+              </div>
+              <div style={{ padding: '0 16px 4px', fontSize: 10, color: 'var(--c-text-faint)' }}>
+                Rueda mouse: sube/baja Z
+              </div>
+              {ikTarget && (
+                <div style={{ fontSize: 11, color: 'var(--c-gray)', marginTop: 4 }}>
+                  Target: ({ikTarget[0].toFixed(0)}, {ikTarget[1].toFixed(0)}, {ikTarget[2].toFixed(0)})
+                  {ikError !== null && (
+                    <span style={{ color: ikError < 10 ? '#4c4' : '#e84', marginLeft: 8 }}>
+                      err: {ikError.toFixed(1)}mm
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Analysis card — the whole "Análisis de workspace" block moved
+              from the sidebar into the dock, gated by the "Análisis" pill
+              button (analysisOpen). Owns the run flow: the primary "Run
+              Analysis" pill (with progress) + "Cancelar" while running. */}
+          {analysisOpen && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span className="section-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="4.5" y="13.5" width="3.6" height="8" rx="1.2" />
+                    <rect x="10.2" y="9.5" width="3.6" height="12" rx="1.2" />
+                    <rect x="15.9" y="5" width="3.6" height="16.5" rx="1.2" />
+                  </svg>
+                  Análisis de workspace
+                </span>
+                {workspaceRunning && (
+                  <button
+                    onClick={cancelWorkspace}
+                    style={{
+                      padding: '2px 10px',
+                      fontSize: 11,
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 999,
+                      color: 'var(--c-cyan)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>N muestras</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                {[1000, 5000, 10000, 50000].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setWorkspaceCount(n)}
+                    style={{
+                      flex: 1,
+                      padding: '3px 0',
+                      fontSize: 11,
+                      background: workspaceCount === n ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid ' + (workspaceCount === n ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                      borderRadius: 6,
+                      color: workspaceCount === n ? 'var(--c-cyan)' : 'var(--c-gray)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {n / 1000}k
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: '#777', marginBottom: 4 }}>Modo</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                <button
+                  onClick={() => setWorkspaceMode('drawing-plane')}
+                  style={{
+                    flex: 1,
+                    padding: '3px 0',
+                    fontSize: 11,
+                    background: workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (workspaceMode === 'drawing-plane' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: workspaceMode === 'drawing-plane' ? 'var(--c-cyan)' : 'var(--c-gray)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Plano de dibujo
+                </button>
+                <button
+                  onClick={() => setWorkspaceMode('full-5dof')}
+                  style={{
+                    flex: 1,
+                    padding: '3px 0',
+                    fontSize: 11,
+                    background: workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid ' + (workspaceMode === 'full-5dof' ? 'rgba(0, 242, 254, 0.45)' : 'var(--border)'),
+                    borderRadius: 6,
+                    color: workspaceMode === 'full-5dof' ? 'var(--c-cyan)' : 'var(--c-gray)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  5 DOF
+                </button>
+              </div>
+              <button
+                className="pill-btn"
+                onClick={() => { void runWorkspace(); }}
+                disabled={workspaceRunning}
+                style={{
+                  width: '100%',
+                  marginTop: 4,
+                  background: 'rgba(0, 242, 254, 0.16)',
+                  border: '1px solid rgba(0, 242, 254, 0.45)',
+                  color: 'var(--c-cyan)',
+                }}
+              >
+                {workspaceRunning ? `Muestreando… ${workspaceProgress}%` : 'Run Analysis'}
+              </button>
+              {workspaceError && (
+                <div role="alert" style={{ fontSize: 11, color: '#e55', marginTop: 4 }}>
+                  {workspaceError}
+                </div>
+              )}
+              {workspaceStats && (
+                <div style={{ fontSize: 10, color: 'var(--c-gray)', marginTop: 6, fontFamily: 'monospace' }}>
+                  válidos {workspaceStats.n_valid} · rechazados {workspaceStats.n_rejected} · reach{' '}
+                  {workspaceStats.reach !== null ? `${workspaceStats.reach.toFixed(0)} mm` : '—'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Playback card — play/pause/stop + trajectory status moved from
+              the drawing card into the dock; only rendered while a player
+              exists (playerId !== null) */}
+          {playerId !== null && (
+            <div className="glass-card anim-in" style={{ padding: '12px 16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinejoin="round" aria-hidden="true">
+                  <path d="M7.5 4.8 19 12 7.5 19.2Z" />
+                </svg>
+                Playback
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <button
                   onClick={handlePlaybackControl}
                   disabled={playerId === null}
                   style={{
                     padding: '8px 12px',
-                    background: '#3a3a3a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: playerState === 'running' ? 'rgba(0, 242, 254, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                    border: playerState === 'running' ? '1px solid rgba(0, 242, 254, 0.45)' : '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: playerState === 'running' ? 'var(--c-cyan)' : 'var(--c-gray)',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -2416,10 +2594,10 @@ export default function App() {
                   disabled={playerId === null}
                   style={{
                     padding: '8px 12px',
-                    background: '#633',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: 'rgba(190, 60, 60, 0.18)',
+                    border: '1px solid rgba(210, 80, 80, 0.45)',
+                    borderRadius: 6,
+                    color: '#e88',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -2427,7 +2605,7 @@ export default function App() {
                   Stop
                 </button>
               </div>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   onClick={handleExportTrace}
                   disabled={traceResult === null || traceResult.samples.length === 0}
@@ -2438,10 +2616,10 @@ export default function App() {
                   }
                   style={{
                     padding: '8px 12px',
-                    background: '#3a3a3a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--c-gray)',
                     fontSize: 13,
                     cursor: traceResult === null || traceResult.samples.length === 0 ? 'not-allowed' : 'pointer',
                     opacity: traceResult === null || traceResult.samples.length === 0 ? 0.45 : 1,
@@ -2459,10 +2637,10 @@ export default function App() {
                   }
                   style={{
                     padding: '8px 12px',
-                    background: '#2c3a4a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#9cc',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--c-cobalt)',
                     fontSize: 13,
                     cursor: lastManifestRef.current === null ? 'not-allowed' : 'pointer',
                     opacity: lastManifestRef.current === null ? 0.45 : 1,
@@ -2471,192 +2649,61 @@ export default function App() {
                   Exportar comandos (SAMPLE)
                 </button>
                 {traceResult !== null && traceResult.samples.length > 0 ? (
-                  <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--c-gray)', alignSelf: 'center' }}>
                     {traceResult.samples.length} muestras
                     {traceResult.truncated ? ' · traza truncada' : ''}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 11, color: '#665', alignSelf: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--c-text-faint)', alignSelf: 'center' }}>
                     sin datos (ejecutá un dibujo)
                   </div>
                 )}
-                <button
-                  onClick={handleExportFirmwareTrace}
-                  disabled={firmwareTrace.length === 0}
-                  title={
-                    firmwareTrace.length === 0
-                      ? 'Sin datos: el manifest debe ejecutarse en el robot (T-lines)'
-                      : `Exportar ${firmwareTrace.length} muestras`
-                  }
-                  style={{
-                    padding: '8px 12px',
-                    background: '#3a3a3a',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#ccc',
-                    fontSize: 13,
-                    cursor: firmwareTrace.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: firmwareTrace.length === 0 ? 0.45 : 1,
-                  }}
-                >
-                  Exportar traza firmware CSV
-                </button>
-                {firmwareTrace.length > 0 ? (
-                  <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
-                    firmware: {firmwareTraceStats(firmwareTrace).count} muestras ·{' '}
-                    {(firmwareTraceStats(firmwareTrace).durationUs / 1e6).toFixed(2)} s
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#665', alignSelf: 'center' }}>
-                    sin T-lines (¿robot conectado y dibujo ejecutado?)
-                  </div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--c-gray)', marginBottom: 6 }}>
+                Trayectoria: <b style={{ color: 'var(--c-text)' }}>{playerState}</b>
+                {manifestStatus && (
+                  <div style={{ fontSize: 11, color: '#8a8', marginBottom: 4 }}>manifest: {manifestStatus}</div>
                 )}
                 <button
-                  onClick={handleViewTrace}
-                  disabled={traceResult === null || traceResult.samples.length === 0}
+                  onClick={handleViewDiag}
                   style={{
-                    padding: '8px 12px',
-                    background: '#2c4a33',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#9d9',
-                    fontSize: 13,
-                    cursor: traceResult === null || traceResult.samples.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: traceResult === null || traceResult.samples.length === 0 ? 0.45 : 1,
+                    padding: '6px 10px', background: '#333', border: 'none', borderRadius: 4,
+                    color: '#aac', fontSize: 12, cursor: 'pointer', width: '100%', marginBottom: 4,
                   }}
                 >
-                  Ver CSV
+                  📋 Diagnóstico del último intento
                 </button>
-                <button
-                  onClick={handleCopyTrace}
-                  disabled={traceResult === null || traceResult.samples.length === 0}
-                  style={{
-                    padding: '8px 12px',
-                    background: '#333',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#aaa',
-                    fontSize: 13,
-                    cursor: traceResult === null || traceResult.samples.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: traceResult === null || traceResult.samples.length === 0 ? 0.45 : 1,
-                  }}
-                >
-                  Copiar traza
-                </button>
-                <button
-                  onClick={handleViewFirmwareTrace}
-                  disabled={firmwareTrace.length === 0}
-                  style={{
-                    padding: '8px 12px',
-                    background: '#2c4a33',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#9d9',
-                    fontSize: 13,
-                    cursor: firmwareTrace.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: firmwareTrace.length === 0 ? 0.45 : 1,
-                  }}
-                >
-                  Ver CSV
-                </button>
-                <button
-                  onClick={handleCopyFirmwareTrace}
-                  disabled={firmwareTrace.length === 0}
-                  style={{
-                    padding: '8px 12px',
-                    background: '#333',
-                    border: 'none',
-                    borderRadius: 4,
-                    color: '#aaa',
-                    fontSize: 13,
-                    cursor: firmwareTrace.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: firmwareTrace.length === 0 ? 0.45 : 1,
-                  }}
-                >
-                  Copiar firmware
-                </button>
-              </div>
-              {manifestStatus && (
-                <div style={{ fontSize: 11, color: '#8a8', marginBottom: 4 }}>manifest: {manifestStatus}</div>
-              )}
-              <button
-                onClick={handleViewDiag}
-                style={{
-                  padding: '6px 10px', background: '#333', border: 'none', borderRadius: 4,
-                  color: '#aac', fontSize: 12, cursor: 'pointer', width: '100%', marginBottom: 4,
-                }}
-              >
-                📋 Diagnóstico del último intento
-              </button>
-              {exportMsg && (
-                <div style={{ fontSize: 11, color: '#aa8', marginBottom: 4 }}>{exportMsg}</div>
-              )}
-              <PlanExecPanel trace={traceResult} plan={tracePlan} />
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
-                Trayectoria: <b style={{ color: '#ccc' }}>{playerState}</b>
+                {exportMsg && (
+                  <div style={{ fontSize: 11, color: '#aa8', marginBottom: 4 }}>{exportMsg}</div>
+                )}
                 {playerId !== null && playerState !== 'idle' && (
                   <> · {Math.round(motionPlayerProgress(playerId) * 100)}%</>
                 )}
               </div>
-              <button
-                onClick={exitDrawingMode}
-                style={{
-                  width: '100%',
-                  padding: 6,
-                  background: '#333',
-                  border: 'none',
-                  borderRadius: 4,
-                  color: '#a99',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                Salir de modo dibujo (restaura pinza)
-              </button>
-            </>
+              {playerId !== null && playerState !== 'idle' && (
+                <div
+                  style={{
+                    height: 6,
+                    borderRadius: 999,
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid var(--border)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${motionPlayerProgress(playerId) * 100}%`,
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg, var(--c-cyan), var(--c-cobalt))',
+                      transition: 'width 0.15s linear',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
-
-        {/* Test temporal: plano cartesiano de la traza enviada */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <button
-            onClick={() => setTestPanelOpen((v) => !v)}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: testPanelOpen ? '#553' : '#3a3a3a',
-              border: '1px solid ' + (testPanelOpen ? '#885' : '#444'),
-              borderRadius: 4,
-              color: testPanelOpen ? '#ddc' : '#999',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            {testPanelOpen ? '▼ Test de dibujo (temporal)' : '▶ Test de dibujo (temporal)'}
-          </button>
-          {testPanelOpen && <DrawTestPanel />}
-        </div>
-
-        {/* Reset */}
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
-          <button
-            onClick={handleReset}
-            style={{
-              width: '100%',
-              padding: '8px',
-              background: '#444',
-              border: 'none',
-              borderRadius: 4,
-              color: '#ccc',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Reset Home
-          </button>
-        </div>
-        </div>
-      </div>
 
       {/* Modal CSV — acceso garantizado al dato, sin depender del sistema de descargas */}
       {csvModal !== null && (
@@ -2711,12 +2758,12 @@ export default function App() {
       )}
 
       {/* 3D Viewport */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div className="app-viewport" style={{ flex: 1, position: 'relative' }}>
         <RobotViewer
           robot={robot}
           rawFrames={rawFrames}
           gripper={gripper}
-          workspacePoints={workspacePoints ?? undefined}
+          workspacePoints={analysisOpen ? (workspacePoints ?? undefined) : undefined}
           tracePath={tracePath}
           traceProgressRef={traceProgressRef}
           ikTracePath={ikTracePath ?? undefined}
@@ -2748,6 +2795,255 @@ export default function App() {
             version={calibrationVersion}
           />
         )}
+
+        {/* CIPRA arrival ALERT — floating top-right overlay of the viewport,
+            ANY mode (R13). Informational only: it never decides, it only
+            announces and offers "Ir al modo dibujo". The decision panel lives
+            inside drawing mode. Container restyled as a glass card (CA-1);
+            role, wiring and strings byte-identical. */}
+        {cipraJobs.lastNotice && !cipraNoticeDismissed && (
+          <div
+            role="alert"
+            className="glass-card anim-in"
+            style={{
+              position: 'absolute',
+              top: 72,
+              right: 16,
+              zIndex: 20,
+              width: 280,
+              padding: 12,
+            }}
+          >
+            <div style={{ fontSize: 12, color: 'var(--c-cyan)', fontWeight: 600 }}>
+               Trabajo nuevo desde CIPRA
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--c-text-dim)', margin: '4px 0' }}>
+              {cipraJobs.lastNotice.whileDrawing
+                ? 'Llegó un trabajo mientras se dibuja — quedó en cola para decidir.'
+                : 'Se recibió un trabajo nuevo de CIPRA.'}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              {robotMode !== 'drawing' && (
+                <button
+                  onClick={() => {
+                    void enterDrawingMode();
+                    setCipraNoticeDismissed(true);
+                  }}
+                  disabled={transitioning}
+                  className="ctl-btn"
+                  style={{
+                    flex: 1,
+                    background: '#464',
+                    border: 'none',
+                    color: 'var(--c-text)',
+                  }}
+                >
+                  Ir al modo dibujo
+                </button>
+              )}
+              <button
+                onClick={() => setCipraNoticeDismissed(true)}
+                className="ctl-btn"
+                style={{ flex: 1 }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom pill bar (PB-1): dark pills hosting the pre-existing action
+            handlers, moved from the sidebar buttons — wiring unchanged.
+            Config UIs (Run Analysis selectors, servo calib, demo/gcode
+            blocks) stay in the left column. Surface = `.pill-bar` liquid
+            glass capsule (theme.css); positioning stays inline. */}
+        <div
+          className="pill-bar"
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 15,
+            display: 'flex',
+            gap: 8,
+            padding: '8px 10px',
+          }}
+        >
+          {connected ? (
+            <button className="pill-btn" onClick={handleDisconnect}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M12 2.6a9.4 9.4 0 1 1 0 18.8 9.4 9.4 0 0 1 0-18.8ZM12 4.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4Z" />
+                <rect x="11.15" y="1.8" width="1.7" height="6.6" rx="0.85" />
+              </svg>
+              Desconectar
+            </button>
+          ) : (
+            <button className="pill-btn" onClick={handleConnect}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M12 2.6a9.4 9.4 0 1 1 0 18.8 9.4 9.4 0 0 1 0-18.8ZM12 4.8a7.2 7.2 0 1 0 0 14.4 7.2 7.2 0 0 0 0-14.4Z" />
+                <rect x="11.15" y="1.8" width="1.7" height="6.6" rx="0.85" />
+              </svg>
+              Conectar
+            </button>
+          )}
+          <button
+            className="pill-btn"
+            onClick={() => {
+              if (!ikMode) {
+                const fk = forwardKinematics(robot.segments, robot.baseTransform);
+                const toolM = robot.toolTransform;
+                const ee = fk.frames[fk.frames.length - 1];
+                const toolPose = (() => {
+                  const m = (r: number, c: number) =>
+                    ee[r*4+0]*toolM[0*4+c] + ee[r*4+1]*toolM[1*4+c] +
+                    ee[r*4+2]*toolM[2*4+c] + ee[r*4+3]*toolM[3*4+c];
+                  return [m(0,3), m(1,3), m(2,3)] as [number, number, number];
+                })();
+                setIkTarget(toolPose);
+                setIkMode(true);
+              } else {
+                setIkMode(false);
+                setIkTarget(null);
+              }
+            }}
+          >
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M12 6.8a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4ZM12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z" />
+              <rect x="11.15" y="1.8" width="1.7" height="4" rx="0.85" />
+              <rect x="11.15" y="18.2" width="1.7" height="4" rx="0.85" />
+              <rect x="1.8" y="11.15" width="4" height="1.7" rx="0.85" />
+              <rect x="18.2" y="11.15" width="4" height="1.7" rx="0.85" />
+            </svg>
+            {ikMode ? 'Desactivar IK' : 'IK Mode'}
+          </button>
+          <button
+            className="pill-btn"
+            onClick={() => { void enterCalibration(); }}
+            disabled={!connected}
+          >
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+              <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+              <path d="m12 12 3.4-5" />
+            </svg>
+            Calibrar Servos
+          </button>
+          <button className="pill-btn" onClick={handleReset}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M12 3.4 2.9 10.6h2.1v8.6c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-8.6h2.1L12 3.4ZM10 14.6h4v6.6h-4v-6.6Z" />
+            </svg>
+            Reset Home
+          </button>
+          <button
+            className={'pill-btn' + (analysisOpen ? ' pill-btn--active' : '')}
+            onClick={() => setAnalysisOpen(v => !v)}
+          >
+            {/* Toggle label: "Análisis" → "Salir de Análisis" while the card
+                is open; the workspace points render only while analysisOpen */}
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="4.5" y="13.5" width="3.6" height="8" rx="1.2" />
+              <rect x="10.2" y="9.5" width="3.6" height="12" rx="1.2" />
+              <rect x="15.9" y="5" width="3.6" height="16.5" rx="1.2" />
+            </svg>
+            {analysisOpen ? 'Salir de Análisis' : 'Análisis'}
+          </button>
+          {robotMode === 'normal' ? (
+            <button
+              className="pill-btn"
+              onClick={() => { void enterDrawingMode(); }}
+              disabled={transitioning}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17 3.4a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3.4Z" />
+              </svg>
+              {transitioning ? 'Cerrando pinza…' : 'Modo dibujo'}
+            </button>
+          ) : (
+            <button
+              className="pill-btn pill-btn--active"
+              onClick={exitDrawingMode}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17 3.4a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3.4Z" />
+              </svg>
+              Salir de modo dibujo
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Top bar chrome (TB-1): floating glass capsule overlaying the
+          viewport. zIndex 5 stays above the canvas (z-auto) and vignette
+          (z1), below CalibrationPanel (z10) and the CIPRA alert (z20).
+          Inset 12px with a 10px top gap reads as a floating bar. */}
+      <div
+        className="top-bar"
+        style={{ position: 'fixed', top: 10, left: 12, right: 12, zIndex: 5 }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 700, letterSpacing: 1.5, color: '#E2E8F0' }}>
+          <img
+            src="/logo.png"
+            alt="Bombolab"
+            width={32}
+            height={32}
+            style={{ borderRadius: 8, objectFit: 'contain' }}
+          />
+          BOMBOLAB — FABRI Creator · 5-DOF
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={'badge ' + (connected ? 'badge--online' : 'badge--offline')}>
+            {connected ? 'Conectado' : 'Desconectado'}
+          </span>
+          <span role="status" className={'badge ' + (cipraConn === 'connected' ? 'badge--online' : 'badge--offline')}>
+            {getConnectionStatusLabel(cipraConn)}
+          </span>
+          <button
+            onClick={() => setCipraNoticeDismissed(v => !v)}
+            aria-label="Notificaciones CIPRA"
+            title="Notificaciones CIPRA"
+            style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              padding: 0,
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02))',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              borderTopColor: 'rgba(255, 255, 255, 0.22)',
+              borderRadius: '50%',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+              cursor: 'pointer',
+              transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+              color: cipraJobs.lastNotice && !cipraNoticeDismissed
+                ? 'var(--c-cyan)'
+                : 'var(--c-gray)',
+            }}
+          >
+            <svg width={22} height={22} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2.6a3.4 3.4 0 0 0-3.4 3.4v.8c-2.7 1.6-4.4 4.4-4.4 7.4 0 3.5-1.6 5.6-1.6 5.6h18.8s-1.6-2.1-1.6-5.6c0-3-1.7-5.8-4.4-7.4V6a3.4 3.4 0 0 0-3.4-3.4Z" />
+              <rect x="10.9" y="20.2" width="2.2" height="2.4" rx="1.1" />
+            </svg>
+            {cipraJobs.lastNotice && !cipraNoticeDismissed && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: 5,
+                  right: 5,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#F87171',
+                  boxShadow: '0 0 6px rgba(248, 113, 113, 0.8)',
+                  animation: 'badgePulse 2s ease-in-out infinite',
+                }}
+              />
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

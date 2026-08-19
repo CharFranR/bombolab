@@ -103,7 +103,9 @@ function ensureReadLoop(port: SerialPort): void {
   serialReadLoops.set(port, loop);
 }
 
-export function sendSerial(port: SerialPort, data: Uint8Array): void {
+/** Null-safe: sin puerto no hay nada que enviar (review fix). */
+export function sendSerial(port: SerialPort | null, data: Uint8Array): void {
+  if (!port) return;
   let writer = serialWriters.get(port);
   if (!writer) {
     const w = port.writable?.getWriter();
@@ -209,7 +211,7 @@ export async function readSerialLines(
   ensureReadLoop(port);
   const lines: string[] = [];
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && lines.length < 8) {
+while (Date.now() < deadline && lines.length < 8) {
     const buf = serialBuffers.get(port) ?? '';
     const idx = buf.indexOf('\n');
     if (idx < 0) {
@@ -302,6 +304,9 @@ export async function continueManifestUpload(
   remainingLines: string[],
   onProgress?: (sent: number, total: number) => void,
   onTelemetry?: (tUs: number, joints: number[]) => void,
+  onDone?: () => void,
+  signal?: AbortSignal,
+  durationUs = 0,
   onSample?: (q: number[]) => void,
 ): Promise<UploadResult> {
   const enc = new TextEncoder();
@@ -309,7 +314,11 @@ export async function continueManifestUpload(
   let sent = 0;
   let done = false;
   let consumed = 0; // T-lines vistas: cada una = un slot del ring liberado
-  while (sent < total && !done) {
+  // DONE is emitted only when the firmware consumes the final sample (v2_tick),
+  // i.e. up to the full trajectory time after EXECUTE — keep reading until
+  // DONE, bounded by the declared duration so a dead firmware gives up.
+  const deadline = Date.now() + durationUs / 1000 + 5000;
+  while (!done && !signal?.aborted && Date.now() < deadline) {
     const lines = await readSerialLines(port, 3000);
     let free = 0;
     for (const line of lines) {
@@ -330,6 +339,7 @@ export async function continueManifestUpload(
       }
       if (line === 'DONE') {
         done = true;
+        onDone?.();
       }
     }
     // Tope de vuelo exacto (bug 2026-08-12 → ERR BAD_STATE por ring lleno en
@@ -352,6 +362,7 @@ export async function continueManifestUpload(
     sent += toSend;
     onProgress?.(sent, total);
   }
+  if (!done && !signal?.aborted) return { sent, total, error: 'sin DONE del firmware' };
   return { sent, total };
 }
 
@@ -364,6 +375,9 @@ export async function uploadManifest(
 ): Promise<UploadResult> {
   const enc = new TextEncoder();
   let sent = 0;
+  // Ring capacity (executor.h: V2_RING_SIZE = 2×V2_CHUNK_MAX): the firmware
+  // only ACKs a window while the ring has free slots, so once the ring is
+  // full the remaining samples stream after EXECUTE (continueManifestUpload).
   const total = chunks.reduce((acc, c) => acc + c.length, 0);
   // El ring del firmware tiene 2×chunkMax (48) slots: subir más antes del EXECUTE
   // desborda el store (V2_ERR_BAD_STATE). El web sube hasta el ring y el resto

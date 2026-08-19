@@ -144,20 +144,76 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
   stlScaleRef?: React.MutableRefObject<number>;
 }) {
   const [ikDragging, setIkDragging] = useState(false);
+
+  // Character-spotlight floor pool: an unlit radial-gradient decal so the lit
+  // floor under the robot reads clearly from ANY camera angle (not only
+  // top-down). Scene units are millimeters; radius ~300mm matches the robot's
+  // footprint while staying inside the grid's 450mm fade. MeshBasicMaterial
+  // (unlit) + depthWrite:false → it never occludes the robot or receives
+  // shadows; renderOrder -1 keeps grid lines/trace crisp on top.
+  const poolTexture = useMemo(() => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0.0, 'rgba(240, 252, 255, 0.92)'); // bright white-cyan core
+    grad.addColorStop(0.35, 'rgba(0, 242, 254, 0.55)'); // design cyan #00F2FE
+    grad.addColorStop(0.7, 'rgba(0, 242, 254, 0.20)');
+    grad.addColorStop(1.0, 'rgba(0, 242, 254, 0.0)'); // soft transparent edge
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, []);
+
   return (
     <div style={{ flex: 1, height: '100%' }}>
       <Canvas
         shadows
         camera={{ position: [500, 400, 500], fov: 35, near: 1, far: 2000 }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
-          gl.setClearColor(new THREE.Color('#1c1c20'));
+          // Alpha 0: CSS gradient + vignette (slice 1) show through the canvas
+          gl.setClearColor(0x000000, 0);
         }}
       >
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[200, 400, 300]} intensity={1.2} castShadow />
-        <directionalLight position={[-200, 100, -200]} intensity={0.3} />
-        <hemisphereLight args={['#8888ff', '#444422', 0.3]} />
+        {/* Studio lighting, HOMOGENEOUS by design (user feedback: one robot face
+            always read dark). The original asymmetric key (1.5 + castShadow) cast a
+            body shadow that blacked one face — ambient can't fix a blocked face.
+            Now: the CHARACTER SPOTLIGHT is the main light, an OVERHEAD symmetric
+            cone ([0,900,0], angle 0.85, penumbra 1.0, decay 0) that lights every
+            side face equally; the three directionals are balanced to the same
+            intensity (0.8, no castShadow) so they only add gentle form without any
+            light/dark axis; ambient 0.55 + hemisphere 0.5 guarantee no face ever
+            drops dark. WARM TONE on the spot + key (#fff1dc/#fff4e6) against the
+            cool cyan/blue fills — a studio warm/cool split that makes the lighting
+            read clearly on the robot. Shared Canvas level → benefits BOTH fidelity
+            views. */}
+        <ambientLight intensity={0.65} />
+        <directionalLight position={[400, 600, 300]} intensity={1.1} color="#fff4e6" />
+        <directionalLight position={[-350, 200, 250]} intensity={1.1} color="#00f2fe" />
+        <directionalLight position={[0, 100, -500]} intensity={1.1} color="#6688ff" />
+        <spotLight
+          position={[0, 900, 0]}
+          angle={0.85}
+          penumbra={1.0}
+          intensity={2.4}
+          decay={0}
+          distance={1100}
+          color="#fff1dc"
+        />
+        <hemisphereLight args={['#8888ff', '#444422', 0.6]} />
+
+        {/* Visible floor light pool under the robot (y just above the grid plane,
+            rotated flat, centered on the robot's origin). Unlit decal → always reads
+            as a lit patch of floor from any angle. */}
+        <mesh position={[0, -0.45, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
+          <circleGeometry args={[300, 64]} />
+          <meshBasicMaterial map={poolTexture} transparent depthWrite={false} />
+        </mesh>
 
         <RobotSceneDispatcher
           robot={robot}
@@ -191,6 +247,13 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           maxDistance={1200}
           target={[0, 200, 0]}
           enabled={!ikDragging}
+          // Navigation across the workspace: pan with right-drag (or two
+          // fingers on touch) along the FLOOR plane, not the screen — the
+          // camera glides over the drawing area. screenSpacePanning=false
+          // keeps the pan on the ground plane so drawings stay in view.
+          enablePan
+          screenSpacePanning={false}
+          panSpeed={1}
         />
       </Canvas>
     </div>

@@ -1,0 +1,754 @@
+/* ============================================================
+   bombolab — Liquid Glass UI theme (Apple-style material)
+   Token CSS: dark palette with vibrant cyan/violet accents,
+   specular glass surfaces, soft gradients, glows + shadows,
+   rounded radii, clean typography. Presentation-only: no logic
+   lives here; every rule maps to the design token contract.
+   ============================================================ */
+
+/* ---- Design tokens ---- */
+:root {
+  /* Palette — deep blue-black base, accents used sparingly */
+  --bg0: #05070B;
+  --bg1: #0A1020;
+  --bg2: #111A30;
+  --c-cyan: #00F2FE;
+  --c-blue: #3B82F6;
+  --c-violet: #A78BFA;
+  --c-cobalt: #0066FF;
+  --c-green: #22C55E;
+  --c-gray: #8CA3BE;
+  --c-text: #E2E8F0;
+  --c-text-dim: #94A3B8;
+  --c-text-faint: #64748B;
+  --border: #FFFFFF18;
+
+  /* Liquid glass surfaces: layered translucency + top-light gradient
+     (the specular rim), saturated backdrop blur, inner highlight with
+     a soft bottom shade and an outer drop for depth. */
+  --glass-bg: rgba(14, 22, 40, 0.55);
+  --glass-blur: 20px;
+  --glass-saturate: 1.6;
+  --glass-border: 1px solid #FFFFFF18;
+  --glass-top-edge: rgba(255, 255, 255, 0.16);
+  --glass-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 42%);
+  --glass-fill: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055),
+    rgba(255, 255, 255, 0.015) 55%,
+    rgba(255, 255, 255, 0.035)
+  );
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 14px 44px rgba(0, 0, 0, 0.5);
+
+  /* Active/emphasis gradient: cyan → electric blue → soft violet,
+     always at low alpha so it reads as light, never neon */
+  --grad-active: linear-gradient(
+    135deg,
+    rgba(0, 242, 254, 0.2),
+    rgba(59, 130, 246, 0.14) 50%,
+    rgba(167, 139, 250, 0.2)
+  );
+  --grad-active-strong: linear-gradient(
+    135deg,
+    rgba(0, 242, 254, 0.26),
+    rgba(59, 130, 246, 0.18) 50%,
+    rgba(167, 139, 250, 0.26)
+  );
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Radii — generous rounded glass */
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-card: 16px;
+  --r-pill: 999px;
+
+  /* Structural radii aliases */
+  --radius-card: 16px;
+  --radius-ctl: 10px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  /* Glow — soft halos, never hard shadows */
+  --glow-cyan: 0 0 10px 2px rgba(0, 242, 254, 0.35);
+  --glow-violet: 0 0 12px 2px rgba(167, 139, 250, 0.4);
+  --glow-cobalt: 0 0 10px 2px rgba(0, 102, 255, 0.35);
+  --glow-blue: 0 0 14px rgba(59, 130, 246, 0.25);
+  --glow-green: 0 0 10px 2px rgba(34, 197, 94, 0.4);
+  --glow-soft: 0 0 14px rgba(0, 242, 254, 0.3);
+}
+
+/* ---- Shared presentation classes ---- */
+
+/* Glass card recipe: liquid glass panel floating over the viewport —
+   specular top rim, diagonal light sheen, saturated blur, inner +
+   outer depth. */
+.glass-card {
+  position: relative;
+  background:
+    var(--glass-sheen),
+    var(--glass-fill),
+    var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: var(--glass-border);
+  border-top-color: var(--glass-top-edge);
+  border-radius: var(--r-card);
+  box-shadow: var(--glass-shadow);
+  color: #e6edf3;
+  font-family: var(--font-sans);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.glass-card:hover {
+  border-color: #FFFFFF24;
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Uppercase panel title inside glass cards — spaced, high contrast */
+.panel-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: #A5B4CB;
+  font-family: var(--font-sans);
+}
+
+/* ---- Structural design system: shared card/section recipes ---- */
+
+/* Card title recipe: uppercase heading inside component cards */
+.card-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #A5B4CB;
+  font-family: var(--font-sans);
+}
+
+/* Section label recipe: small muted label for sidebar/panel sections */
+.section-label {
+  font-size: 11px;
+  color: var(--c-gray);
+  font-family: var(--font-sans);
+}
+
+/* Control button recipe: liquid glass control, cyan hover, violet
+   active tint (active/emphasis accent) */
+.ctl-btn {
+  min-height: 28px;
+  padding: 5px 11px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  color: var(--c-gray);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.2s ease;
+}
+.ctl-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 242, 254, 0.45);
+  color: #cfeef4;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0 10px rgba(0, 242, 254, 0.2);
+}
+.ctl-btn:active {
+  transform: translateY(0);
+}
+.ctl-btn--active {
+  background:
+    var(--grad-active),
+    rgba(18, 24, 33, 0.4);
+  border-color: rgba(96, 165, 250, 0.45);
+  border-top-color: rgba(255, 255, 255, 0.25);
+  color: #E8F1FF;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 14px rgba(96, 165, 250, 0.22);
+}
+.ctl-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Text/number input recipe: glass field with cyan focus outline */
+.ctl-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+  color: var(--c-text);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color-scheme: dark;
+}
+.ctl-input:focus {
+  outline: 1px solid rgba(0, 242, 254, 0.5);
+  border-color: rgba(0, 242, 254, 0.45);
+}
+
+/* Floating top bar — elevated glass capsule with a luminous blue/cyan
+   edge, soft outer shadow and the brand logo mark on the left.
+   Position is set inline in App.tsx (top 10, inset 12). */
+.top-bar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+  padding: 0 var(--space-4);
+  border-radius: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015) 55%, rgba(255, 255, 255, 0.03)),
+    rgba(13, 20, 36, 0.62);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 18px 48px rgba(0, 0, 0, 0.55);
+  font-family: var(--font-sans);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Status badge base: dot + label, liquid pill */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-gray);
+  font-family: var(--font-sans);
+}
+.badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Online state: green luminous indicator + soft pulse (translucent pill) */
+.badge--online {
+  color: var(--c-green);
+  box-shadow:
+    0 0 10px 2px rgba(34, 197, 94, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+.badge--online::before {
+  box-shadow: var(--glow-green);
+}
+
+/* Offline state: dim static indicator */
+.badge--offline {
+  color: var(--c-gray);
+  opacity: 0.65;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Generic glow helper for badge dots / icons */
+.badge-glow {
+  box-shadow: 0 0 8px 2px currentColor;
+}
+
+/* Bottom pill action bar — floating liquid glass capsule, intense blur,
+   luminous edge, clearly separated actions */
+.pill-bar {
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(56, 189, 248, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(8, 12, 22, 0.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.7);
+  backdrop-filter: blur(28px) saturate(1.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 44px rgba(0, 0, 0, 0.6);
+}
+
+/* Bottom pill action button — liquid glass, icon + label, cyan glow on
+   hover, tri-gradient active/emphasis states */
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 20px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03) 55%, rgba(255, 255, 255, 0.05)),
+    rgba(18, 24, 33, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+  color: #e6edf3;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.22s ease;
+}
+.pill-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 242, 254, 0.45);
+  border-top-color: rgba(255, 255, 255, 0.3);
+  color: #f0f6fa;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 16px rgba(0, 242, 254, 0.28),
+    0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.pill-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+.pill-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Active/emphasis pill: soft cyan → blue → violet gradient (approved
+   system: accent gradient owns active/emphasis, cyan owns hovers) */
+.pill-btn--active {
+  background:
+    var(--grad-active),
+    rgba(18, 24, 33, 0.5);
+  border-color: rgba(96, 165, 250, 0.4);
+  border-top-color: rgba(255, 255, 255, 0.3);
+  color: #EAF2FF;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 16px rgba(96, 165, 250, 0.25),
+    0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.pill-btn--active:hover {
+  border-color: rgba(96, 165, 250, 0.65);
+  color: #F5F9FF;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 22px rgba(96, 165, 250, 0.38),
+    0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Segmented control container + options — liquid capsule with a
+   frosted gradient capsule on the active option */
+.segmented {
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+    rgba(10, 14, 20, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 2px 6px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-sans);
+}
+.segmented__opt {
+  padding: 4px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--c-gray);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.2s ease;
+}
+.segmented__opt--active {
+  background:
+    var(--grad-active),
+    rgba(18, 24, 33, 0.3);
+  border-color: rgba(96, 165, 250, 0.5);
+  border-top-color: rgba(255, 255, 255, 0.3);
+  color: #EAF2FF;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 12px rgba(96, 165, 250, 0.28);
+}
+.segmented__opt:hover,
+.segmented__opt--active:hover {
+  transform: translateY(-1px);
+}
+.segmented__opt:active,
+.segmented__opt--active:active {
+  transform: translateY(0);
+}
+
+/* Keyboard focus — cyan ring on interactive glass controls */
+.ctl-btn:focus-visible,
+.pill-btn:focus-visible,
+.segmented__opt:focus-visible,
+.segmented__opt--active:focus-visible {
+  outline: 2px solid rgba(0, 242, 254, 0.55);
+  outline-offset: 2px;
+}
+
+/* Joint slider: 2px rail + bright thumb (webkit + moz). The --fill custom
+   property (set inline per slider) drives the cyan illuminated portion. */
+.jnt-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--c-cyan) var(--fill, 0%),
+    #2a3038 var(--fill, 0%)
+  );
+  outline: none;
+}
+.jnt-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+}
+.jnt-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--c-cyan);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.5);
+  cursor: pointer;
+}
+.jnt-slider::-moz-range-track {
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--c-cyan) var(--fill, 0%),
+    #2a3038 var(--fill, 0%)
+  );
+}
+.jnt-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--c-cyan);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.5);
+  cursor: pointer;
+}
+.jnt-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 3D viewport shell: hosts the transparent canvas; deep blue-black
+   gradient with discreet ambient glows (cyan / electric blue / violet)
+   that read through the frosted glass panels and the 3D scene. */
+.app-viewport {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 700px at 14% -6%, rgba(0, 242, 254, 0.1), transparent 60%),
+    radial-gradient(1000px 800px at 86% 10%, rgba(59, 130, 246, 0.12), transparent 60%),
+    radial-gradient(900px 700px at 72% 108%, rgba(167, 139, 250, 0.09), transparent 60%),
+    linear-gradient(165deg, var(--bg0) 0%, var(--bg1) 55%, var(--bg2) 100%);
+}
+.app-viewport::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 0%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+/* DEBUG accordion header */
+.debug-acc {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Premium toggle switch recipe: replaces the raw checkbox look for
+   calibration + debug options. The input stays focusable (a11y); the
+   track/knob spans reflect :checked / :disabled via sibling selectors. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--c-text-dim);
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+.toggle__track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.toggle__knob {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #9aa4b2;
+  transform: translateY(-50%);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+.toggle:focus-within .toggle__track {
+  outline: 1px solid rgba(0, 242, 254, 0.5);
+}
+.toggle input:checked + .toggle__track {
+  background: rgba(0, 242, 254, 0.22);
+  border-color: rgba(0, 242, 254, 0.5);
+}
+.toggle input:checked + .toggle__track .toggle__knob {
+  transform: translate(16px, -50%);
+  background: var(--c-cyan);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.6);
+}
+.toggle input:disabled + .toggle__track {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Premium custom dropdown (replaces the native <select>: the OS-native popup
+   ignores `color-scheme` on some browsers — white tray on light OS themes —
+   so the menu is hand-rolled dark glass matching the premium theme) */
+.pselect {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+.pselect__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  color: var(--c-text);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.pselect__trigger:hover {
+  border-color: rgba(0, 242, 254, 0.5);
+}
+.pselect__trigger:focus-visible {
+  outline: 1px solid rgba(0, 242, 254, 0.5);
+  border-color: rgba(0, 242, 254, 0.45);
+}
+.pselect__chevron {
+  flex: none;
+  color: var(--c-gray);
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.pselect__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: transparent;
+}
+.pselect__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--border);
+  background: rgba(10, 14, 20, 0.97);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-sans);
+}
+.pselect__opt {
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--c-text-dim);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.pselect__opt:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--c-text);
+}
+.pselect__opt--sel {
+  color: var(--c-cyan);
+}
+.pselect__opt--sel:hover {
+  color: var(--c-cyan);
+}
+
+/* ---- Premium scrollbars (I1) ---- */
+/* Uniform dark glass scrollbars on every scrollable surface (dropdown menu,
+   sidebar, right dock, panels...): transparent track + subtle glass thumb,
+   cyan on hover. Firefox uses scrollbar-color; Chromium/Edge the webkit rules. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 254, 0.45);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---- Keyframes ---- */
+@keyframes badgePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ---- Entrance animations (D4) ---- */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Utility entrance classes — .anim-in for cards/overlays, .anim-pop for
+   small notice boxes. `both` fill mode keeps the first frame hidden. */
+.anim-in {
+  animation: fadeSlideIn 0.3s ease-out both;
+}
+
+.anim-pop {
+  animation: scaleIn 0.25s ease-out both;
+}
+
+/* Accessibility guard: collapse all motion for users who opt out. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -200,18 +200,20 @@ export default function CandidatesOverlay({ frames, gripper, calibrationConfigRe
         <div style={{ position: 'absolute', top: -120, left: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <button
             onClick={() => setPickMode((v) => !v)}
-            style={{ pointerEvents: 'auto', background: pickMode ? '#f0f' : '#333', color: '#fff', border: '1px solid #666', borderRadius: 4, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}
+            className={pickMode ? 'ctl-btn ctl-btn--active' : 'ctl-btn'}
+            style={{ pointerEvents: 'auto' }}
           >
             {pickMode ? '● Click the base hole…' : 'Pick base anchor'}
           </button>
           {anchor && (
             <>
-              <span style={{ background: '#222', padding: '2px 6px', borderRadius: 4, fontSize: 10, color: '#f0f' }}>
+              <span style={{ background: '#222', padding: '2px 6px', borderRadius: 'var(--radius-ctl)', fontSize: 10, color: 'var(--c-cyan)' }}>
                 anchor ({anchor.join(', ')}) mm
               </span>
               <button
                 onClick={downloadAnchor}
-                style={{ pointerEvents: 'auto', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}
+                className="ctl-btn"
+                style={{ pointerEvents: 'auto' }}
               >
                  Download anchor.json
               </button>

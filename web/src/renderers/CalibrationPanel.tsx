@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { ALL_STL_FILES } from './stlMapping';
 
@@ -27,28 +27,124 @@ function getTranslation(m: THREE.Matrix4): [number, number, number] {
 }
 
 const stepBtnStyle: React.CSSProperties = {
-  padding: '1px 3px',
-  fontSize: 9,
-  background: '#2a2a2a',
-  border: '1px solid #444',
-  borderRadius: 3,
-  color: '#aaa',
+  minHeight: 24,
+  padding: '2px 4px',
+  fontSize: 10,
+  background: 'rgba(255, 255, 255, 0.04)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-ctl)',
+  color: 'var(--c-text-dim)',
   cursor: 'pointer',
   fontFamily: 'monospace',
+  transition: 'border-color 0.15s ease, background 0.15s ease',
 };
 
 const STEPS = [-50, -10, -1, 1, 10, 50] as const;
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '4px 6px',
-  fontSize: 12,
-  background: '#3a3a3a',
-  border: '1px solid #555',
-  borderRadius: 4,
-  color: '#ddd',
-  boxSizing: 'border-box',
-};
+// ─── PremiumSelect ───────────────────────────────────────────────────────────
+// Custom dropdown replacing the native <select>. The OS-native popup ignores
+// `color-scheme` on some browsers (white tray on light OS themes), so the menu
+// is hand-rolled dark glass matching the premium theme.
+
+interface PremiumSelectProps {
+  value: string;
+  options: string[];
+  placeholder: string;
+  clearLabel?: string;
+  onChange: (value: string | null) => void;
+}
+
+function PremiumSelect({ value, options, placeholder, onChange, clearLabel }: PremiumSelectProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside + Escape close. Document-level because .glass-card applies
+  // backdrop-filter, which turns the panel into the fixed overlay's containing
+  // block — the overlay alone cannot cover the whole viewport.
+  useEffect(() => {
+    if (!open) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="pselect">
+      <button
+        type="button"
+        className="pselect__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: value ? 'var(--c-text)' : 'var(--c-text-faint)',
+          }}
+        >
+          {value || placeholder}
+        </span>
+        <span className="pselect__chevron" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <>
+          {/* Transparent click-catcher behind the menu; the document mousedown
+              listener above covers clicks outside the panel. */}
+          <div className="pselect__overlay" onClick={() => setOpen(false)} />
+          <div className="pselect__menu" role="listbox">
+            {clearLabel && (
+              <div
+                role="option"
+                aria-selected={!value}
+                className={'pselect__opt' + (!value ? ' pselect__opt--sel' : '')}
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
+              >
+                {clearLabel}
+              </div>
+            )}
+            {options.map((option) => (
+              <div
+                key={option}
+                role="option"
+                aria-selected={value === option}
+                className={'pselect__opt' + (value === option ? ' pselect__opt--sel' : '')}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+              >
+                {value === option && (
+                  <span style={{ color: 'var(--c-cyan)', marginRight: 6 }}>✓</span>
+                )}
+                {option}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -119,101 +215,81 @@ export default function CalibrationPanel({
     updateTranslation(x, y, v);
   }, [x, y, updateTranslation]);
 
-  const handleTargetChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    onTargetChange(val || null);
-  }, [onTargetChange]);
-
   if (!target) return (
-    <div style={{
-      position: 'absolute',
-      top: 16,
-      right: 16,
-      zIndex: 10,
-      background: 'rgba(30, 30, 35, 0.92)',
-      padding: 16,
-      borderRadius: 8,
-      border: '1px solid #444',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-      minWidth: 200,
-    }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
+    <div
+      className="glass-card"
+      style={{
+        position: 'absolute',
+        top: 72,
+        right: 16,
+        zIndex: 16,
+        padding: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        minWidth: 200,
+      }}
+    >
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+          <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+          <path d="m12 12 3.4-5" />
+        </svg>
         Calibration
       </div>
-      <label style={{ fontSize: 11, color: '#888' }}>STL File</label>
-      <select
-        value=""
-        onChange={handleTargetChange}
-        style={{
-          width: '100%',
-          padding: '6px 8px',
-          fontSize: 12,
-          background: '#3a3a3a',
-          border: '1px solid #555',
-          borderRadius: 4,
-          color: '#ddd',
-        }}
-      >
-        <option value="">-- Select a piece --</option>
-        {ALL_STL_FILES.map((file) => (
-          <option key={file} value={file}>{file}</option>
-        ))}
-      </select>
-      <span style={{ fontSize: 10, color: '#666' }}>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
+        <PremiumSelect
+          value=""
+          options={ALL_STL_FILES}
+          placeholder="-- Select a piece --"
+          onChange={(v) => onTargetChange(v)}
+        />
+      <span style={{ fontSize: 10, color: 'var(--c-text-faint)' }}>
         Pick a piece above to start calibrating
       </span>
     </div>
   );
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 16,
-      right: 16,
-      zIndex: 10,
-      background: 'rgba(30, 30, 35, 0.92)',
-      padding: 16,
-      borderRadius: 8,
-      border: '1px solid #444',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-      minWidth: 200,
-    }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#ddd', marginBottom: 4 }}>
+    <div
+      className="glass-card"
+      style={{
+        position: 'absolute',
+        top: 72,
+        right: 16,
+        zIndex: 16,
+        padding: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        minWidth: 200,
+      }}
+    >
+      <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
+          <path d="M7.3 3.9a9.4 9.4 0 1 1 9.4 0" />
+          <path d="m12 12 3.4-5" />
+        </svg>
         Calibration
       </div>
 
       {/* STL file selector */}
-      <label style={{ fontSize: 11, color: '#888' }}>STL File</label>
-      <select
-        value={target}
-        onChange={handleTargetChange}
-        style={{
-          width: '100%',
-          padding: '6px 8px',
-          fontSize: 12,
-          background: '#3a3a3a',
-          border: '1px solid #555',
-          borderRadius: 4,
-          color: '#ddd',
-        }}
-      >
-        <option value="">-- Select --</option>
-        {ALL_STL_FILES.map((file) => (
-          <option key={file} value={file}>{file}</option>
-        ))}
-      </select>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL File</label>
+        <PremiumSelect
+          value={target}
+          options={ALL_STL_FILES}
+          placeholder="-- Select --"
+          clearLabel="-- Select --"
+          onChange={(v) => onTargetChange(v)}
+        />
 
       {/* Translation inputs */}
-      <label style={{ fontSize: 11, color: '#888' }}>Translation (mm) — drag gizmo or type/step</label>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>Translation (mm) — drag gizmo or type/step</label>
       <div style={{ display: 'flex', gap: 4 }}>
         {/* X */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#ff6666', textAlign: 'center' }}>X</span>
-          <input type="number" step={0.1} value={x} onChange={handleXChange} style={inputStyle} />
+          <input type="number" step={0.1} value={x} onChange={handleXChange} className="ctl-input" style={{ width: '100%', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
             {STEPS.map((s) => (
               <button key={s} style={stepBtnStyle}
@@ -227,7 +303,7 @@ export default function CalibrationPanel({
         {/* Y */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#66ff66', textAlign: 'center' }}>Y</span>
-          <input type="number" step={0.1} value={y} onChange={handleYChange} style={inputStyle} />
+          <input type="number" step={0.1} value={y} onChange={handleYChange} className="ctl-input" style={{ width: '100%', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
             {STEPS.map((s) => (
               <button key={s} style={stepBtnStyle}
@@ -241,7 +317,7 @@ export default function CalibrationPanel({
         {/* Z */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: '#4488ff', textAlign: 'center' }}>Z</span>
-          <input type="number" step={0.1} value={z} onChange={handleZChange} style={inputStyle} />
+          <input type="number" step={0.1} value={z} onChange={handleZChange} className="ctl-input" style={{ width: '100%', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
             {STEPS.map((s) => (
               <button key={s} style={stepBtnStyle}
@@ -255,49 +331,64 @@ export default function CalibrationPanel({
       </div>
 
       {/* Global scale */}
-      <label style={{ fontSize: 11, color: '#888' }}>STL Scale (global)</label>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>STL Scale (global)</label>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         <input type="range" min={0.1} max={5} step={0.01} value={globalScale}
           onChange={(e) => { const v = parseFloat(e.target.value); setGlobalScale(v); stlScaleRef.current = v; }}
           style={{ flex: 1 }} />
         <input type="number" step={0.01} value={globalScale}
           onChange={(e) => { const v = parseFloat(e.target.value) || 1; setGlobalScale(v); stlScaleRef.current = v; }}
-          style={{ ...inputStyle, width: 60 }} />
+          className="ctl-input"
+          style={{ width: 60, boxSizing: 'border-box' }} />
       </div>
 
       {/* Gizmo mode toggle */}
-      <label style={{ fontSize: 11, color: '#888' }}>Gizmo</label>
+      <label style={{ fontSize: 11, color: 'var(--c-gray)' }}>Gizmo</label>
       <div style={{ display: 'flex', gap: 4 }}>
-        <button onClick={() => onGizmoModeChange('translate')}
+        <button
+          onClick={() => onGizmoModeChange('translate')}
+          className={gizmoMode === 'translate' ? 'ctl-btn ctl-btn--active' : 'ctl-btn'}
+          style={{ flex: 1 }}
+        >↕ Translate</button>
+        <button
+          onClick={() => onGizmoModeChange('rotate')}
+          className="ctl-btn"
           style={{
-            flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
-            background: gizmoMode === 'translate' ? '#364' : '#3a3a3a',
-            border: `1px solid ${gizmoMode === 'translate' ? '#6a6' : '#555'}`,
-            borderRadius: 4, color: '#ccc',
-          }}>↕ Translate</button>
-        <button onClick={() => onGizmoModeChange('rotate')}
-          style={{
-            flex: 1, padding: '4px 0', fontSize: 11, cursor: 'pointer',
-            background: gizmoMode === 'rotate' ? '#346' : '#3a3a3a',
-            border: `1px solid ${gizmoMode === 'rotate' ? '#66a' : '#555'}`,
-            borderRadius: 4, color: '#ccc',
-          }}>↻ Rotate</button>
+            flex: 1,
+            ...(gizmoMode === 'rotate'
+              ? { background: 'rgba(0, 102, 255, 0.18)', border: '1px solid rgba(0, 102, 255, 0.5)', color: 'var(--c-cobalt)' }
+              : {}),
+          }}
+        >↻ Rotate</button>
       </div>
 
       {/* Buttons */}
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
         <button onClick={onSave}
-          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#364', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          className="ctl-btn ctl-btn--active"
+          style={{ flex: 1 }}>
            Save
         </button>
         <button onClick={onUpload}
-          style={{ flex: 1, padding: '6px 0', fontSize: 11, background: '#346', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          className="ctl-btn"
+          style={{
+            flex: 1,
+            background: 'rgba(0, 102, 255, 0.18)',
+            border: '1px solid rgba(0, 102, 255, 0.5)',
+            color: 'var(--c-cobalt)',
+          }}>
            Upload
         </button>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={onReload}
-          style={{ flex: 1, padding: '4px 0', fontSize: 10, background: '#633', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer' }}>
+          className="ctl-btn"
+          style={{
+            flex: 1,
+            background: 'rgba(190, 60, 60, 0.18)',
+            border: '1px solid rgba(210, 80, 80, 0.45)',
+            color: '#e88',
+          }}>
            Reload defaults
         </button>
       </div>

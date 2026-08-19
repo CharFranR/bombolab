@@ -20,19 +20,42 @@ export default function InfoPanel({ robot, rawFrames }: { robot: RobotDef; rawFr
 
   if (!result.tool) return null;
 
+  // EE-1: floating glass card (theme.css `.glass-card`). Data source is the
+  // same shared rawFrames FK result — presentation-only restyle: values get
+  // the cyan accent, structure/logic unchanged.
   return (
-    <div style={{ padding: '12px 16px', borderTop: '1px solid #333' }}>
-      <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: '#ccc', textTransform: 'uppercase', letterSpacing: 1 }}>
+    <div className="glass-card" style={{ padding: '12px 16px' }}>
+      <h3 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 600, color: 'var(--c-text)', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path fillRule="evenodd" d="M12 6.8a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4ZM12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z" />
+          <rect x="11.15" y="1.8" width="1.7" height="4" rx="0.85" />
+          <rect x="11.15" y="18.2" width="1.7" height="4" rx="0.85" />
+          <rect x="1.8" y="11.15" width="4" height="1.7" rx="0.85" />
+          <rect x="18.2" y="11.15" width="4" height="1.7" rx="0.85" />
+        </svg>
         End-Effector
       </h3>
 
-      <div style={{ fontSize: 13, fontFamily: 'monospace', color: '#aaa', lineHeight: 1.8 }}>
-        <div>Pos: ({result.tool.x.toFixed(1)}, {result.tool.y.toFixed(1)}, {result.tool.z.toFixed(1)})</div>
-        <div style={{ marginTop: 4, fontSize: 11, color: '#666' }}>
+      <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--c-gray)', lineHeight: 1.8 }}>
+        <div>
+          Pos:{' '}
+          <span style={{ color: 'var(--c-cyan)' }}>
+            ({result.tool.x.toFixed(1)}, {result.tool.y.toFixed(1)}, {result.tool.z.toFixed(1)})
+          </span>
+        </div>
+        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--c-gray)' }}>
           Rot:<br />
-          [{result.tool.rot.slice(0, 3).map(v => v.toFixed(3)).join(', ')}]<br />
-          [{result.tool.rot.slice(3, 6).map(v => v.toFixed(3)).join(', ')}]<br />
-          [{result.tool.rot.slice(6, 9).map(v => v.toFixed(3)).join(', ')}]
+          <span style={{ color: 'var(--c-cyan)' }}>
+            [{result.tool.rot.slice(0, 3).map(v => v.toFixed(3)).join(', ')}]
+          </span>
+          <br />
+          <span style={{ color: 'var(--c-cyan)' }}>
+            [{result.tool.rot.slice(3, 6).map(v => v.toFixed(3)).join(', ')}]
+          </span>
+          <br />
+          <span style={{ color: 'var(--c-cyan)' }}>
+            [{result.tool.rot.slice(6, 9).map(v => v.toFixed(3)).join(', ')}]
+          </span>
         </div>
       </div>
     </div>
