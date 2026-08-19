@@ -17,7 +17,7 @@ pub fn fabri_creator() -> Robot {
     let segments = vec![
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_j1_j2, -q_j1_j2),
-            DHParams::new(0.0, 85.0, 15.0, -FRAC_PI_2),
+            DHParams::new(0.0, 65.0, 15.0, -FRAC_PI_2),
         ),
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_j1_j2, -q_j1_j2),
@@ -25,11 +25,11 @@ pub fn fabri_creator() -> Robot {
         ),
         Segment::new(
             Joint::new(JointType::Revolute, 0.0, q_j3_max, q_j3_min),
-            DHParams::new(FRAC_PI_2, 0.0, 90.0, -FRAC_PI_2),
+            DHParams::new(FRAC_PI_2, 0.0, 100.0, -FRAC_PI_2),
         ),
         Segment::new(
             Joint::new(JointType::Twist, 0.0, q_j4_max, q_j4_min),
-            DHParams::new(0.0, 15.0, 35.0, FRAC_PI_2),
+            DHParams::new(0.0, 0.0, 45.0, FRAC_PI_2),
         ),
         Segment::new(
             Joint::new(

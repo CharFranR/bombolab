@@ -81,7 +81,7 @@ describe('fabriCreator — default marker payload', () => {
   });
 
   it('keeps the wire payload identical to the legacy 12-float tool', () => {
-    expect(robotToWasm(fabriCreator()).tool_transform).toEqual([1, 0, 0, 75, 0, 1, 0, 0, 0, 0, 1, 0]);
+    expect(robotToWasm(fabriCreator()).tool_transform).toEqual([1, 0, 0, 117, 0, 1, 0, 0, 0, 0, 1, 0]);
   });
 });
 

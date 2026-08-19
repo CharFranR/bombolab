@@ -402,7 +402,7 @@ fn test_solve_drawing_ik_centered() {
     let pos_solver = IkSolver::new(200, 1.0, 0.05, 0.5);
     let orient_solver = OrientationSolver::new(1e-6);
 
-    let pos = [200.0, 0.0, 80.0];
+    let pos = [280.0, 0.0, 80.0];
     let result = solve_drawing_ik(
         &pos_solver,
         &orient_solver,
@@ -439,12 +439,12 @@ fn test_solve_drawing_ik_lateral() {
     let orient_solver = OrientationSolver::new(1e-6);
 
     let test_positions: [[f64; 3]; 6] = [
-        [200.0, 50.0, 80.0],
-        [200.0, 100.0, 80.0],
-        [200.0, -50.0, 80.0],
-        [200.0, -100.0, 80.0],
-        [250.0, 50.0, 90.0],
-        [150.0, 80.0, 75.0],
+        [250.0, 60.0, 60.0],
+        [280.0, 60.0, 60.0],
+        [310.0, 40.0, 60.0],
+        [310.0, 60.0, 60.0],
+        [220.0, 40.0, 60.0],
+        [250.0, -40.0, 60.0],
     ];
 
     let all_ok: bool = true;
@@ -505,7 +505,7 @@ fn test_solve_drawing_ik_vs_constant() {
     let pos_solver = IkSolver::new(200, 1.0, 0.1, 0.5);
     let orient_solver = OrientationSolver::new(1e-6);
 
-    let pos = [200.0, 80.0, 80.0];
+    let pos = [250.0, 40.0, 60.0];
 
     let const_pose = PoseGenerator::drawing_pose(pos);
     let const_result = solve_full_ik(

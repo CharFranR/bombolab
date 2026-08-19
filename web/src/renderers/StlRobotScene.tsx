@@ -51,6 +51,7 @@ export default function StlRobotScene({
   workspacePoints,
   tracePath,
   traceProgressRef,
+  ikTracePath,
   debugToggles,
   calibrationConfigRef,
   calibrationOverridesRef,
@@ -353,6 +354,35 @@ export default function StlRobotScene({
           </bufferGeometry>
           <lineBasicMaterial color="#ff8866" linewidth={2} />
         </line>
+      )}
+      {/* Diagnostic overlay: actual path the servos will draw (µs → q → FK).
+          Points (one per resolved sample): cyan while drawing, dim gray
+          while traveling — full trajectory shown. */}
+      {ikTracePath && ikTracePath.drawing.length > 1 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={ikTracePath.drawing.length}
+              array={new Float32Array(ikTracePath.drawing.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial color="#44ddff" size={3} sizeAttenuation transparent opacity={0.95} depthWrite={false} />
+        </points>
+      )}
+      {ikTracePath && ikTracePath.travel.length > 1 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={ikTracePath.travel.length}
+              array={new Float32Array(ikTracePath.travel.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial color="#777788" size={2} sizeAttenuation transparent opacity={0.4} depthWrite={false} />
+        </points>
       )}
       {/* IK target */}
       {ikTarget && onIkTargetChange && (

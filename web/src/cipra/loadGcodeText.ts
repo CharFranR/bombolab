@@ -17,6 +17,7 @@
 import type { MotionCommandJS } from '../motion/commands';
 import type { GcodeOptions, GcodeParseResult } from '../motion/gcode';
 import type { ErrorCode } from './protocol';
+import { DRAW_PLANE_Z, TRAVEL_PLANE_Z } from '../motion/planes';
 
 export interface DrawingAreaLike {
   xMin: number;
@@ -42,7 +43,8 @@ export interface LoadGcodeTextDeps {
   setGcodeError: (e: string | null) => void;
   setGcodeWarnings: (w: string[]) => void;
   setGcodeName: (name: string) => void;
-  /** Drawing-plane heights. Defaults to 80/85 (mirror DRAW_PLANE_Z/TRAVEL_PLANE_Z). */
+  /** Drawing-plane heights. Defaults to DRAW_PLANE_Z/TRAVEL_PLANE_Z
+   *  (planes.ts, 80/120). */
   planeZ?: number;
   travelZ?: number;
   /** Real-scale 1:1 mode: parse without autofit (default false → autofit on,
@@ -79,8 +81,8 @@ export async function loadGcodeText(
     setGcodeError,
     setGcodeWarnings,
     setGcodeName,
-    planeZ = 80,
-    travelZ = 85,
+    planeZ = DRAW_PLANE_Z,
+    travelZ = TRAVEL_PLANE_Z,
     autofit = true,
   } = deps;
 

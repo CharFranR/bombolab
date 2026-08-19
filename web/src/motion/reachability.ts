@@ -17,9 +17,9 @@
 import { initWasm, fabriCreator, solveDrawingPlaneIk } from '../wasm';
 import type { RobotDef } from '../kinematics/types';
 import type { MotionCommandJS } from './commands';
+import { DRAW_PLANE_Z, TRAVEL_PLANE_Z } from './planes';
 
-export const DRAW_PLANE_Z = 80;
-export const TRAVEL_PLANE_Z = 85;
+export { DRAW_PLANE_Z, TRAVEL_PLANE_Z, TRAVEL_LIFT_MM } from './planes';
 
 export interface DrawingArea {
   xMin: number;
@@ -252,7 +252,13 @@ function sampleSegment(
 
 /** Largest axis-aligned rectangle inscribed in the reachable drawing band.
  *  Validated to be safe at BOTH the drawing plane (pen down) and the travel
- *  plane (pen up) so travel moves are never flagged either. */
+ *  plane (pen up) so travel moves are never flagged either.
+ *
+ *  Two-phase search: a coarse pass over the full workspace (20mm center
+ *  step, 10mm half-extent step, descending sizes) finds the best candidate
+ *  cheaply, then a fine pass (±15mm around that center, 5mm steps) refines
+ *  it. The `area <= bestArea` prune keeps the cost near the original
+ *  single-pass search even though the workspace range is much wider. */
 export async function safeDrawingArea(
   z: number = DRAW_PLANE_Z,
   travelZ: number = TRAVEL_PLANE_Z,
@@ -263,25 +269,52 @@ export async function safeDrawingArea(
   const b = bandForZ(z)!;
   const bt = bandForZ(travelZ)!;
   let best: DrawingArea | null = null;
-  for (let cx = 170; cx <= 235; cx += 5) {
-    for (let cy = -15; cy <= 15; cy += 5) {
-      for (let hx = 20; hx <= 45; hx += 5) {
-        for (let hy = 15; hy <= 40; hy += 5) {
+  let bestArea = 0;
+
+  /** True when the rectangle is reachable at BOTH plane heights. */
+  const fitsArea = (a: DrawingArea): boolean => rectFits(b, a) && rectFits(bt, a);
+
+  // Phase 1 — coarse sweep over the full workspace (sizes descending so the
+  // prune kicks in early).
+  for (let cx = 120; cx <= 330; cx += 20) {
+    for (let cy = -70; cy <= 70; cy += 20) {
+      for (let hx = 110; hx >= 20; hx -= 10) {
+        for (let hy = 80; hy >= 20; hy -= 10) {
           const a = { xMin: cx - hx, xMax: cx + hx, yMin: cy - hy, yMax: cy + hy };
-          // must fit at pen-down AND pen-up heights
-          if (rectFits(b, a) && rectFits(bt, a)) {
-            if (
-              !best ||
-              (a.xMax - a.xMin) * (a.yMax - a.yMin) >
-                (best.xMax - best.xMin) * (best.yMax - best.yMin)
-            )
-              best = a;
+          if (a.xMin < 0) continue;
+          const area = (a.xMax - a.xMin) * (a.yMax - a.yMin);
+          if (area <= bestArea || !fitsArea(a)) continue;
+          best = a;
+          bestArea = area;
+        }
+      }
+    }
+  }
+
+  // Phase 2 — fine refinement around the phase-1 winner.
+  const phase1 = best;
+  if (phase1) {
+    const bcx = (phase1.xMin + phase1.xMax) / 2;
+    const bcy = (phase1.yMin + phase1.yMax) / 2;
+    const bw = phase1.xMax - phase1.xMin;
+    const bh = phase1.yMax - phase1.yMin;
+    for (let cx = bcx - 15; cx <= bcx + 15; cx += 5) {
+      for (let cy = bcy - 15; cy <= bcy + 15; cy += 5) {
+        for (let hx = Math.max(20, bw - 20); hx <= 110; hx += 5) {
+          for (let hy = Math.max(20, bh - 10); hy <= 80; hy += 5) {
+            const a = { xMin: cx - hx, xMax: cx + hx, yMin: cy - hy, yMax: cy + hy };
+            if (a.xMin < 0) continue;
+            const area = (a.xMax - a.xMin) * (a.yMax - a.yMin);
+            if (area <= bestArea || !fitsArea(a)) continue;
+            best = a;
+            bestArea = area;
           }
         }
       }
     }
   }
-  return best ?? { xMin: 160, xMax: 240, yMin: -35, yMax: 35 };
+
+  return best ?? { xMin: 160, xMax: 360, yMin: -90, yMax: 70 };
 }
 
 function rectFits(b: Band, a: DrawingArea): boolean {

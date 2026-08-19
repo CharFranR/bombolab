@@ -129,10 +129,10 @@ export interface DhSegment {
 }
 
 export const FABRI_DH: DhSegment[] = [
-  { type: 'revolute', theta0: 0, d: 85, a: 15, alpha: -Math.PI / 2 },
+  { type: 'revolute', theta0: 0, d: 65, a: 15, alpha: -Math.PI / 2 },
   { type: 'revolute', theta0: -Math.PI / 2, d: 0, a: 120, alpha: 0 },
-  { type: 'revolute', theta0: Math.PI / 2, d: 0, a: 90, alpha: -Math.PI / 2 },
-  { type: 'twist', d: 15, a: 35, alpha: Math.PI / 2 },
+  { type: 'revolute', theta0: Math.PI / 2, d: 0, a: 100, alpha: -Math.PI / 2 },
+  { type: 'twist', d: 0, a: 45, alpha: Math.PI / 2 },
   { type: 'revolute', theta0: 0, d: 0, a: 0, alpha: 0 },
 ];
 

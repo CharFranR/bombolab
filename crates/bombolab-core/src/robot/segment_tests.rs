@@ -98,7 +98,7 @@ fn test_robot_tool_default_marker_perpendicular() {
     let robot = Robot::new(vec![make_test_segment(JointType::Revolute, 0.0)]);
     let tool = robot.tool();
     assert_eq!(tool.name(), "marker_perpendicular");
-    assert_eq!(tool.pose().translation.vector.x, 75.0);
+    assert_eq!(tool.pose().translation.vector.x, 117.0);
     assert_eq!(tool.pose().translation.vector.y, 0.0);
     assert_eq!(tool.pose().translation.vector.z, 0.0);
 }

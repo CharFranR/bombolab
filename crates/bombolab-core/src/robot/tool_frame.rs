@@ -1,6 +1,6 @@
 use crate::math::Iso3;
 
-pub const DEFAULT_MARKER_LENGTH: f64 = 75.0;
+pub const DEFAULT_MARKER_LENGTH: f64 = 117.0;
 
 pub const PEN_LENGTH: f64 = 90.0;
 

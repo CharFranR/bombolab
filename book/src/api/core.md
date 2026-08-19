@@ -365,7 +365,7 @@ Ready-made robot configuration for the 5-DOF educational arm:
 ```rust
 pub fn fabri_creator() -> Robot
 pub fn base_transform() -> Iso3  // 57mm vertical offset from ground
-pub fn tool_transform() -> Iso3  // 75mm along X (marker tip)
+pub fn tool_transform() -> Iso3  // 117mm along X (marker tip)
 ```
 
 ---

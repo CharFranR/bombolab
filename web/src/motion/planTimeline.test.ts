@@ -38,7 +38,7 @@ describe('planTimeline — TC-1 analytic timeline', () => {
     const cmds: MotionCommandJS[] = [{ type: 'move', target: [100, 0, 0], speed: 50 }];
     const tl = planTimeline(cmds, { ik: makeIk(calls), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0] });
     expect(tl.length).toBeGreaterThan(0);
-    expect(tl[0]).toEqual({ t: 0, q_us: qUs([0, 0, 0, 0, 0]), count: 1 });
+    expect(tl[0]).toEqual({ t: 0, q_us: qUs([0, 0, 0, 0, 0]), count: 1, penDown: false });
     expect(tl[tl.length - 1].t).toBe(2.0);
     expect(lastT(tl)).toBeCloseTo(2.0, 6);
     expect(calls.length).toBe(51);
@@ -82,6 +82,29 @@ describe('planTimeline — TC-1 analytic timeline', () => {
   it('returns an empty timeline for an empty command list', () => {
     const tl = planTimeline([], { ik: makeIk(), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0] });
     expect(tl).toEqual([]);
+  });
+
+  it('tracks the pen state through penUp/penDown commands', () => {
+    // q stays inside the servo band on channel 0 (max ≈ 1.48 rad before
+    // clamping): 100→q=1.0, 120→q=1.2, 130→q=1.3.
+    const cmds: MotionCommandJS[] = [
+      { type: 'move', target: [100, 0, 0], speed: 50 },
+      { type: 'penDown' },
+      { type: 'move', target: [120, 0, 0], speed: 50 },
+      { type: 'penUp' },
+      { type: 'move', target: [130, 0, 0], speed: 50 },
+    ];
+    const tl = planTimeline(cmds, { ik: makeIk(), robot, startQ: START_Q, gripperPct: 50, startTcp: [0, 0, 0] });
+    expect(tl.length).toBeGreaterThan(0);
+    // Before the first penDown: pen is up. Channel 0 direction is −1, so
+    // LARGER q → SMALLER µs.
+    expect(tl[0].penDown).toBe(false);
+    // After penDown: pen is down for the second move (q ∈ (1.0, 1.2)).
+    const firstDown = tl.find((s) => s.q_us[0] < qUs([1, 0, 0, 0, 0])[0]);
+    expect(firstDown?.penDown).toBe(true);
+    // After penUp: pen is up again on the final move (q > 1.2).
+    const lastUp = tl.find((s) => s.q_us[0] < qUs([1.2, 0, 0, 0, 0])[0]);
+    expect(lastUp?.penDown).toBe(false);
   });
 });
 

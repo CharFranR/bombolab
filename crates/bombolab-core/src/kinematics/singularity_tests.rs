@@ -135,9 +135,9 @@ fn test_gate_empty_path() {
 fn test_gate_warm_start_chain() {
     let robot = fabri_creator();
     let base = make_base();
-    let p1 = [310.0, 0.0, 120.0];
-    let p2 = [320.0, 0.0, 120.0];
-    let p3 = [330.0, 0.0, 120.0];
+    let p1 = [380.0, 0.0, 120.0];
+    let p2 = [385.0, 0.0, 120.0];
+    let p3 = [391.0, 0.0, 120.0];
     let commands = vec![
         MotionCommand::MoveLinear {
             target: p1,
@@ -231,7 +231,7 @@ fn test_gate_10k_path_capped() {
 fn test_gate_custom_thresholds() {
     let robot = fabri_creator();
     let base = make_base();
-    let target = [320.0, 0.0, 120.0];
+    let target = [388.0, 0.0, 120.0];
     let commands = vec![MotionCommand::MoveLinear { target, speed: 1.0 }];
     let defaults = analyze_path(&robot, &base, &commands, &SingularityThresholds::default());
     let wp = defaults
@@ -242,7 +242,7 @@ fn test_gate_custom_thresholds() {
     assert_eq!(
         wp.level,
         SingularityLevel::Ok,
-        "sigma_min 36.6 is above warn 25"
+        "sigma_min 29.9 is above warn 25"
     );
     let warn = SingularityThresholds {
         warn_sigma_min: 40.0,

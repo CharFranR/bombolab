@@ -147,6 +147,7 @@ export default function SimpleRobotScene({
   workspacePoints,
   tracePath,
   traceProgressRef,
+  ikTracePath,
   ikTarget,
   onIkTargetChange,
   onDragStart,
@@ -307,6 +308,37 @@ export default function SimpleRobotScene({
           </bufferGeometry>
           <lineBasicMaterial color="#ff8866" linewidth={2} />
         </line>
+      )}
+
+      {/* Diagnostic overlay: the ACTUAL path the servos will draw, rebuilt
+          from the IK-resolved servo plan via FK (µs → q → FK).  Rendered as
+          POINTS (one dot per resolved sample): cyan while drawing, dim gray
+          while traveling — the FULL trajectory is shown, nothing dropped. */}
+      {ikTracePath && ikTracePath.drawing.length > 1 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={ikTracePath.drawing.length}
+              array={new Float32Array(ikTracePath.drawing.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial color="#44ddff" size={3} sizeAttenuation transparent opacity={0.95} depthWrite={false} />
+        </points>
+      )}
+      {ikTracePath && ikTracePath.travel.length > 1 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={ikTracePath.travel.length}
+              array={new Float32Array(ikTracePath.travel.flat())}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial color="#777788" size={2} sizeAttenuation transparent opacity={0.4} depthWrite={false} />
+        </points>
       )}
     </group>
   );

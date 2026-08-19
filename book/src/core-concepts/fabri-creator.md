@@ -9,7 +9,7 @@ The FABRI Creator is defined in `robot/fabri_creator.rs` and serves as the refer
 The FABRI Creator is a 5-DOF robotic arm built with:
 
 - **Microcontroller:** Arduino Nano (ATmega328P)
-- **Servos:** 5× SG90 micro servos (joints) + 1× SG90 (gripper)
+- **Servos:** 5× MG996R servos (joints) + 1× MG996R (gripper)
 - **Servo driver:** PCA9685 I2C servo driver (or direct PWM from Arduino)
 - **Communication:** USB serial at 115200 baud
 - **Firmware:** Custom Arduino sketch accepting 6 comma-separated angles per command
@@ -39,30 +39,30 @@ Standard DH convention, units: millimeters. These values are defined in `crates/
 
 | i | α | a | d | θ | Type |
 |---|-----|-----|-----|-----|------|
-| 1 | -90° | 15 | 85 | q₁ | Revolute |
+| 1 | -90° | 15 | 65 | q₁ | Revolute |
 | 2 | 0° | 120 | 0 | q₂ − 90° | Revolute |
-| 3 | -90° | 90 | 0 | q₃ + 90° | Revolute |
-| 4 | 90° | 35 | 15 | — | **Twist** (α = q₄ + 90°) |
+| 3 | -90° | 100 | 0 | q₃ + 90° | Revolute |
+| 4 | 90° | 45 | 0 | — | **Twist** (α = q₄ + 90°) |
 | 5 | 0° | 0 | 0 | q₅ | Revolute |
 
 **Why these values?**
 
 - **α₁ = -90°**: J1 rotates around Z (yaw). The -90° twist reorients the next Z axis from vertical to horizontal so J2 can pitch the arm up and down.
-- **a₁ = 15 mm**: Horizontal offset from J1 rotation axis to J2 axis, measured from the center of the base servo horn.
-- **d₁ = 85 mm**: Vertical offset from J1 to J2 along Z₁ (7 cm base plate + 15 mm hardware).
+- **a₁ = 15 mm**: Horizontal offset from J1 rotation axis to the arm column, toward the TCP. Measured from the center of the base servo horn.
+- **d₁ = 65 mm**: Vertical offset from the arm column (15mm offset point) to J2, along Z₁. Measured after the MG996R upgrade.
 - **a₂ = 120 mm**: The "upper arm" link from shoulder to elbow. This is the main reaching segment. In home pose this link points upward (Z direction after the accumulated rotation).
-- **a₃ = 90 mm**: The "forearm" link from elbow to wrist. Combined with a₄ this gives the robot its horizontal reach.
-- **a₄ = 35 mm**: Short link from wrist roll to wrist pitch. The physical distance between the two wrist servo axes.
-- **d₄ = 15 mm**: Lateral offset of the wrist assembly from the forearm axis.
+- **a₃ = 100 mm**: The "forearm" link from elbow to wrist roll. Combined with a₄ this gives the robot its horizontal reach.
+- **a₄ = 45 mm**: Short link from wrist roll to wrist pitch. The physical distance between the two wrist servo axes.
+- **d₄ = 0 mm**: No lateral offset — with the MG996R upgrade the whole arm is coplanar (base aligned with TCP, no depth).
 
 **Joint types:**
 
 | Joint | Type | Motion | Implementation |
 |-------|------|--------|----------------|
-| J1 | Revolute | Base yaw (Z₀) | Standard DH: `RotZ(q₁) · TransZ(85) · TransX(15) · RotX(-90°)` |
+| J1 | Revolute | Base yaw (Z₀) | Standard DH: `RotZ(q₁) · TransZ(65) · TransX(15) · RotX(-90°)` |
 | J2 | Revolute | Shoulder pitch (Z₁) | Standard DH: `RotZ(q₂−90°) · TransZ(0) · TransX(120) · RotX(0)` |
-| J3 | Revolute | Elbow pitch (Z₂) | Standard DH: `RotZ(q₃+90°) · TransZ(0) · TransX(90) · RotX(-90°)` |
-| J4 | **Twist** | Wrist roll (X₃) | **`Iso3::from_parts((35,15,0), Rot_X(q₄+90°))`** |
+| J3 | Revolute | Elbow pitch (Z₂) | Standard DH: `RotZ(q₃+90°) · TransZ(0) · TransX(100) · RotX(-90°)` |
+| J4 | **Twist** | Wrist roll (X₃) | **`Iso3::from_parts((45,0,0), Rot_X(q₄+90°))`** |
 | J5 | Revolute | Wrist pitch (Z₄) | Standard DH: `RotZ(q₅) · TransZ(0) · TransX(0) · RotX(0)` |
 
 J4 uses `Twist` instead of `Revolute` because the wrist roll rotates about the forearm axis (X in DH convention). The Twist type rotates around the X axis of the previous frame, and the translation is applied as `(a, d, 0)` in the local frame without further rotation — this is the behavior of `Iso3::from_parts(translation, rotation)` in nalgebra. The joint variable q₄ adds to α₄ rather than θ₄.
@@ -71,11 +71,11 @@ J4 uses `Twist` instead of `Revolute` because the wrist roll rotates about the f
 
 ```
          marcador
-            ↑ 75mm (tool transform)
+            ↑ 117mm (tool transform)
             |
          J5 ──── J4 ──── J3
                           |
-                          | 90mm (a₃)
+                          | 100mm (a₃)
                           |
                          J2
                         /
@@ -91,13 +91,18 @@ The robot stands 57mm above its mounting surface. The base servo (J1) rotates th
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| Base height | 57 mm | Distance from mounting surface to J1 rotation axis |
-| J1→J2 horizontal | 15 mm | Measured from base servo center to shoulder servo horn |
-| J1→J2 vertical | 85 mm | Base plate (70 mm) + hardware offset (15 mm) |
+| Base height | 57 mm | Distance from floor to J1 rotation axis |
+| J1→arm column horizontal | 15 mm | Arm offset from yaw center, toward TCP |
+| Arm column → J2 vertical | 65 mm | Distance from the 15mm offset point to the shoulder revolute |
 | J2→J3 (upper arm) | 120 mm | Length of upper arm link (vertical in home pose) |
-| J3→J4 (forearm) | 90 mm | Length of forearm link (horizontal in home pose) |
-| J4→J5 (wrist) | 35 mm horizontal, 15 mm lateral | Distance between wrist servo axes |
-| Tool (J5→marker) | 75 mm along X | Marker holder length; perpendicular to end effector |
+| J3→J4 (forearm) | 100 mm | Length of forearm link (horizontal in home pose) |
+| J4→J5 (wrist) | 45 mm | Distance between wrist servo axes (coplanar, no lateral offset) |
+| Tool (J5→marker) | 117 mm along X | Marker holder length; perpendicular to end effector |
+
+**Safe drawing area** (largest inscribed rectangle reachable at BOTH
+`DRAW_PLANE_Z=80` and `TRAVEL_PLANE_Z=120`, computed by `safeDrawingArea`):
+x ∈ [160, 360] mm, y ∈ [−130, 30] mm (200×160 mm). This replaced the old
+80×70 area after the MG996R geometry update.
 
 ## Joint Limits
 
@@ -168,7 +173,7 @@ Translation from J5 frame to marker tip. The marker is **perpendicular** to the 
 use bombolab_core::tool_transform;
 
 let tt = tool_transform();
-// Translation: (75mm, 0, 0)
+// Translation: (117mm, 0, 0)
 // Rotation: identity
 ```
 

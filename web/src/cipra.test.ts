@@ -34,11 +34,7 @@ import {
   type LoadGcodeTextDeps,
 } from './cipra/loadGcodeText';
 import { buildGcodeWsUrl, planIncoming, GcodeClient, getConnectionStatusLabel } from './cipra';
-
-/** Reachable drawing-plane heights (mirror of reachability DRAW/TRAVEL_PLANE_Z).
- *  Kept literal here to keep the node test free of the wasm module chain. */
-const DRAW_PLANE_Z = 80;
-const TRAVEL_PLANE_Z = 85;
+import { DRAW_PLANE_Z, TRAVEL_PLANE_Z } from './motion/planes';
 
 const READY_FIXTURE = {
   type: 'gcode.ready',
@@ -201,7 +197,7 @@ describe('cipra/jobStore.ts — pending-job state machine (R8/R9)', () => {
 
 function makeLoaderDeps(overrides: Partial<LoadGcodeTextDeps> = {}): LoadGcodeTextDeps {
   return {
-    safeDrawingArea: async () => ({ xMin: 160, xMax: 240, yMin: -35, yMax: 35 }),
+    safeDrawingArea: async () => ({ xMin: 160, xMax: 360, yMin: -130, yMax: 30 }),
     parseGcode: () => ({
       commands: [{ type: 'move', target: [180, 0, DRAW_PLANE_Z], speed: 40 }],
       warnings: [],
@@ -224,7 +220,7 @@ describe('cipra/loadGcodeText.ts — shared gcode→trajectory pipeline (R12)', 
     const deps = makeLoaderDeps({
       parseGcode: (text, opts) => {
         parsed = true;
-        expect(opts.area).toEqual({ xMin: 160, xMax: 240, yMin: -35, yMax: 35 });
+        expect(opts.area).toEqual({ xMin: 160, xMax: 360, yMin: -130, yMax: 30 });
         expect(opts.planeZ).toBe(DRAW_PLANE_Z);
         expect(opts.travelZ).toBe(TRAVEL_PLANE_Z);
         return {
@@ -291,7 +287,7 @@ describe('cipra/loadGcodeText.ts — shared gcode→trajectory pipeline (R12)', 
     const deps = makeLoaderDeps({
       safeDrawingArea: async () => {
         areaConsulted = true;
-        return { xMin: 160, xMax: 240, yMin: -35, yMax: 35 };
+        return { xMin: 160, xMax: 360, yMin: -130, yMax: 30 };
       },
       parseGcode: (text, opts) => {
         seenAutofit = opts.autofit;
@@ -316,11 +312,11 @@ describe('cipra/loadGcodeText.ts — shared gcode→trajectory pipeline (R12)', 
     const deps = makeLoaderDeps({
       safeDrawingArea: async () => {
         areaConsulted = true;
-        return { xMin: 160, xMax: 240, yMin: -35, yMax: 35 };
+        return { xMin: 160, xMax: 360, yMin: -130, yMax: 30 };
       },
       parseGcode: (text, opts) => {
         seenAutofit = opts.autofit;
-        expect(opts.area).toEqual({ xMin: 160, xMax: 240, yMin: -35, yMax: 35 });
+        expect(opts.area).toEqual({ xMin: 160, xMax: 360, yMin: -130, yMax: 30 });
         return {
           commands: [{ type: 'move', target: [40, 0, DRAW_PLANE_Z], speed: 40 }],
           warnings: [],

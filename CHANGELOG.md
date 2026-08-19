@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Changed
 
+- **DH parameters re-measured after MG996R upgrade** (`fabri_creator.rs`, web `FABRI_DH` mirror, `DEFAULT_MARKER_LENGTH`):
+  - d₁: 85mm → 65mm (arm column → J2; floor→yaw stays in `base_transform` z=57)
+  - a₃: 90mm → 100mm (J3→J4 forearm)
+  - J4 twist: d₄ 15mm → 0 (second displacement gone — arm is coplanar), a₄ 35mm → 45mm (J4→J5)
+  - Tool (J5→TCP): 75mm → 117mm (`DEFAULT_MARKER_LENGTH`)
+  - IK/singularity/dynamics tests and e2e drawing tests re-anchored to the new workspace
 - **Visual fidelity modes**: Low/High fidelity toggle with STL 3D model rendering
 - `RobotRenderer` abstraction with `SimpleRobotScene` (primitives) and `StlRobotScene` (STL meshes)
 - Real-time calibration panel with step buttons, numeric inputs, save/upload/reload

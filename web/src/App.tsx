@@ -13,6 +13,8 @@ import { firmwareTraceCsv, firmwareTraceStats, type FirmwareSample } from './mot
 import { DEFAULT_INTERPOLATION, ServoInterpolator, type InterpolationConfig } from './interpolation';
 import { TraceRecorder, type TraceResult } from './motion/trace';
 import { planTimeline, type PlanSample } from './motion/planTimeline';
+import { compensateMotionCommands, loadPostIkCalibration, type PostIkCalibration } from './motion/postIkCalibration';
+import { ikPathFromSamples, maxDeviationToPath, type IkPathSplit } from './motion/fkPath';
 import { downloadTraceCsv, downloadBlob, copyText, exportTraceCsv } from './motion/csv';
 import type { DebugToggles, FidelityMode, CalibrationConfig } from './renderers/types';
 import { ALL_STL_FILES } from './renderers/stlMapping';
@@ -24,6 +26,7 @@ import InfoPanel from './components/InfoPanel';
 import CalibrationPanel from './renderers/CalibrationPanel';
 import ServoCalibAnalyzer from './components/ServoCalibAnalyzer';
 import PlanExecPanel from './components/PlanExecPanel';
+import DrawTestPanel from './components/DrawTestPanel';
 import { loadGcodeText, mapDrawFailureToErrorCode, type LoadGcodeTextResult } from './cipra/loadGcodeText';
 import { jobReducer, initialJobState, queueFull, shouldCompleteCipraDraw, type CipraJob } from './cipra/jobStore';
 import { GcodeClient, buildGcodeWsUrl, readEnvWsUrl, getConnectionStatusLabel, type CipraConnectionStatus } from './cipra';
@@ -44,6 +47,13 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [robot, setRobot] = useState<RobotDef | null>(null);
+  const [postIkCalibration, setPostIkCalibration] = useState<PostIkCalibration | null>(null);
+  const [postIkCalibrationLoading, setPostIkCalibrationLoading] = useState(true);
+  const [postIkCalibrationError, setPostIkCalibrationError] = useState<string | null>(null);
+  // Calibration mode: draw the raw ideal targets WITHOUT post-IK compensation.
+  // Used to measure the robot's raw error (diag-08-landmarks) before fitting a
+  // new calibration. When off (default) every trajectory is compensated.
+  const [postIkCalibrationMode, setPostIkCalibrationMode] = useState(false);
   const [gripper, setGripper] = useState(50);
   const [connected, setConnected] = useState(false);
   const [serialError, setSerialError] = useState<string | null>(null);
@@ -58,6 +68,13 @@ export default function App() {
   const [ikMode, setIkMode] = useState(false);
   const [drawingMode, setDrawingMode] = useState(0); // 0=off, 1=modo1, 2=modo2
   const [drawingActive, setDrawingActive] = useState(false);
+  const [smoothTrajectory, setSmoothTrajectory] = useState(true);
+  /** Temporary draw-test view (upload trace CSV → Cartesian plot). */
+  const [testPanelOpen, setTestPanelOpen] = useState(false);
+  /** IK-resolved drawing path (three.js coords) reconstructed via FK from the
+   *  servo plan — what the robot will ACTUALLY draw, not the ideal gcode path.
+   *  Split by pen state so travel samples are shown too (full coverage). */
+  const [ikTracePath, setIkTracePath] = useState<IkPathSplit | null>(null);
   const [ikTarget, setIkTarget] = useState<[number, number, number] | null>(null);
   const [ikError, setIkError] = useState<number | null>(null);
   // Robot operating mode: the enum has more variants (Teaching, Calibration,
@@ -79,6 +96,16 @@ export default function App() {
   );
   const [demoSizeCm, setDemoSizeCm] = useState<number>(8);
   const [tracePath, setTracePath] = useState<[number, number, number][]>([]);
+  /** Max deviation (mm) of the IK-resolved DRAWING path from the ideal gcode
+   *  trace. Recomputed on every toggle of the smoothing checkbox — instant
+   *  quantitative proof that the filter changes the real path. */
+  const ikDeviation = useMemo(
+    () =>
+      ikTracePath && ikTracePath.drawing.length > 1 && tracePath.length > 1
+        ? maxDeviationToPath(ikTracePath.drawing, tracePath)
+        : null,
+    [ikTracePath, tracePath],
+  );
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [firmwareTrace, setFirmwareTrace] = useState<FirmwareSample[]>([]);
   const [manifestStatus, setManifestStatus] = useState('');
@@ -88,8 +115,21 @@ export default function App() {
     diagRef.current.push(`[${new Date().toISOString().slice(11, 23)}] ${msg}`);
   }, []);
   const [serialLost, setSerialLost] = useState(false);
-  const [csvModal, setCsvModal] = useState<{ title: string; content: string } | null>(null);
+  const [csvModal, setCsvModal] = useState<{ title: string; content: string; filename?: string } | null>(null);
   const [tracePlan, setTracePlan] = useState<PlanSample[] | null>(null);
+  /** Last plan inputs, kept so toggling the smoothing checkbox can re-plan
+   *  the preview immediately (no hardware side effects). */
+  const lastPlanRef = useRef<{
+    cmds: MotionCommandJS[];
+    start: [number, number, number];
+    robot: RobotDef;
+    drawingMode: number;
+    gripper: number;
+    smooth: boolean;
+  } | null>(null);
+  /** Last built v2 manifest (the exact SAMPLE commands sent to the µC),
+   *  kept so they can be exported even without a connected port. */
+  const lastManifestRef = useRef<{ lines: string[]; count: number; durationUs: number } | null>(null);
   const traceProgressRef = useRef(0);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
   const [gcodeName, setGcodeName] = useState<string | null>(null);
@@ -202,7 +242,7 @@ export default function App() {
   };
 }, []);
 
-  // ─── Fetch calibration config on mount ──────────────────────────────────
+  // ─── Fetch STL calibration config on mount ──────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     fetch('/calibration.json')
@@ -234,6 +274,29 @@ export default function App() {
       .catch((err) => {
         if (cancelled) return;
         console.warn('[App] Failed to load calibration.json:', err.message);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Post-IK calibration is a required trajectory dependency. It is deliberately
+  // loaded separately from calibration.json: the latter is only STL placement.
+  // A missing or invalid post-IK document must never fall back to ideal targets.
+  useEffect(() => {
+    let cancelled = false;
+    setPostIkCalibrationLoading(true);
+    loadPostIkCalibration()
+      .then((config) => {
+        if (cancelled) return;
+        setPostIkCalibration(config);
+        setPostIkCalibrationError(null);
+        setPostIkCalibrationLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setPostIkCalibration(null);
+        setPostIkCalibrationError(`No se pudo cargar la calibración post-IK: ${message}`);
+        setPostIkCalibrationLoading(false);
       });
     return () => { cancelled = true; };
   }, []);
@@ -625,6 +688,26 @@ export default function App() {
   // gates what it is fed.
   const startTrajectory = useCallback(async (cmds: MotionCommandJS[], key: string) => {
     if (transitioning || !robot || robotMode !== 'drawing') return false;
+    if (!postIkCalibrationMode && (postIkCalibrationLoading || postIkCalibration === null)) {
+      const reason = postIkCalibrationLoading
+        ? 'La calibración post-IK todavía se está cargando. La trayectoria queda bloqueada.'
+        : (postIkCalibrationError ?? 'La calibración post-IK no está disponible. La trayectoria queda bloqueada.');
+      setDrawingBlock({ reason, points: [], canRefit: false });
+      return false;
+    }
+
+    // Compute the current TCP before compensation: velocity stretching starts at
+    // this actual pose, while every downstream stage receives the same targets.
+    const fk = forwardKinematics(robot.segments, robot.baseTransform);
+    const tip = fk.ee;
+    const start: [number, number, number] = [tip[3], tip[7], tip[11]];
+    // Calibration mode bypasses compensation: the raw nominal targets reach the
+    // robot so their landing positions can be measured against the reference L.
+    // The `!` is safe: the gate above returned early when !postIkCalibrationMode
+    // and the calibration was missing/unloaded, so it is non-null on this branch.
+    const effectiveCmds = postIkCalibrationMode
+      ? cmds
+      : compensateMotionCommands(cmds, postIkCalibration!, { start });
     // Replace any running/completed trajectory — the demo buttons must
     // always work; starting a new demo drops the previous player.
     if (playerId !== null) {
@@ -634,7 +717,7 @@ export default function App() {
     setValidating(true);
     let reach: ReachResult | null = null;
     try {
-      reach = await validateDrawingCommands(cmds, {
+      reach = await validateDrawingCommands(effectiveCmds, {
         onProgress: (done, total) => {
           if (done === total) setValidating(false);
         },
@@ -665,7 +748,7 @@ export default function App() {
       return false;
     }
 
-    const gateProceed = await runSingularityGate(robot, cmds, {
+    const gateProceed = await runSingularityGate(robot, effectiveCmds, {
       canRefit,
       confirmFn: (message) => window.confirm(message + '\n\n¿Dibujar de todos modos?'),
       setDrawingBlock,
@@ -673,26 +756,34 @@ export default function App() {
     });
     if (!gateProceed) return false;
 
-    // Start the trajectory from the robot's current tool-tip pose (the TCP),
-    // NOT the base. fk.ee is the tool pose (frame_last * tool_transform); in the
-    // row-major Mat4 returned by forwardKinematics the translation lives in
-    // [3],[7],[11]. Reading [12..14] instead yields the affine last row [0,0,1],
-    // i.e. base origin, which made demos climb diagonally from the base.
-    const fk = forwardKinematics(robot.segments, robot.baseTransform);
-    const tip = fk.ee;
-    const start: [number, number, number] = [tip[3], tip[7], tip[11]];
+    // Keep the ideal trace for comparison; only the execution pipeline uses
+    // effectiveCmds. The current TCP was computed above from fk.ee.
     setTracePath(drawingPath(cmds).map(robotToThree));
     traceProgressRef.current = 0;
     setActiveDemo(key);
-    const samples = planTimeline(cmds, {
+    const samples = planTimeline(effectiveCmds, {
       ik: drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk,
       robot,
       startQ: robot.segments.map((s) => s.q),
       gripperPct: gripper,
       startTcp: start,
+      smooth: smoothTrajectory,
     });
     setTracePlan(samples);
-    const id = motionPlayerNew(cmds, start);
+    // Reconstruct the REAL path the servos will draw (µs → q → FK). This is
+    // the diagnostic overlay that exposes IK discontinuities the ideal
+    // gcode trace hides.
+    setIkTracePath(ikPathFromSamples(robot, samples));
+    // Remember the plan inputs so toggling the smoothing checkbox can
+    // re-plan for an immediate side-by-side comparison (preview only, no
+    // hardware side effects).
+    lastPlanRef.current = { cmds: effectiveCmds, start, robot, drawingMode, gripper, smooth: smoothTrajectory };
+    // Build + keep the v2 protocol commands ALWAYS (even without a port):
+    // they are the exact SAMPLE lines the µC receives, exportable for the
+    // draw-test view.
+    const manifest = buildManifest(samples);
+    lastManifestRef.current = manifest instanceof Error ? null : manifest;
+    const id = motionPlayerNew(effectiveCmds, start);
     // Review fix #2: remember the playback id THIS trajectory created; the
     // CIPRA draw path copies it into cipraDrawPlayerIdRef after a successful
     // start so a later `completed` state can be attributed to the right job.
@@ -708,9 +799,9 @@ export default function App() {
     const port = portRef.current;
     if (port && connected) {
       manifestAbortRef.current = false;
-      const built = buildManifest(samples);
-      if (built instanceof Error) {
-        console.warn('[manifest] build fallback legacy:', built.message);
+      const built = manifest instanceof Error ? null : manifest;
+      if (built === null) {
+        console.warn('[manifest] build fallback legacy:', manifest instanceof Error ? manifest.message : manifest);
       } else {
         try {
           // Detener heartbeat/sendQ legacy ANTES del handshake: el tráfico legacy
@@ -842,7 +933,7 @@ export default function App() {
     }
     setIkTarget(start); // mantener la pose actual hasta el primer waypoint
     return true;
-  }, [playerId, transitioning, robot, robotMode, drawingMode, gripper, gcodeName, connected]);
+  }, [playerId, transitioning, robot, robotMode, drawingMode, gripper, gcodeName, connected, smoothTrajectory, postIkCalibrationMode, postIkCalibration, postIkCalibrationLoading, postIkCalibrationError]);
 
   // Shared "gcode text → validate → draw" pipeline (R12): the .gcode file
   // picker and the CIPRA arrival "Dibujar" action both go through this so
@@ -864,7 +955,7 @@ export default function App() {
   const handleStartDemo = useCallback(() => {
     void (async () => {
       const half = (demoSizeCm * 10) / 2; // 5×5 → half 25; 8×8 → half 40
-      await startTrajectory(squareCommands(200, 0, 80, half), 'square');
+      await startTrajectory(squareCommands(200, 0, DRAW_PLANE_Z, half), 'square');
     })();
   }, [startTrajectory, demoSizeCm]);
 
@@ -875,6 +966,31 @@ export default function App() {
   const handleStartArc = useCallback(() => {
     void startTrajectory(arcCommands(), 'arc');
   }, [startTrajectory]);
+
+  // Toggling the smoothing checkbox re-plans the PREVIEW in place so the
+  // IK overlay shows immediately how the filter changes the real path.
+  // Deliberately preview-only: the running hardware plan is never touched.
+  useEffect(() => {
+    const last = lastPlanRef.current;
+    if (!last || last.smooth === smoothTrajectory) return;
+    lastPlanRef.current = { ...last, smooth: smoothTrajectory };
+    const samples = planTimeline(last.cmds, {
+      ik: last.drawingMode === 1 ? solveDrawingIk : solveDrawingPlaneIk,
+      robot: last.robot,
+      startQ: last.robot.segments.map((s) => s.q),
+      gripperPct: last.gripper,
+      startTcp: last.start,
+      smooth: smoothTrajectory,
+    });
+    setTracePlan(samples);
+    setIkTracePath(ikPathFromSamples(last.robot, samples));
+    // Keep the exported commands coherent with what the preview shows:
+    // the manifest must be rebuilt too, otherwise the SAMPLE file still
+    // carries the PREVIOUS smoothing state while the viewer shows the new
+    // one. (Hardware is never touched here — this is preview-only.)
+    const manifest = buildManifest(samples);
+    lastManifestRef.current = manifest instanceof Error ? null : manifest;
+  }, [smoothTrajectory]);
 
   const handleGcodeFile = useCallback((file: File) => {
     const reader = new FileReader();
@@ -1142,11 +1258,27 @@ export default function App() {
     setCsvModal({ title: `traza firmware — ${firmwareTrace.length} muestras`, content: firmwareTraceCsv(firmwareTrace) });
   }, [firmwareTrace, manifestStatus]);
 
+  // Export the EXACT v2 protocol commands sent to the µC (SAMPLE lines),
+  // independent of the port: they exist as soon as a trajectory is planned.
+  // The draw-test view accepts this file directly.
+  const handleExportCommands = useCallback(() => {
+    const m = lastManifestRef.current;
+    if (m === null) {
+      setExportMsg('Sin comandos: ejecutá un dibujo para generar el manifest.');
+      return;
+    }
+    setCsvModal({
+      title: `comandos SAMPLE (protocolo v2) — ${m.count} muestras · ${(m.durationUs / 1e6).toFixed(2)} s`,
+      content: m.lines.join('\n'),
+      filename: 'commands.txt',
+    });
+  }, []);
+
   const handleModalDownload = useCallback(() => {
     if (csvModal === null) return;
     try {
-      downloadBlob('trace.csv', new Blob([csvModal.content], { type: 'text/csv' }));
-      setExportMsg('Descargando trace.csv… (si no aparece, usá Copiar)');
+      downloadBlob(csvModal.filename ?? 'trace.csv', new Blob([csvModal.content], { type: 'text/plain' }));
+      setExportMsg(`Descargando ${csvModal.filename ?? 'trace.csv'}… (si no aparece, usá Copiar)`);
     } catch (e) {
       setExportMsg('Error de descarga: ' + (e instanceof Error ? e.message : String(e)));
     }
@@ -1765,6 +1897,30 @@ export default function App() {
               ))}
 
             </div>
+            <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label style={{ fontSize: 11, color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={smoothTrajectory}
+                  onChange={(e) => setSmoothTrajectory(e.target.checked)}
+                  style={{ accentColor: '#885' }}
+                />
+                Suavizar trayectoria
+              </label>
+              <span style={{ fontSize: 9, color: '#555' }}>
+                {smoothTrajectory ? '(IK filtrada)' : '(IK cruda)'}
+              </span>
+              {ikTracePath && (
+                <span style={{ fontSize: 9, color: '#588' }}>
+                  {ikTracePath.drawing.length} dib + {ikTracePath.travel.length} viaje
+                </span>
+              )}
+              {ikDeviation !== null && (
+                <span style={{ fontSize: 10, color: '#4cf', marginLeft: 'auto' }}>
+                  Desvío máx: {ikDeviation.toFixed(2)} mm
+                </span>
+              )}
+            </div>
             <div style={{ padding: '0 16px 4px', fontSize: 10, color: '#555' }}>
               Rueda mouse: sube/baja Z
             </div>
@@ -2069,6 +2225,26 @@ export default function App() {
                   }}
                 />
               </div>
+              {postIkCalibrationLoading && (
+                <div style={{ fontSize: 11, color: '#aa8', marginBottom: 6 }}>
+                  Cargando calibración post-IK; las trayectorias están bloqueadas hasta validarla…
+                </div>
+              )}
+              {postIkCalibrationError && (
+                <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>
+                  {postIkCalibrationError} Las trayectorias quedan bloqueadas.
+                </div>
+              )}
+              <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={postIkCalibrationMode}
+                  onChange={(e) => setPostIkCalibrationMode(e.target.checked)}
+                />
+                <span style={postIkCalibrationMode ? { color: '#e55' } : undefined}>
+                  Modo calibración: dibujar SIN compensación post-IK
+                </span>
+              </label>
               {gcodeError && (
                 <div style={{ fontSize: 11, color: '#e55', marginBottom: 6 }}>
                   {gcodeError}
@@ -2273,6 +2449,27 @@ export default function App() {
                 >
                   Exportar traza CSV
                 </button>
+                <button
+                  onClick={handleExportCommands}
+                  disabled={lastManifestRef.current === null}
+                  title={
+                    lastManifestRef.current === null
+                      ? 'Sin comandos: ejecutá un dibujo para generar el manifest'
+                      : `Exportar ${lastManifestRef.current.count} líneas SAMPLE (comandos del µC)`
+                  }
+                  style={{
+                    padding: '8px 12px',
+                    background: '#2c3a4a',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#9cc',
+                    fontSize: 13,
+                    cursor: lastManifestRef.current === null ? 'not-allowed' : 'pointer',
+                    opacity: lastManifestRef.current === null ? 0.45 : 1,
+                  }}
+                >
+                  Exportar comandos (SAMPLE)
+                </button>
                 {traceResult !== null && traceResult.samples.length > 0 ? (
                   <div style={{ fontSize: 11, color: '#888', alignSelf: 'center' }}>
                     {traceResult.samples.length} muestras
@@ -2420,6 +2617,26 @@ export default function App() {
           )}
         </div>
 
+        {/* Test temporal: plano cartesiano de la traza enviada */}
+        <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
+          <button
+            onClick={() => setTestPanelOpen((v) => !v)}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: testPanelOpen ? '#553' : '#3a3a3a',
+              border: '1px solid ' + (testPanelOpen ? '#885' : '#444'),
+              borderRadius: 4,
+              color: testPanelOpen ? '#ddc' : '#999',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            {testPanelOpen ? '▼ Test de dibujo (temporal)' : '▶ Test de dibujo (temporal)'}
+          </button>
+          {testPanelOpen && <DrawTestPanel />}
+        </div>
+
         {/* Reset */}
         <div style={{ padding: '8px 16px', borderTop: '1px solid #333' }}>
           <button
@@ -2472,6 +2689,20 @@ export default function App() {
                 fontFamily: 'monospace', padding: 8, whiteSpace: 'pre', overflow: 'auto',
               }}
             />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleModalDownload}
+                style={{ padding: '6px 12px', background: '#2c4a33', border: 'none', borderRadius: 4, color: '#9d9', cursor: 'pointer', fontSize: 12 }}
+              >
+                Descargar
+              </button>
+              <button
+                onClick={() => { void handleModalCopy(); }}
+                style={{ padding: '6px 12px', background: '#333', border: 'none', borderRadius: 4, color: '#aaa', cursor: 'pointer', fontSize: 12 }}
+              >
+                Copiar
+              </button>
+            </div>
             <div style={{ fontSize: 11, color: '#888' }}>
               Seleccioná todo (Ctrl+A dentro del cuadro) y copiá (Ctrl+C) — o guardá con "Copiar" abajo si preferís.
             </div>
@@ -2488,6 +2719,7 @@ export default function App() {
           workspacePoints={workspacePoints ?? undefined}
           tracePath={tracePath}
           traceProgressRef={traceProgressRef}
+          ikTracePath={ikTracePath ?? undefined}
           ikTarget={ikTarget}
           onIkTargetChange={setIkTarget}
           fidelityMode={fidelityMode}

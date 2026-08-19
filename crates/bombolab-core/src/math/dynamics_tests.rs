@@ -35,7 +35,7 @@ fn gravity_home_matches_document() {
     let frames = eval(&[0.0; 5]);
     let robot = fabri_creator();
     let g = gravity_vector(&robot, &frames, &test_links(), 9.81);
-    let expected = [0.0, -0.1177, -0.1177, 0.0, 0.0];
+    let expected = [0.0, -0.1344, -0.1344, 0.0, 0.0];
     for (i, e) in expected.iter().enumerate() {
         assert!(
             (g[(i, 0)] - e).abs() < 1e-3,
@@ -51,7 +51,7 @@ fn gravity_q_test_matches_document() {
     let frames = eval(&q);
     let robot = fabri_creator();
     let g = gravity_vector(&robot, &frames, &test_links(), 9.81);
-    let expected = [0.0, -0.2925, -0.1177, 0.0, 0.0];
+    let expected = [0.0, -0.3092, -0.1344, 0.0, 0.0];
     for (i, e) in expected.iter().enumerate() {
         assert!(
             (g[(i, 0)] - e).abs() < 1e-3,
@@ -67,9 +67,9 @@ fn inertia_home_matches_document() {
     let robot = fabri_creator();
     let m = inertia_matrix(&robot, &frames, &test_links());
     let cases = [
-        ((0, 0), 1978.9),
-        ((1, 1), 4437.2),
-        ((1, 2), 1393.2),
+        ((0, 0), 2435.4),
+        ((1, 1), 4856.3),
+        ((1, 2), 1812.3),
         ((3, 3), 17.0),
         ((4, 4), 4.0),
     ];
@@ -91,9 +91,9 @@ fn inertia_q_test_matches_document() {
     let robot = fabri_creator();
     let m = inertia_matrix(&robot, &frames, &test_links());
     let cases = [
-        ((0, 0), 6058.2),
-        ((1, 1), 6477.5),
-        ((1, 2), 2415.2),
+        ((0, 0), 6803.2),
+        ((1, 1), 7185.0),
+        ((1, 2), 2978.5),
         ((3, 3), 17.0),
         ((4, 4), 4.0),
     ];

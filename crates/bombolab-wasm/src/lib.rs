@@ -834,17 +834,15 @@ pub fn sampler_drop(id: usize) -> Result<(), JsValue> {
 #[cfg(test)]
 mod singularity_binding_tests {
     use super::*;
-    use bombolab_core::kinematics::{
-        GateReason, SingularityLevel, SingularityThresholds, analyze_path,
-    };
+    use bombolab_core::kinematics::{SingularityThresholds, analyze_path};
     use bombolab_core::trajectory::MotionCommand;
 
     fn fold_report() -> GateReport {
         let robot = bombolab_core::robot::fabri_creator();
         let base = bombolab_core::robot::base_transform();
         let commands = vec![
-            MotionCommand::MoveLinear { target: [85.0, -15.0, 142.0], speed: 1.0 },
-            MotionCommand::MoveLinear { target: [200.0, 0.0, 80.0], speed: 1.0 },
+            MotionCommand::MoveLinear { target: [400.0, 0.0, 200.0], speed: 1.0 },
+            MotionCommand::MoveLinear { target: [200.0, 0.0, 100.0], speed: 1.0 },
         ];
         analyze_path(&robot, &base, &commands, &SingularityThresholds::default())
     }
@@ -864,7 +862,7 @@ mod singularity_binding_tests {
         assert_eq!(block.kappa, 0.0);
         assert_eq!(block.yoshikawa, 0.0);
         assert_eq!(block.reason, "ik_non_convergence");
-        assert_eq!(block.target, [85.0, -15.0, 142.0]);
+        assert_eq!(block.target, [400.0, 0.0, 200.0]);
         assert_eq!(block.q.len(), 5);
         let healthy = payload
             .worst

@@ -11,7 +11,7 @@ fn iso3_bits(iso: &Iso3) -> Vec<u64> {
 #[test]
 fn test_default_marker_byte_identical_to_legacy_pose() {
     let frame = ToolFrame::marker_perpendicular();
-    let expected = Iso3::translation(75.0, 0.0, 0.0);
+    let expected = Iso3::translation(117.0, 0.0, 0.0);
     assert_eq!(iso3_bits(frame.pose()), iso3_bits(&expected));
 }
 

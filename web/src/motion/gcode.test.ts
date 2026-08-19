@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseGcode, type GcodeOptions } from './gcode';
 import type { MotionCommandJS } from './commands';
+import { DRAW_PLANE_Z, TRAVEL_PLANE_Z } from './planes';
 
 function parse(text: string, opts: GcodeOptions = {}): ReturnType<typeof parseGcode> {
   return parseGcode(text, { autofit: false, ...opts });
@@ -35,12 +36,12 @@ describe('parseGcode', () => {
     const r = parse(cipra);
     expect(r.warnings).toEqual([]);
     expect(r.commands).toEqual([
-      { type: 'move', target: [0, 0, 85], speed: 40 }, // travel lift before M3
+      { type: 'move', target: [0, 0, TRAVEL_PLANE_Z], speed: 40 }, // travel lift before M3
       { type: 'penDown' },
-      { type: 'move', target: [10, 10, 80], speed: 10 }, // F600 → 600/60 = 10 mm/s
-      { type: 'move', target: [20, 20, 80], speed: 10 },
+      { type: 'move', target: [10, 10, DRAW_PLANE_Z], speed: 10 }, // F600 → 600/60 = 10 mm/s
+      { type: 'move', target: [20, 20, DRAW_PLANE_Z], speed: 10 },
       { type: 'penUp' },
-      { type: 'move', target: [20, 20, 85], speed: 10 },
+      { type: 'move', target: [20, 20, TRAVEL_PLANE_Z], speed: 10 },
     ]);
     expect(r.moveCount).toBe(4);
     expect(r.bounds).toEqual({ min: [0, 0], max: [20, 20] });
@@ -57,10 +58,10 @@ describe('parseGcode', () => {
 
     const r = parse(padded);
     expect(r.commands).toEqual([
-      { type: 'move', target: [0, 0, 85], speed: 40 }, // travel, default feed
+      { type: 'move', target: [0, 0, TRAVEL_PLANE_Z], speed: 40 }, // travel, default feed
       { type: 'penDown' },
-      { type: 'move', target: [10, 10, 80], speed: 10 },
-      { type: 'move', target: [20, 20, 80], speed: 10 },
+      { type: 'move', target: [10, 10, DRAW_PLANE_Z], speed: 10 },
+      { type: 'move', target: [20, 20, DRAW_PLANE_Z], speed: 10 },
     ]);
     expect(r.moveCount).toBe(3);
   });
@@ -70,8 +71,8 @@ describe('parseGcode', () => {
     const r = parse(compact);
     expect(r.commands).toEqual([
       { type: 'penDown' },
-      { type: 'move', target: [10, 10, 80], speed: 40 },
-      { type: 'move', target: [20, 20, 80], speed: 40 },
+      { type: 'move', target: [10, 10, DRAW_PLANE_Z], speed: 40 },
+      { type: 'move', target: [20, 20, DRAW_PLANE_Z], speed: 40 },
     ]);
     expect(r.moveCount).toBe(2);
   });
@@ -82,23 +83,23 @@ describe('parseGcode', () => {
     // no Z / no M3 → pen is always down; first command is penDown
     expect(r.commands[0]).toEqual({ type: 'penDown' });
     expect(moves(r.commands).map((m) => m.target)).toEqual([
-      [10, 10, 80],
-      [20, 10, 80],
-      [20, 20, 80],
+      [10, 10, DRAW_PLANE_Z],
+      [20, 10, DRAW_PLANE_Z],
+      [20, 20, DRAW_PLANE_Z],
     ]);
   });
 
   it('stops at M2/M30, ignoring the rest of the file', () => {
     const m2 = ['G21 G90', 'M3', 'G1 X10 Y10', 'M2', 'G1 X50 Y50'].join('\n');
     const r = parse(m2);
-    expect(moves(r.commands).map((m) => m.target)).toEqual([[10, 10, 80]]);
+    expect(moves(r.commands).map((m) => m.target)).toEqual([[10, 10, DRAW_PLANE_Z]]);
     expect(r.warnings.some((w) => w.includes('M2/M30'))).toBe(true);
   });
 
   it('skips G2/G3 arcs with a warning (v1 unsupported)', () => {
     const arc = ['G21 G90', 'M3', 'G2 X20 Y20 I5 J0', 'G1 X30 Y30'].join('\n');
     const r = parse(arc);
-    expect(moves(r.commands).map((m) => m.target)).toEqual([[30, 30, 80]]);
+    expect(moves(r.commands).map((m) => m.target)).toEqual([[30, 30, DRAW_PLANE_Z]]);
     expect(r.warnings.some((w) => w.includes('G2/G3'))).toBe(true);
   });
 
@@ -112,7 +113,7 @@ describe('parseGcode', () => {
 
   it('converts G20 inches to mm', () => {
     const r = parse('G20 G90\nG0 X1 Y1');
-    expect(moves(r.commands).map((m) => m.target)).toEqual([[25.4, 25.4, 80]]);
+    expect(moves(r.commands).map((m) => m.target)).toEqual([[25.4, 25.4, DRAW_PLANE_Z]]);
   });
 
   it('auto-detects pen state from Z when the file has no M3/M5', () => {
@@ -125,12 +126,12 @@ describe('parseGcode', () => {
     ].join('\n');
     const r = parse(byZ);
     expect(r.commands).toEqual([
-      { type: 'move', target: [0, 0, 85], speed: 40 },
-      { type: 'move', target: [10, 10, 85], speed: 40 },
+      { type: 'move', target: [0, 0, TRAVEL_PLANE_Z], speed: 40 },
+      { type: 'move', target: [10, 10, TRAVEL_PLANE_Z], speed: 40 },
       { type: 'penDown' },
-      { type: 'move', target: [20, 20, 80], speed: 40 },
+      { type: 'move', target: [20, 20, DRAW_PLANE_Z], speed: 40 },
       { type: 'penUp' },
-      { type: 'move', target: [20, 20, 85], speed: 40 },
+      { type: 'move', target: [20, 20, TRAVEL_PLANE_Z], speed: 40 },
     ]);
     // stroke-start point (where the pen went down) is included in bounds
     expect(r.bounds).toEqual({ min: [10, 10], max: [20, 20] });
@@ -141,24 +142,24 @@ describe('parseGcode', () => {
     expect(byP.commands).toEqual([
       { type: 'wait', duration: 2 }, // 2000 ms → 2 s
       { type: 'penDown' },
-      { type: 'move', target: [10, 10, 80], speed: 40 },
+      { type: 'move', target: [10, 10, DRAW_PLANE_Z], speed: 40 },
     ]);
 
     const byS = parse('G21 G90\nG4 S1.5\nG1 X10 Y10');
     expect(byS.commands).toEqual([
       { type: 'wait', duration: 1.5 }, // seconds, passed through as-is
       { type: 'penDown' },
-      { type: 'move', target: [10, 10, 80], speed: 40 },
+      { type: 'move', target: [10, 10, DRAW_PLANE_Z], speed: 40 },
     ]);
   });
 
   it('autofits (scales + centers) the drawing to the target area', () => {
     const r = parseGcode('G21 G90\nM3\nG1 X0 Y0\nG1 X100 Y0\n', {
-      area: { xMin: 160, xMax: 240, yMin: -35, yMax: 35 },
+      area: { xMin: 160, xMax: 360, yMin: -130, yMax: 30 },
     });
     const ms = moves(r.commands).map((m) => m.target);
-    expect(ms.map((t) => t[0])).toEqual([165, 235]); // 100mm → 70mm of the 80mm band
-    expect(ms[0][1]).toBe(0);
+    expect(ms.map((t) => t[0])).toEqual([165, 355]); // 100mm → 190mm of the 200mm band
+    expect(ms[0][1]).toBe(-50); // centered on the area's y-midpoint (−130..30)
     expect(ms[0][2]).toBe(80);
   });
 });

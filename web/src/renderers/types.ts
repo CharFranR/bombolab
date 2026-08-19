@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Mat4 } from '../kinematics/types';
 import type { WorkspacePoints } from '../workspace/colors';
+import type { IkPathSplit } from '../motion/fkPath';
 
 // ─── Fidelity mode ──────────────────────────────────────────────────────────
 
@@ -45,6 +46,13 @@ export interface RobotRendererProps {
   workspacePoints?: WorkspacePoints;
   /** Preview of the commanded drawing path (shape the selected demo draws). */
   tracePath?: [number, number, number][];
+  /**
+   * Actual path the servos will draw, reconstructed via FK from the
+   * IK-resolved servo plan (µs → q → FK), split by pen state. Diagnostic
+   * overlay: exposes IK discontinuities / smoothing effects the ideal
+   * trace hides.
+   */
+  ikTracePath?: IkPathSplit;
   /**
    * Fraction 0..1 of the trajectory consumed (read in useFrame, NOT state —
    * the renderer reveals the trace via geometry.setDrawRange without forcing

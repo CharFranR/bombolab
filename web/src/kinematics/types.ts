@@ -23,7 +23,7 @@ export type Mat4 = [
 ];
 
 export const DEFAULT_TOOL_TRANSFORM: Mat4 = [
-  1, 0, 0, 75,
+  1, 0, 0, 117,
   0, 1, 0, 0,
   0, 0, 1, 0,
   0, 0, 0, 1,

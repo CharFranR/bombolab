@@ -7,6 +7,7 @@ import { forwardKinematics } from '../wasm';
 import type { DebugToggles, FidelityMode, RobotRendererProps } from '../renderers/types';
 import type { WorkspacePoints } from '../workspace/colors';
 import { framePose, mulMat4 } from '../renderers/types';
+import type { IkPathSplit } from '../motion/fkPath';
 import SimpleRobotScene from '../renderers/SimpleRobotScene';
 import StlRobotScene from '../renderers/StlRobotScene';
 
@@ -36,13 +37,14 @@ class StlErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
 
 // ─── Dispatcher: FK precomputation + renderer branch ────────────────────────
 
-function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints, tracePath, traceProgressRef, ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints, tracePath, traceProgressRef, ikTracePath, ikTarget, onIkTargetChange, onDragStart, onDragEnd, fidelityMode, debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: WorkspacePoints;
   tracePath?: [number, number, number][];
   traceProgressRef?: React.MutableRefObject<number>;
+  ikTracePath?: IkPathSplit;
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   onDragStart?: () => void;
@@ -89,6 +91,7 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints, 
     workspacePoints,
     tracePath,
     traceProgressRef,
+    ikTracePath,
     ikTarget,
     onIkTargetChange,
     onDragStart,
@@ -119,13 +122,14 @@ function RobotSceneDispatcher({ robot, rawFrames, gripper = 0, workspacePoints, 
 
 // ─── Viewer principal ──────────────────────────────────────────────────────
 
-export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints, tracePath, traceProgressRef, ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
+export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePoints, tracePath, traceProgressRef, ikTracePath, ikTarget, onIkTargetChange, fidelityMode = 'low', debugToggles, calibrationConfigRef, calibrationOverridesRef, calibrationTarget, calibrationMode, calibrationVersion, onCalibrationChange, gizmoMode, stlScaleRef }: {
   robot: RobotDef;
   rawFrames?: Mat4[];
   gripper?: number;
   workspacePoints?: WorkspacePoints;
   tracePath?: [number, number, number][];
   traceProgressRef?: React.MutableRefObject<number>;
+  ikTracePath?: IkPathSplit;
   ikTarget?: [number, number, number] | null;
   onIkTargetChange?: (pos: [number, number, number]) => void;
   fidelityMode: FidelityMode;
@@ -162,6 +166,7 @@ export default function RobotViewer({ robot, rawFrames, gripper = 0, workspacePo
           workspacePoints={workspacePoints}
           tracePath={tracePath}
           traceProgressRef={traceProgressRef}
+          ikTracePath={ikTracePath}
           ikTarget={ikTarget}
           onIkTargetChange={onIkTargetChange}
           onDragStart={() => setIkDragging(true)}

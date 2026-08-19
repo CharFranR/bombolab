@@ -14,6 +14,10 @@ export interface PlanSample {
   t: number;
   q_us: number[];
   count: number;
+  /** True while the pen is down (drawing on the plane). Set by planTimeline;
+   *  optional so hand-built fixtures / legacy consumers stay valid. Used by
+   *  the diagnostic overlay to color drawing vs travel samples. */
+  penDown?: boolean;
 }
 
 export interface PlanOptions {
@@ -23,6 +27,11 @@ export interface PlanOptions {
   gripperPct: number;
   dt?: number;
   startTcp: [number, number, number];
+  /** Apply a centered moving-average filter (window 3) over the raw q_us
+   *  values after IK resolution.  Smooths out IK solution jitter that
+   *  manifests as visible tremor in the physical drawing.
+   *  Default: false (caller opts in). */
+  smooth?: boolean;
 }
 
 // Plan sampling interval (s): 40 ms step cadence for drawing playback
@@ -31,6 +40,31 @@ export const DEFAULT_PLAN_DT = 0.04;
 
 const MIN_PUSH_MM = 0.5;
 const EPS = 1e-6;
+
+/**
+ * Centered moving-average filter (window 3) applied independently to each
+ * servo channel.  Because the whole trajectory is planned upfront we can
+ * look ahead, so this filter adds zero phase lag — the smoothed path
+ * follows the same timeline as the raw one.
+ *
+ * The first and last samples are left unchanged so that trajectory
+ * endpoints stay exactly on-target.
+ */
+function smoothSamples(samples: PlanSample[]): PlanSample[] {
+  if (samples.length <= 2) return samples;
+  const channels = samples[0].q_us.length;
+  const out = samples.map((s) => ({ ...s, q_us: [...s.q_us] }));
+
+  for (let ch = 0; ch < channels; ch++) {
+    for (let i = 1; i < out.length - 1; i++) {
+      const prev = out[i - 1].q_us[ch];
+      const curr = out[i].q_us[ch];
+      const next = out[i + 1].q_us[ch];
+      out[i].q_us[ch] = (prev + curr + next) / 3;
+    }
+  }
+  return out;
+}
 
 function dist3(a: [number, number, number], b: [number, number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -51,6 +85,7 @@ export function planTimeline(cmds: MotionCommandJS[], opts: PlanOptions): PlanSa
   let tcp: [number, number, number] = [...opts.startTcp];
   let lastQ: number[] | null = null;
   let lastPushed: [number, number, number] | null = null;
+  let penDown = false;
 
   const emit = (time: number, qq: number[]): void => {
     const qus = [...qToServoUs(qq), gripperToServoUs(gripperPct)];
@@ -59,7 +94,7 @@ export function planTimeline(cmds: MotionCommandJS[], opts: PlanOptions): PlanSa
       last.count += 1;
       return;
     }
-    samples.push({ t: time, q_us: qus, count: 1 });
+    samples.push({ t: time, q_us: qus, count: 1, penDown });
   };
 
   const push = (time: number, target: [number, number, number]): void => {
@@ -80,7 +115,14 @@ export function planTimeline(cmds: MotionCommandJS[], opts: PlanOptions): PlanSa
   push(0, tcp);
   let t = 0;
   for (const cmd of cmds) {
-    if (cmd.type === 'penUp' || cmd.type === 'penDown') continue;
+    if (cmd.type === 'penUp') {
+      penDown = false;
+      continue;
+    }
+    if (cmd.type === 'penDown') {
+      penDown = true;
+      continue;
+    }
     if (cmd.type === 'wait') {
       const waitEnd = t + cmd.duration;
       let k = 1;
@@ -116,5 +158,6 @@ export function planTimeline(cmds: MotionCommandJS[], opts: PlanOptions): PlanSa
     t = moveEnd;
     tcp = segEnd;
   }
-  return samples;
+
+  return opts.smooth ? smoothSamples(samples) : samples;
 }

@@ -132,23 +132,23 @@ fn fabri_creator_home_pose() {
 
     let p_ee = ee_mat.fixed_view::<3, 1>(0, 3);
     assert!(
-        (p_ee[(0, 0)] - 140.0).abs() < 1e-10,
+        (p_ee[(0, 0)] - 160.0).abs() < 1e-10,
         "home x: {}",
         p_ee[(0, 0)]
     );
     assert!(
-        (p_ee[(1, 0)] - -15.0).abs() < 1e-10,
+        (p_ee[(1, 0)] - 0.0).abs() < 1e-10,
         "home y: {}",
         p_ee[(1, 0)]
     );
     assert!(
-        (p_ee[(2, 0)] - 205.0).abs() < 1e-10,
+        (p_ee[(2, 0)] - 185.0).abs() < 1e-10,
         "home z: {}",
         p_ee[(2, 0)]
     );
 
-    approx_eq(j[(0, 0)], 15.0);
-    approx_eq(j[(1, 0)], 140.0);
+    approx_eq(j[(0, 0)], 0.0);
+    approx_eq(j[(1, 0)], 160.0);
     approx_eq(j[(2, 0)], 0.0);
     approx_eq(j[(5, 0)], 1.0);
 

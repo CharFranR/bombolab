@@ -20,11 +20,12 @@
  */
 
 import type { MotionCommandJS } from './commands';
+import { DRAW_PLANE_Z, TRAVEL_PLANE_Z } from './planes';
 
 export interface GcodeOptions {
-  /** Drawing plane Z (mm). Default 80. */
+  /** Drawing plane Z (mm). Default DRAW_PLANE_Z (80). */
   planeZ?: number;
-  /** Travel Z with the pen lifted (mm). Default planeZ + 5. */
+  /** Travel Z with the pen lifted (mm). Default TRAVEL_PLANE_Z (120). */
   travelZ?: number;
   /** Feed used when the file has no F word (mm/s). Default 40. */
   defaultSpeed?: number;
@@ -66,8 +67,8 @@ interface RawWait {
 type RawEvent = RawMove | RawWait;
 
 export function parseGcode(text: string, opts: GcodeOptions = {}): GcodeParseResult {
-  const planeZ = opts.planeZ ?? 80;
-  const travelZ = opts.travelZ ?? planeZ + 5;
+  const planeZ = opts.planeZ ?? DRAW_PLANE_Z;
+  const travelZ = opts.travelZ ?? TRAVEL_PLANE_Z;
   const defaultSpeed = opts.defaultSpeed ?? 40;
   const maxSpeed = opts.maxSpeed ?? 100;
   const area = opts.area ?? { xMin: 160, xMax: 240, yMin: -35, yMax: 35 };
